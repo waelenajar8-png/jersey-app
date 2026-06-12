@@ -15,21 +15,30 @@ def build_prompt(name, number, name_below=None):
     name = name.strip().upper()
     number = number.strip()
     name_below = (name_below or name).strip().upper()
-    parts = ["Edit this image of a sports jersey (back view)."]
+    parts = ["Edit this image of a sports jersey (back view). This is a precise text-replacement task, not a redesign."]
     if name:
-        parts.append(f'Replace the main back name text (large text near the top) with "{name}".')
+        parts.append(
+            f'Replace the main back name text (large curved/straight text near the top) with "{name}". '
+            f'Keep the exact same font, font weight, outline style, color, letter size, and curvature/position as the original text.'
+        )
     if number:
-        parts.append(f'Replace the large back number with "{number}".')
+        parts.append(
+            f'Replace the large back number with "{number}". '
+            f'Keep the exact same font, size, color, outline style and position as the original number.'
+        )
     if name_below:
         parts.append(
             f'There is also a smaller name text printed below the number/badge — '
-            f'replace that text with "{name_below}".'
+            f'replace that text with "{name_below}". '
+            f'Keep it in the exact same position, distance from the number/badge above it, '
+            f'font, size, color and outline style as the original smaller text.'
         )
     parts.append(
-        "Keep everything else exactly the same: jersey color, fabric texture, "
-        "font style, text color, position, size proportions, lighting, shadows, "
-        "background, and overall composition must remain identical to the original image. "
-        "Do not regenerate the whole image, only modify the specified text elements."
+        "Keep absolutely everything else identical to the original image: jersey color, fabric texture, "
+        "pattern, font style, text outline, text color, exact position, exact size, exact spacing between "
+        "text elements, lighting, shadows, background, tags, and overall composition. "
+        "Do not regenerate, redesign, resize or reposition anything — only swap the text content itself, "
+        "as if replacing the print while keeping the same template."
     )
     return " ".join(parts)
 
