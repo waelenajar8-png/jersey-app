@@ -11,18 +11,19 @@ API_KEY = os.environ.get("GEMINI_API_KEY")
 MODEL_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent"
 
 
-def build_prompt(name, number):
+def build_prompt(name, number, name_below=None):
     name = name.strip().upper()
     number = number.strip()
+    name_below = (name_below or name).strip().upper()
     parts = ["Edit this image of a sports jersey (back view)."]
     if name:
         parts.append(f'Replace the main back name text (large text near the top) with "{name}".')
     if number:
         parts.append(f'Replace the large back number with "{number}".')
-    if name:
+    if name_below:
         parts.append(
             f'There is also a smaller name text printed below the number/badge — '
-            f'replace that text with "{name}" as well (same text as the main name above).'
+            f'replace that text with "{name_below}".'
         )
     parts.append(
         "Keep everything else exactly the same: jersey color, fabric texture, "
@@ -33,9 +34,9 @@ def build_prompt(name, number):
     return " ".join(parts)
 
 
-def call_gemini(img_bytes, mime_type, name, number, max_retries=2):
+def call_gemini(img_bytes, mime_type, name, number, name_below=None, max_retries=2):
     img_b64 = base64.b64encode(img_bytes).decode()
-    prompt = build_prompt(name, number)
+    prompt = build_prompt(name, number, name_below)
 
     payload = {
         "contents": [
@@ -112,27 +113,32 @@ def generate_bulk():
                      f"au nombre de lignes de flocage ({len(lines)})."
         }), 400
 
-    # Pré-lire tout en mémoire (le générateur tourne hors du contexte de requête)
     items = []
     for f, line in zip(files, lines):
         if "/" in line:
-            name, number = line.split("/", 1)
+            split_parts = line.split("/")
         elif "," in line:
-            name, number = line.split(",", 1)
+            split_parts = line.split(",")
         else:
-            name, number = line, ""
+            split_parts = [line]
+
+        name = split_parts[0].strip() if len(split_parts) > 0 else ""
+        number = split_parts[1].strip() if len(split_parts) > 1 else ""
+        name_below = split_parts[2].strip() if len(split_parts) > 2 else None
+
         items.append({
             "filename": f.filename,
             "bytes": f.read(),
             "mime_type": f.mimetype or "image/png",
-            "name": name.strip(),
-            "number": number.strip(),
+            "name": name,
+            "number": number,
+            "name_below": name_below,
         })
 
     def stream():
         total = len(items)
         for idx, item in enumerate(items):
-            result = call_gemini(item["bytes"], item["mime_type"], item["name"], item["number"])
+            result = call_gemini(item["bytes"], item["mime_type"], item["name"], item["number"], item["name_below"])
             payload = {
                 "index": idx,
                 "total": total,
