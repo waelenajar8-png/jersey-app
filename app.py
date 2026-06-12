@@ -3,12 +3,45 @@ import base64
 import json
 import time
 import requests
+from datetime import datetime, timezone
 from flask import Flask, render_template, request, Response, jsonify
 
 app = Flask(__name__)
 
 API_KEY = os.environ.get("GEMINI_API_KEY")
 MODEL_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent"
+
+COST_PER_IMAGE = 0.039
+LOG_FILE = "/tmp/generation_log.jsonl"
+
+
+def log_generation(user, success):
+    entry = {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "user": user or "Inconnu",
+        "success": success,
+    }
+    try:
+        with open(LOG_FILE, "a") as f:
+            f.write(json.dumps(entry) + "\n")
+    except Exception:
+        pass
+
+
+def read_logs():
+    if not os.path.exists(LOG_FILE):
+        return []
+    entries = []
+    with open(LOG_FILE) as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                entries.append(json.loads(line))
+            except json.JSONDecodeError:
+                continue
+    return entries
 
 
 def build_prompt(name, number, name_below=None):
@@ -102,6 +135,48 @@ def index():
     return render_template("index.html")
 
 
+@app.route("/stats")
+def stats():
+    entries = read_logs()
+
+    by_day_user = {}
+    total_count = 0
+    total_success = 0
+
+    for e in entries:
+        day = e["timestamp"][:10]  # YYYY-MM-DD
+        user = e.get("user") or "Inconnu"
+        key = (day, user)
+        by_day_user.setdefault(key, {"total": 0, "success": 0})
+        by_day_user[key]["total"] += 1
+        total_count += 1
+        if e.get("success"):
+            by_day_user[key]["success"] += 1
+            total_success += 1
+
+    rows = []
+    for (day, user), counts in sorted(by_day_user.items(), reverse=True):
+        cost = counts["total"] * COST_PER_IMAGE
+        rows.append({
+            "day": day,
+            "user": user,
+            "total": counts["total"],
+            "success": counts["success"],
+            "cost": round(cost, 3),
+        })
+
+    total_cost = round(total_count * COST_PER_IMAGE, 2)
+
+    return render_template(
+        "stats.html",
+        rows=rows,
+        total_count=total_count,
+        total_success=total_success,
+        total_cost=total_cost,
+        cost_per_image=COST_PER_IMAGE,
+    )
+
+
 @app.route("/generate_bulk", methods=["POST"])
 def generate_bulk():
     if not API_KEY:
@@ -109,6 +184,7 @@ def generate_bulk():
 
     files = request.files.getlist("images")
     flockages_raw = request.form.get("flockages", "")
+    user = request.form.get("user", "").strip()
 
     lines = [l.strip() for l in flockages_raw.splitlines() if l.strip()]
 
@@ -159,6 +235,7 @@ def generate_bulk():
                 payload["image"] = result["image"]
             else:
                 payload["error"] = result["error"]
+            log_generation(user, result["success"])
             yield json.dumps(payload) + "\n"
 
     return Response(stream(), mimetype="application/x-ndjson")
