@@ -48,36 +48,42 @@ def build_prompt(name, number, name_below=None):
     name = name.strip().upper()
     number = number.strip()
     name_below = (name_below or name).strip().upper()
-    parts = ["Edit this image of a sports jersey (back view). This is a precise text-replacement task, not a redesign."]
+    parts = [
+        "You are performing a precise text-swap edit on a sports jersey photo. "
+        "Treat this like editing a vector text layer in design software: only the TEXT CONTENT changes, "
+        "every other visual property (font family, font weight/boldness, outline thickness, fill color, "
+        "letter height, letter spacing, baseline position, curvature, rotation) must stay IDENTICAL to the original."
+    ]
     if name:
         parts.append(
-            f'Replace the main back name text (large curved/straight text near the top) with "{name}". '
-            f'Keep the exact same font, font weight, outline style, color, letter size, and curvature/position as the original text.'
+            f'TASK 1: The main name text near the collar currently shows some text. '
+            f'Change its content to "{name}" only. Do not change its font weight, size, outline thickness, '
+            f'color, curvature or vertical position. If "{name}" has more or fewer letters than the original word, '
+            f'adjust letter spacing/width slightly so it spans the same horizontal area as the original word, '
+            f'without changing letter height or stroke thickness.'
         )
     if number:
         digits_spelled = ", ".join(f'"{d}"' for d in number)
         parts.append(
-            f'Replace the large back number with the {len(number)}-digit number "{number}". '
-            f'This number is made of exactly {len(number)} characters, in this exact order: {digits_spelled}. '
-            f'Render EVERY one of these {len(number)} digits, none missing, none merged, none dropped. '
-            f'Keep the exact same font, color, outline style and centered position as the original number. '
-            f'If "{number}" has a different number of digits than the original number, adjust the font size '
-            f'proportionally (smaller if more digits, larger if fewer) so all {len(number)} digits fit cleanly '
-            f'in the same area, all digits the same height and style as each other.'
+            f'TASK 2: The large center number currently shows a number. '
+            f'Change its content to "{number}" ({len(number)} digit(s), in order: {digits_spelled}) only. '
+            f'Render all {len(number)} digit(s), none missing or merged. '
+            f'Do not change its font weight, outline thickness, color, or vertical centering. '
+            f'If "{number}" has a different digit count than the original, scale the digit width '
+            f'(not the digit height or stroke thickness) so all digits fit within the same bounding box as the original number.'
         )
     if name_below:
         parts.append(
-            f'There is also a smaller name text printed below the number/badge — '
-            f'replace that text with "{name_below}". '
-            f'Keep it in the exact same position, distance from the number/badge above it, '
-            f'font, size, color and outline style as the original smaller text.'
+            f'TASK 3: There is a smaller name text below the number/badge area. '
+            f'Change its content to "{name_below}" only, with the exact same font weight, size, outline thickness, '
+            f'color and vertical gap to the badge above it as the original.'
         )
     parts.append(
-        "Keep absolutely everything else identical to the original image: jersey color, fabric texture, "
-        "pattern, font style, text outline, text color, exact position, exact size, exact spacing between "
-        "text elements, lighting, shadows, background, tags, and overall composition. "
-        "Do not regenerate, redesign, resize or reposition anything — only swap the text content itself, "
-        "as if replacing the print while keeping the same template."
+        "CRITICAL RULES: "
+        "Do not add, remove, or alter any logos, badges, watermarks, icons, sponsor marks, tags, or decorative "
+        "elements anywhere in the image — the only changes are the three text contents listed above. "
+        "Do not change jersey color, fabric texture, pattern, lighting, shadows, background, or composition. "
+        "The output must look like the exact same photograph with only the text characters swapped."
     )
     return " ".join(parts)
 
