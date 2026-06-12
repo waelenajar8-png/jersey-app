@@ -8,7 +8,7 @@ from flask import Flask, render_template, request, Response, jsonify
 app = Flask(__name__)
 
 API_KEY = os.environ.get("GEMINI_API_KEY")
-MODEL_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image-preview:generateContent"
+MODEL_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent"
 
 
 def build_prompt(name, number):
