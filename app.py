@@ -9,7 +9,7 @@ from flask import Flask, render_template, request, Response, jsonify
 app = Flask(__name__)
 
 API_KEY = os.environ.get("GEMINI_API_KEY")
-MODEL_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent"
+MODEL_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image-preview:generateContent"
 
 COST_PER_IMAGE = 0.039
 LOG_FILE = "/tmp/generation_log.jsonl"
