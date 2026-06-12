@@ -55,13 +55,15 @@ def build_prompt(name, number, name_below=None):
             f'Keep the exact same font, font weight, outline style, color, letter size, and curvature/position as the original text.'
         )
     if number:
+        digits_spelled = ", ".join(f'"{d}"' for d in number)
         parts.append(
-            f'Replace the large back number with "{number}", making sure ALL digits of "{number}" are fully rendered '
-            f'(do not drop, merge or truncate any digit). '
+            f'Replace the large back number with the {len(number)}-digit number "{number}". '
+            f'This number is made of exactly {len(number)} characters, in this exact order: {digits_spelled}. '
+            f'Render EVERY one of these {len(number)} digits, none missing, none merged, none dropped. '
             f'Keep the exact same font, color, outline style and centered position as the original number. '
             f'If "{number}" has a different number of digits than the original number, adjust the font size '
-            f'proportionally so the whole number fits cleanly in the same area, while keeping all digits '
-            f'the same height and style as each other.'
+            f'proportionally (smaller if more digits, larger if fewer) so all {len(number)} digits fit cleanly '
+            f'in the same area, all digits the same height and style as each other.'
         )
     if name_below:
         parts.append(
