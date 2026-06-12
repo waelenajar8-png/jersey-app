@@ -231,6 +231,7 @@ const progressFill = document.getElementById('progressFill');
 const resultsEl = document.getElementById('results');
 
 let selectedFiles = [];
+let currentItems = [];
 
 dropzone.addEventListener('click', () => imageInput.click());
 dropzone.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.classList.add('dragover'); });
@@ -270,12 +271,17 @@ generateBtn.addEventListener('click', async () => {
     progressFill.style.width = '0%';
 
     for (let i = 0; i < selectedFiles.length; i++) {
-        const [name, number] = lines[i].includes('/') ? lines[i].split('/') : [lines[i], ''];
+        const parts = lines[i].split('/').map(p => p.trim());
+        const name = parts[0] || '';
+        const number = parts[1] || '';
+        const nameBelow = parts[2] || '';
+        currentItems[i] = { file: selectedFiles[i], name, number, name_below: nameBelow };
+
         const card = document.createElement('div');
         card.className = 'card';
         card.id = `card-${i}`;
         card.innerHTML = `
-            <div class="card-title">${(name||'').trim().toUpperCase()} ${(number||'').trim() ? '#' + number.trim() : ''}</div>
+            <div class="card-title">${name.toUpperCase()} ${number ? '#' + number : ''}</div>
             <div class="card-placeholder"><div class="spinner"></div></div>
         `;
         resultsEl.appendChild(card);
@@ -336,13 +342,46 @@ function renderResult(data) {
             <div class="card-title">${(data.name||'').toUpperCase()} ${data.number ? '#' + data.number : ''}</div>
             <img src="${imgSrc}" alt="result">
             <a class="download-btn" href="${imgSrc}" download="maillot_${(data.name||'jersey')}_${data.number||''}.png">Télécharger</a>
+            <div class="retry-btn" onclick="retryItem(${data.index})">🔄 Relancer cette génération</div>
         `;
     } else {
         card.innerHTML = `
             <div class="card-title">${(data.name||'').toUpperCase()} ${data.number ? '#' + data.number : ''}</div>
             <div class="card-placeholder">❌ Échec</div>
             <div class="card-error">${data.error || 'Erreur inconnue'}</div>
+            <div class="retry-btn" onclick="retryItem(${data.index})">🔄 Relancer cette génération</div>
         `;
+    }
+}
+
+async function retryItem(index) {
+    const item = currentItems[index];
+    if (!item) return;
+    const card = document.getElementById(`card-${index}`);
+    if (!card) return;
+
+    card.innerHTML = `
+        <div class="card-title">${item.name.toUpperCase()} ${item.number ? '#' + item.number : ''}</div>
+        <div class="card-placeholder"><div class="spinner"></div></div>
+    `;
+
+    const formData = new FormData();
+    formData.append('image', item.file);
+    formData.append('name', item.name);
+    formData.append('number', item.number);
+    formData.append('name_below', item.name_below || '');
+    formData.append('user', document.getElementById('userName').value.trim());
+
+    try {
+        const res = await fetch('/generate_single', { method: 'POST', body: formData });
+        const data = await res.json();
+        if (!res.ok || data.error) {
+            renderResult({ index, name: item.name, number: item.number, error: data.error || 'Erreur inconnue' });
+            return;
+        }
+        renderResult({ index, name: item.name, number: item.number, image: data.image });
+    } catch (err) {
+        renderResult({ index, name: item.name, number: item.number, error: err.message });
     }
 }
 </script>
