@@ -185,8 +185,15 @@
     <h1>🎨 Générateur de flocages — mode bulk</h1>
     <p class="subtitle">
         1. Upload les images de maillots (dans l'ordre) &nbsp;·&nbsp;
-        2. Colle la liste des flocages, une ligne par maillot, format <code>NOM/NUMERO</code>
+        2. Colle la liste des flocages, une ligne par maillot, format <code>NOM/NUMERO/NOM_DESSOUS</code>
+        (le 3e champ est optionnel, par défaut = même nom qu'en haut)
+        &nbsp;·&nbsp; <a href="/stats" style="color: var(--accent);">📊 Voir les statistiques</a>
     </p>
+
+    <div class="panel">
+        <label for="userName">Ton prénom (pour le suivi des stats)</label>
+        <input type="text" id="userName" placeholder="ex: Wael" style="width: 100%; padding: 10px 12px; background: #11141a; border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 14px; margin-bottom: 8px;">
+    </div>
 
     <div class="panel">
         <div class="grid2">
@@ -200,9 +207,9 @@
             </div>
             <div>
                 <label>Flocages (1 par ligne — NOM/NUMERO)</label>
-                <textarea id="flockages" placeholder="PIERRE/2
+                <textarea id="flockages" placeholder="PIERRE/2/OUF
 LUCAS/7
-THEO/10"></textarea>
+THEO/10/THEO_PRO"></textarea>
             </div>
         </div>
         <button id="generateBtn">Lancer la génération</button>
@@ -236,7 +243,6 @@ dropzone.addEventListener('drop', (e) => {
 imageInput.addEventListener('change', (e) => setFiles(Array.from(e.target.files)));
 
 function setFiles(files) {
-    // tri par nom de fichier pour un ordre cohérent et prévisible
     files.sort((a, b) => a.name.localeCompare(b.name, undefined, {numeric: true}));
     selectedFiles = files;
     fileCount.textContent = files.length ? `${files.length} image(s) sélectionnée(s)` : '';
@@ -263,7 +269,6 @@ generateBtn.addEventListener('click', async () => {
     resultsEl.innerHTML = '';
     progressFill.style.width = '0%';
 
-    // Créer les cards placeholder dans l'ordre
     for (let i = 0; i < selectedFiles.length; i++) {
         const [name, number] = lines[i].includes('/') ? lines[i].split('/') : [lines[i], ''];
         const card = document.createElement('div');
@@ -279,6 +284,7 @@ generateBtn.addEventListener('click', async () => {
     const formData = new FormData();
     selectedFiles.forEach(f => formData.append('images', f));
     formData.append('flockages', lines.join('\n'));
+    formData.append('user', document.getElementById('userName').value.trim());
 
     try {
         const res = await fetch('/generate_bulk', { method: 'POST', body: formData });
@@ -301,7 +307,7 @@ generateBtn.addEventListener('click', async () => {
             if (streamDone) break;
             buffer += decoder.decode(value, { stream: true });
             let lines2 = buffer.split('\n');
-            buffer = lines2.pop(); // garde la dernière ligne incomplète
+            buffer = lines2.pop();
 
             for (const line of lines2) {
                 if (!line.trim()) continue;
