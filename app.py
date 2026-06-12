@@ -1,246 +1,389 @@
-import os
-import base64
-import json
-import time
-import requests
-from datetime import datetime, timezone
-from flask import Flask, render_template, request, Response, jsonify
-
-app = Flask(__name__)
-
-API_KEY = os.environ.get("GEMINI_API_KEY")
-MODEL_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent"
-
-COST_PER_IMAGE = 0.039
-LOG_FILE = "/tmp/generation_log.jsonl"
-
-
-def log_generation(user, success):
-    entry = {
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-        "user": user or "Inconnu",
-        "success": success,
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Générateur de flocages - Bulk</title>
+<style>
+    :root {
+        --bg: #0f1115;
+        --panel: #1a1d24;
+        --border: #2a2e37;
+        --accent: #4ade80;
+        --text: #e5e7eb;
+        --text-dim: #9ca3af;
+        --danger: #f87171;
     }
-    try:
-        with open(LOG_FILE, "a") as f:
-            f.write(json.dumps(entry) + "\n")
-    except Exception:
-        pass
+    * { box-sizing: border-box; }
+    body {
+        margin: 0;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        background: var(--bg);
+        color: var(--text);
+        min-height: 100vh;
+        padding: 24px;
+    }
+    .wrap {
+        max-width: 1200px;
+        margin: 0 auto;
+    }
+    h1 { font-size: 22px; margin: 0 0 4px; }
+    .subtitle { color: var(--text-dim); font-size: 13px; margin: 0 0 24px; }
+    .panel {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 24px;
+        margin-bottom: 24px;
+    }
+    .grid2 {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 24px;
+    }
+    @media (max-width: 800px) { .grid2 { grid-template-columns: 1fr; } }
+    label {
+        display: block;
+        font-size: 13px;
+        font-weight: 600;
+        margin-bottom: 8px;
+        color: var(--text-dim);
+    }
+    textarea {
+        width: 100%;
+        padding: 12px;
+        background: #11141a;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        color: var(--text);
+        font-size: 14px;
+        font-family: monospace;
+        min-height: 180px;
+        resize: vertical;
+    }
+    .dropzone {
+        border: 2px dashed var(--border);
+        border-radius: 10px;
+        padding: 24px;
+        text-align: center;
+        cursor: pointer;
+        font-size: 14px;
+        color: var(--text-dim);
+        min-height: 180px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-direction: column;
+        gap: 8px;
+        transition: border-color 0.2s;
+    }
+    .dropzone:hover, .dropzone.dragover { border-color: var(--accent); color: var(--text); }
+    input[type="file"] { display: none; }
+    .file-count { font-weight: 700; color: var(--accent); }
+    button {
+        padding: 14px 28px;
+        background: var(--accent);
+        color: #0f1115;
+        border: none;
+        border-radius: 8px;
+        font-size: 15px;
+        font-weight: 700;
+        cursor: pointer;
+        margin-top: 16px;
+    }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .status { color: var(--text-dim); font-size: 13px; margin-top: 12px; }
+    .progress-bar {
+        height: 6px;
+        background: var(--border);
+        border-radius: 3px;
+        overflow: hidden;
+        margin-top: 12px;
+    }
+    .progress-fill {
+        height: 100%;
+        background: var(--accent);
+        width: 0%;
+        transition: width 0.3s;
+    }
+    .results {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+        gap: 16px;
+    }
+    .card {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+    .card img {
+        width: 100%;
+        border-radius: 8px;
+        background: #000;
+    }
+    .card-title {
+        font-size: 13px;
+        font-weight: 700;
+    }
+    .card-error {
+        color: var(--danger);
+        font-size: 12px;
+        background: rgba(248,113,113,0.1);
+        border: 1px solid rgba(248,113,113,0.3);
+        border-radius: 6px;
+        padding: 8px;
+    }
+    .card .download-btn {
+        background: #11141a;
+        border: 1px solid var(--border);
+        color: var(--text);
+        text-decoration: none;
+        padding: 8px;
+        border-radius: 6px;
+        font-size: 13px;
+        font-weight: 600;
+        text-align: center;
+    }
+    .card .retry-btn {
+        background: #11141a;
+        border: 1px solid var(--border);
+        color: var(--text-dim);
+        padding: 8px;
+        border-radius: 6px;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        text-align: center;
+    }
+    .card-placeholder {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 160px;
+        background: #11141a;
+        border-radius: 8px;
+        color: var(--text-dim);
+        font-size: 12px;
+    }
+    .spinner {
+        width: 24px;
+        height: 24px;
+        border: 3px solid var(--border);
+        border-top-color: var(--accent);
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<div class="wrap">
+    <h1>🎨 Générateur de flocages — mode bulk</h1>
+    <p class="subtitle">
+        1. Upload les images de maillots (dans l'ordre) &nbsp;·&nbsp;
+        2. Colle la liste des flocages, une ligne par maillot, format <code>NOM/NUMERO/NOM_DESSOUS</code>
+        (le 3e champ est optionnel, par défaut = même nom qu'en haut)
+        &nbsp;·&nbsp; <a href="/stats" style="color: var(--accent);">📊 Voir les statistiques</a>
+    </p>
 
+    <div class="panel">
+        <label for="userName">Ton prénom (pour le suivi des stats)</label>
+        <input type="text" id="userName" placeholder="ex: Wael" style="width: 100%; padding: 10px 12px; background: #11141a; border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 14px; margin-bottom: 8px;">
+    </div>
 
-def read_logs():
-    if not os.path.exists(LOG_FILE):
-        return []
-    entries = []
-    with open(LOG_FILE) as f:
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                entries.append(json.loads(line))
-            except json.JSONDecodeError:
-                continue
-    return entries
+    <div class="panel">
+        <div class="grid2">
+            <div>
+                <label>Images des maillots</label>
+                <div class="dropzone" id="dropzone">
+                    <span id="dropzone-text">Clique ou dépose les images ici (plusieurs fichiers possible)</span>
+                    <span class="file-count" id="fileCount"></span>
+                    <input type="file" id="imageInput" accept="image/*" multiple>
+                </div>
+            </div>
+            <div>
+                <label>Flocages (1 par ligne — NOM/NUMERO)</label>
+                <textarea id="flockages" placeholder="PIERRE/2/OUF
+LUCAS/7
+THEO/10/THEO_PRO"></textarea>
+            </div>
+        </div>
+        <button id="generateBtn">Lancer la génération</button>
+        <div class="status" id="status"></div>
+        <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+    </div>
 
+    <div class="results" id="results"></div>
+</div>
 
-def build_prompt(name, number, name_below=None):
-    name = name.strip().upper()
-    number = number.strip()
-    name_below = (name_below or name).strip().upper()
-    parts = ["Edit this image of a sports jersey (back view). This is a precise text-replacement task, not a redesign."]
-    if name:
-        parts.append(
-            f'Replace the main back name text (large curved/straight text near the top) with "{name}". '
-            f'Keep the exact same font, font weight, outline style, color, letter size, and curvature/position as the original text.'
-        )
-    if number:
-        parts.append(
-            f'Replace the large back number with "{number}". '
-            f'Keep the exact same font, size, color, outline style and position as the original number.'
-        )
-    if name_below:
-        parts.append(
-            f'There is also a smaller name text printed below the number/badge — '
-            f'replace that text with "{name_below}". '
-            f'Keep it in the exact same position, distance from the number/badge above it, '
-            f'font, size, color and outline style as the original smaller text.'
-        )
-    parts.append(
-        "Keep absolutely everything else identical to the original image: jersey color, fabric texture, "
-        "pattern, font style, text outline, text color, exact position, exact size, exact spacing between "
-        "text elements, lighting, shadows, background, tags, and overall composition. "
-        "Do not regenerate, redesign, resize or reposition anything — only swap the text content itself, "
-        "as if replacing the print while keeping the same template."
-    )
-    return " ".join(parts)
+<script>
+const dropzone = document.getElementById('dropzone');
+const imageInput = document.getElementById('imageInput');
+const fileCount = document.getElementById('fileCount');
+const flockagesEl = document.getElementById('flockages');
+const generateBtn = document.getElementById('generateBtn');
+const statusEl = document.getElementById('status');
+const progressFill = document.getElementById('progressFill');
+const resultsEl = document.getElementById('results');
 
+let selectedFiles = [];
+let currentItems = [];
 
-def call_gemini(img_bytes, mime_type, name, number, name_below=None, max_retries=2):
-    img_b64 = base64.b64encode(img_bytes).decode()
-    prompt = build_prompt(name, number, name_below)
+dropzone.addEventListener('click', () => imageInput.click());
+dropzone.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.classList.add('dragover'); });
+dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
+dropzone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dropzone.classList.remove('dragover');
+    setFiles(Array.from(e.dataTransfer.files));
+});
+imageInput.addEventListener('change', (e) => setFiles(Array.from(e.target.files)));
 
-    payload = {
-        "contents": [
-            {
-                "parts": [
-                    {"text": prompt},
-                    {"inline_data": {"mime_type": mime_type, "data": img_b64}}
-                ]
-            }
-        ]
+function setFiles(files) {
+    files.sort((a, b) => a.name.localeCompare(b.name, undefined, {numeric: true}));
+    selectedFiles = files;
+    fileCount.textContent = files.length ? `${files.length} image(s) sélectionnée(s)` : '';
+}
+
+generateBtn.addEventListener('click', async () => {
+    const lines = flockagesEl.value.split('\n').map(l => l.trim()).filter(Boolean);
+
+    if (selectedFiles.length === 0) {
+        alert("Sélectionne au moins une image.");
+        return;
+    }
+    if (lines.length === 0) {
+        alert("Renseigne au moins un flocage.");
+        return;
+    }
+    if (lines.length !== selectedFiles.length) {
+        alert(`Le nombre d'images (${selectedFiles.length}) ne correspond pas au nombre de lignes de flocage (${lines.length}).`);
+        return;
     }
 
-    last_error = None
-    for attempt in range(max_retries + 1):
-        try:
-            resp = requests.post(
-                MODEL_URL,
-                headers={"x-goog-api-key": API_KEY, "Content-Type": "application/json"},
-                json=payload,
-                timeout=120,
-            )
-        except requests.RequestException as e:
-            last_error = f"Erreur réseau: {e}"
-            time.sleep(1)
-            continue
+    generateBtn.disabled = true;
+    generateBtn.textContent = "Génération en cours...";
+    resultsEl.innerHTML = '';
+    progressFill.style.width = '0%';
 
-        if resp.status_code != 200:
-            last_error = f"Erreur API ({resp.status_code}): {resp.text[:300]}"
-            time.sleep(1)
-            continue
+    for (let i = 0; i < selectedFiles.length; i++) {
+        const parts = lines[i].split('/').map(p => p.trim());
+        const name = parts[0] || '';
+        const number = parts[1] || '';
+        const nameBelow = parts[2] || '';
+        currentItems[i] = { file: selectedFiles[i], name, number, name_below: nameBelow };
 
-        data = resp.json()
-        try:
-            candidates = data.get("candidates", [])
-            if not candidates:
-                last_error = "Aucune réponse générée (contenu bloqué ?)."
-                continue
-            parts_out = candidates[0]["content"]["parts"]
-            image_b64_out = None
-            for part in parts_out:
-                if "inlineData" in part:
-                    image_b64_out = part["inlineData"]["data"]
-            if image_b64_out:
-                return {"success": True, "image": image_b64_out}
-            last_error = "Pas d'image dans la réponse."
-        except (KeyError, IndexError) as e:
-            last_error = f"Réponse inattendue: {e}"
+        const card = document.createElement('div');
+        card.className = 'card';
+        card.id = `card-${i}`;
+        card.innerHTML = `
+            <div class="card-title">${name.toUpperCase()} ${number ? '#' + number : ''}</div>
+            <div class="card-placeholder"><div class="spinner"></div></div>
+        `;
+        resultsEl.appendChild(card);
+    }
 
-    return {"success": False, "error": last_error}
+    const formData = new FormData();
+    selectedFiles.forEach(f => formData.append('images', f));
+    formData.append('flockages', lines.join('\n'));
+    formData.append('user', document.getElementById('userName').value.trim());
 
+    try {
+        const res = await fetch('/generate_bulk', { method: 'POST', body: formData });
+        if (!res.ok) {
+            const errData = await res.json();
+            statusEl.textContent = "Erreur: " + (errData.error || 'inconnue');
+            generateBtn.disabled = false;
+            generateBtn.textContent = "Lancer la génération";
+            return;
+        }
 
-@app.route("/")
-def index():
-    return render_template("index.html")
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let done = 0;
+        const total = selectedFiles.length;
 
+        while (true) {
+            const { value, done: streamDone } = await reader.read();
+            if (streamDone) break;
+            buffer += decoder.decode(value, { stream: true });
+            let lines2 = buffer.split('\n');
+            buffer = lines2.pop();
 
-@app.route("/stats")
-def stats():
-    entries = read_logs()
-
-    by_day_user = {}
-    total_count = 0
-    total_success = 0
-
-    for e in entries:
-        day = e["timestamp"][:10]  # YYYY-MM-DD
-        user = e.get("user") or "Inconnu"
-        key = (day, user)
-        by_day_user.setdefault(key, {"total": 0, "success": 0})
-        by_day_user[key]["total"] += 1
-        total_count += 1
-        if e.get("success"):
-            by_day_user[key]["success"] += 1
-            total_success += 1
-
-    rows = []
-    for (day, user), counts in sorted(by_day_user.items(), reverse=True):
-        cost = counts["total"] * COST_PER_IMAGE
-        rows.append({
-            "day": day,
-            "user": user,
-            "total": counts["total"],
-            "success": counts["success"],
-            "cost": round(cost, 3),
-        })
-
-    total_cost = round(total_count * COST_PER_IMAGE, 2)
-
-    return render_template(
-        "stats.html",
-        rows=rows,
-        total_count=total_count,
-        total_success=total_success,
-        total_cost=total_cost,
-        cost_per_image=COST_PER_IMAGE,
-    )
-
-
-@app.route("/generate_bulk", methods=["POST"])
-def generate_bulk():
-    if not API_KEY:
-        return jsonify({"error": "Clé API non configurée sur le serveur (GEMINI_API_KEY manquante)."}), 500
-
-    files = request.files.getlist("images")
-    flockages_raw = request.form.get("flockages", "")
-    user = request.form.get("user", "").strip()
-
-    lines = [l.strip() for l in flockages_raw.splitlines() if l.strip()]
-
-    if not files:
-        return jsonify({"error": "Aucune image envoyée."}), 400
-    if not lines:
-        return jsonify({"error": "Aucun flocage fourni."}), 400
-    if len(files) != len(lines):
-        return jsonify({
-            "error": f"Le nombre d'images ({len(files)}) ne correspond pas "
-                     f"au nombre de lignes de flocage ({len(lines)})."
-        }), 400
-
-    items = []
-    for f, line in zip(files, lines):
-        if "/" in line:
-            split_parts = line.split("/")
-        elif "," in line:
-            split_parts = line.split(",")
-        else:
-            split_parts = [line]
-
-        name = split_parts[0].strip() if len(split_parts) > 0 else ""
-        number = split_parts[1].strip() if len(split_parts) > 1 else ""
-        name_below = split_parts[2].strip() if len(split_parts) > 2 else None
-
-        items.append({
-            "filename": f.filename,
-            "bytes": f.read(),
-            "mime_type": f.mimetype or "image/png",
-            "name": name,
-            "number": number,
-            "name_below": name_below,
-        })
-
-    def stream():
-        total = len(items)
-        for idx, item in enumerate(items):
-            result = call_gemini(item["bytes"], item["mime_type"], item["name"], item["number"], item["name_below"])
-            payload = {
-                "index": idx,
-                "total": total,
-                "filename": item["filename"],
-                "name": item["name"],
-                "number": item["number"],
+            for (const line of lines2) {
+                if (!line.trim()) continue;
+                const data = JSON.parse(line);
+                renderResult(data);
+                done++;
+                progressFill.style.width = `${Math.round(done / total * 100)}%`;
+                statusEl.textContent = `${done} / ${total} traité(s)`;
             }
-            if result["success"]:
-                payload["image"] = result["image"]
-            else:
-                payload["error"] = result["error"]
-            log_generation(user, result["success"])
-            yield json.dumps(payload) + "\n"
+        }
+    } catch (err) {
+        statusEl.textContent = "Erreur: " + err.message;
+    } finally {
+        generateBtn.disabled = false;
+        generateBtn.textContent = "Lancer la génération";
+    }
+});
 
-    return Response(stream(), mimetype="application/x-ndjson")
+function renderResult(data) {
+    const card = document.getElementById(`card-${data.index}`);
+    if (!card) return;
 
+    if (data.image) {
+        const imgSrc = `data:image/png;base64,${data.image}`;
+        card.innerHTML = `
+            <div class="card-title">${(data.name||'').toUpperCase()} ${data.number ? '#' + data.number : ''}</div>
+            <img src="${imgSrc}" alt="result">
+            <a class="download-btn" href="${imgSrc}" download="maillot_${(data.name||'jersey')}_${data.number||''}.png">Télécharger</a>
+            <div class="retry-btn" onclick="retryItem(${data.index})">🔄 Relancer cette génération</div>
+        `;
+    } else {
+        card.innerHTML = `
+            <div class="card-title">${(data.name||'').toUpperCase()} ${data.number ? '#' + data.number : ''}</div>
+            <div class="card-placeholder">❌ Échec</div>
+            <div class="card-error">${data.error || 'Erreur inconnue'}</div>
+            <div class="retry-btn" onclick="retryItem(${data.index})">🔄 Relancer cette génération</div>
+        `;
+    }
+}
 
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port, debug=True, threaded=True)
+async function retryItem(index) {
+    const item = currentItems[index];
+    if (!item) return;
+    const card = document.getElementById(`card-${index}`);
+    if (!card) return;
+
+    card.innerHTML = `
+        <div class="card-title">${item.name.toUpperCase()} ${item.number ? '#' + item.number : ''}</div>
+        <div class="card-placeholder"><div class="spinner"></div></div>
+    `;
+
+    const formData = new FormData();
+    formData.append('image', item.file);
+    formData.append('name', item.name);
+    formData.append('number', item.number);
+    formData.append('name_below', item.name_below || '');
+    formData.append('user', document.getElementById('userName').value.trim());
+
+    try {
+        const res = await fetch('/generate_single', { method: 'POST', body: formData });
+        const data = await res.json();
+        if (!res.ok || data.error) {
+            renderResult({ index, name: item.name, number: item.number, error: data.error || 'Erreur inconnue' });
+            return;
+        }
+        renderResult({ index, name: item.name, number: item.number, image: data.image });
+    } catch (err) {
+        renderResult({ index, name: item.name, number: item.number, error: err.message });
+    }
+}
+</script>
+</body>
+</html>
