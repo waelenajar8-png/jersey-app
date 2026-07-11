@@ -1,11 +1,12 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="fr" data-theme="dark">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Générateur de flocages - Bulk</title>
+<title>Générateur de flocages</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <style>
-    :root {
+    :root[data-theme="dark"] {
         --bg: #0f1115;
         --panel: #1a1d24;
         --border: #2a2e37;
@@ -13,6 +14,17 @@
         --text: #e5e7eb;
         --text-dim: #9ca3af;
         --danger: #f87171;
+        --card-orig: #1e2330;
+    }
+    :root[data-theme="light"] {
+        --bg: #f3f4f6;
+        --panel: #ffffff;
+        --border: #d1d5db;
+        --accent: #16a34a;
+        --text: #111827;
+        --text-dim: #6b7280;
+        --danger: #ef4444;
+        --card-orig: #e5e7eb;
     }
     * { box-sizing: border-box; }
     body {
@@ -22,12 +34,38 @@
         color: var(--text);
         min-height: 100vh;
         padding: 24px;
+        transition: background 0.2s, color 0.2s;
     }
-    .wrap {
-        max-width: 1200px;
-        margin: 0 auto;
+    .wrap { max-width: 1200px; margin: 0 auto; }
+    .topbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 8px;
     }
-    h1 { font-size: 22px; margin: 0 0 4px; }
+    h1 { font-size: 22px; margin: 0; }
+    .topbar-right { display: flex; align-items: center; gap: 12px; }
+    .theme-btn {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        color: var(--text);
+        padding: 6px 12px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 13px;
+        font-weight: 600;
+    }
+    .rpd-badge {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        padding: 6px 12px;
+        border-radius: 8px;
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--accent);
+    }
+    .rpd-badge.warn { color: #fbbf24; border-color: #fbbf24; }
+    .rpd-badge.danger { color: var(--danger); border-color: var(--danger); }
     .subtitle { color: var(--text-dim); font-size: 13px; margin: 0 0 24px; }
     .panel {
         background: var(--panel);
@@ -36,23 +74,25 @@
         padding: 24px;
         margin-bottom: 24px;
     }
-    .grid2 {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 24px;
-    }
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
     @media (max-width: 800px) { .grid2 { grid-template-columns: 1fr; } }
-    label {
-        display: block;
-        font-size: 13px;
-        font-weight: 600;
-        margin-bottom: 8px;
-        color: var(--text-dim);
+    label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 8px; color: var(--text-dim); }
+    .required-star { color: var(--danger); margin-left: 3px; }
+    input[type="text"] {
+        width: 100%;
+        padding: 10px 12px;
+        background: var(--bg);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        color: var(--text);
+        font-size: 14px;
     }
+    input[type="text"].error-field { border-color: var(--danger); }
+    .field-error { color: var(--danger); font-size: 12px; margin-top: 4px; display: none; }
     textarea {
         width: 100%;
         padding: 12px;
-        background: #11141a;
+        background: var(--bg);
         border: 1px solid var(--border);
         border-radius: 8px;
         color: var(--text);
@@ -80,6 +120,8 @@
     .dropzone:hover, .dropzone.dragover { border-color: var(--accent); color: var(--text); }
     input[type="file"] { display: none; }
     .file-count { font-weight: 700; color: var(--accent); }
+    .csv-hint { font-size: 11px; color: var(--text-dim); margin-top: 6px; }
+    .btn-row { display: flex; gap: 12px; align-items: center; margin-top: 16px; flex-wrap: wrap; }
     button {
         padding: 14px 28px;
         background: var(--accent);
@@ -89,28 +131,23 @@
         font-size: 15px;
         font-weight: 700;
         cursor: pointer;
-        margin-top: 16px;
     }
     button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-secondary {
+        padding: 10px 18px;
+        background: var(--panel);
+        border: 1px solid var(--border);
+        color: var(--text);
+        border-radius: 8px;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        display: none;
+    }
     .status { color: var(--text-dim); font-size: 13px; margin-top: 12px; }
-    .progress-bar {
-        height: 6px;
-        background: var(--border);
-        border-radius: 3px;
-        overflow: hidden;
-        margin-top: 12px;
-    }
-    .progress-fill {
-        height: 100%;
-        background: var(--accent);
-        width: 0%;
-        transition: width 0.3s;
-    }
-    .results {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-        gap: 16px;
-    }
+    .progress-bar { height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; margin-top: 12px; }
+    .progress-fill { height: 100%; background: var(--accent); width: 0%; transition: width 0.3s; }
+    .results { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 20px; }
     .card {
         background: var(--panel);
         border: 1px solid var(--border);
@@ -120,14 +157,37 @@
         flex-direction: column;
         gap: 8px;
     }
-    .card img {
-        width: 100%;
-        border-radius: 8px;
-        background: #000;
+    .card-title { font-size: 14px; font-weight: 700; }
+    .card-subtitle { font-size: 11px; color: var(--text-dim); }
+    .card-images {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
     }
-    .card-title {
-        font-size: 13px;
+    .card-images-single { display: block; }
+    .card-img-wrap { position: relative; }
+    .card-img-label {
+        position: absolute;
+        top: 4px;
+        left: 4px;
+        background: rgba(0,0,0,0.6);
+        color: #fff;
+        font-size: 10px;
         font-weight: 700;
+        padding: 2px 6px;
+        border-radius: 4px;
+    }
+    .card img { width: 100%; border-radius: 8px; background: #000; display: block; }
+    .card-orig-placeholder {
+        width: 100%;
+        aspect-ratio: 3/4;
+        background: var(--card-orig);
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--text-dim);
+        font-size: 11px;
     }
     .card-error {
         color: var(--danger);
@@ -138,7 +198,7 @@
         padding: 8px;
     }
     .card .download-btn {
-        background: #11141a;
+        background: var(--bg);
         border: 1px solid var(--border);
         color: var(--text);
         text-decoration: none;
@@ -149,7 +209,7 @@
         text-align: center;
     }
     .card .retry-btn {
-        background: #11141a;
+        background: var(--bg);
         border: 1px solid var(--border);
         color: var(--text-dim);
         padding: 8px;
@@ -164,35 +224,41 @@
         align-items: center;
         justify-content: center;
         height: 160px;
-        background: #11141a;
+        background: var(--bg);
         border-radius: 8px;
         color: var(--text-dim);
         font-size: 12px;
+        grid-column: 1 / -1;
     }
     .spinner {
-        width: 24px;
-        height: 24px;
+        width: 24px; height: 24px;
         border: 3px solid var(--border);
         border-top-color: var(--accent);
         border-radius: 50%;
         animation: spin 0.8s linear infinite;
     }
     @keyframes spin { to { transform: rotate(360deg); } }
+    input[type="file"]#csvInput { display: none; }
 </style>
 </head>
 <body>
 <div class="wrap">
-    <h1>🎨 Générateur de flocages — mode bulk</h1>
+    <div class="topbar">
+        <h1>🎨 Générateur de flocages</h1>
+        <div class="topbar-right">
+            <div class="rpd-badge" id="rpdBadge">⚡ — / 1000 RPD</div>
+            <a href="/stats" style="color: var(--accent); font-size: 13px; font-weight: 600; text-decoration: none;">📊 Stats</a>
+            <button class="theme-btn" id="themeBtn">🌙 Mode sombre</button>
+        </div>
+    </div>
     <p class="subtitle">
-        1. Upload les images de maillots (dans l'ordre) &nbsp;·&nbsp;
-        2. Colle la liste des flocages, une ligne par maillot, format <code>NOM/NUMERO/NOM_DESSOUS</code>
-        (le 3e champ est optionnel, par défaut = même nom qu'en haut)
-        &nbsp;·&nbsp; <a href="/stats" style="color: var(--accent);">📊 Voir les statistiques</a>
+        Format flocage : <code>NOM/NUMERO/NOM_DESSOUS</code> (3e champ optionnel)
     </p>
 
     <div class="panel">
-        <label for="userName">Ton prénom (pour le suivi des stats)</label>
-        <input type="text" id="userName" placeholder="ex: Wael" style="width: 100%; padding: 10px 12px; background: #11141a; border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 14px; margin-bottom: 8px;">
+        <label for="userName">Ton prénom <span class="required-star">*</span></label>
+        <input type="text" id="userName" placeholder="ex: Wael" autocomplete="off">
+        <div class="field-error" id="userNameError">⚠️ Le prénom est obligatoire.</div>
     </div>
 
     <div class="panel">
@@ -200,19 +266,27 @@
             <div>
                 <label>Images des maillots</label>
                 <div class="dropzone" id="dropzone">
-                    <span id="dropzone-text">Clique ou dépose les images ici (plusieurs fichiers possible)</span>
+                    <span>Clique ou dépose les images ici</span>
                     <span class="file-count" id="fileCount"></span>
                     <input type="file" id="imageInput" accept="image/*" multiple>
                 </div>
             </div>
             <div>
-                <label>Flocages (1 par ligne — NOM/NUMERO)</label>
+                <label>Flocages (1 par ligne — NOM/NUMERO/NOM_DESSOUS)</label>
                 <textarea id="flockages" placeholder="PIERRE/2/OUF
 LUCAS/7
 THEO/10/THEO_PRO"></textarea>
+                <div class="csv-hint">
+                    Ou importe un fichier CSV/Excel :
+                    <label for="csvInput" style="color: var(--accent); cursor: pointer; font-weight: 600;">📄 Importer CSV</label>
+                    <input type="file" id="csvInput" accept=".csv,.xlsx,.xls,.txt">
+                </div>
             </div>
         </div>
-        <button id="generateBtn">Lancer la génération</button>
+        <div class="btn-row">
+            <button id="generateBtn">Lancer la génération</button>
+            <button class="btn-secondary" id="zipBtn">📦 Tout télécharger en ZIP</button>
+        </div>
         <div class="status" id="status"></div>
         <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
     </div>
@@ -221,17 +295,58 @@ THEO/10/THEO_PRO"></textarea>
 </div>
 
 <script>
+// ── Thème ──────────────────────────────────────────────────────────────────
+const html = document.documentElement;
+const themeBtn = document.getElementById('themeBtn');
+let currentTheme = localStorage.getItem('theme') || 'dark';
+applyTheme(currentTheme);
+
+function applyTheme(theme) {
+    currentTheme = theme;
+    html.setAttribute('data-theme', theme);
+    themeBtn.textContent = theme === 'dark' ? '☀️ Mode clair' : '🌙 Mode sombre';
+    localStorage.setItem('theme', theme);
+}
+themeBtn.addEventListener('click', () => applyTheme(currentTheme === 'dark' ? 'light' : 'dark'));
+
+// ── Prénom mémorisé ────────────────────────────────────────────────────────
+const userNameEl = document.getElementById('userName');
+const userNameError = document.getElementById('userNameError');
+userNameEl.value = localStorage.getItem('userName') || '';
+userNameEl.addEventListener('input', () => {
+    localStorage.setItem('userName', userNameEl.value.trim());
+    if (userNameEl.value.trim()) {
+        userNameEl.classList.remove('error-field');
+        userNameError.style.display = 'none';
+    }
+});
+
+// ── RPD counter ────────────────────────────────────────────────────────────
+const rpdBadge = document.getElementById('rpdBadge');
+function updateRPD() {
+    const today = new Date().toISOString().slice(0, 10);
+    const key = `rpd_${today}`;
+    const count = parseInt(localStorage.getItem(key) || '0');
+    const pct = count / 1000;
+    rpdBadge.textContent = `⚡ ${count} / 1000 RPD`;
+    rpdBadge.className = 'rpd-badge' + (pct >= 0.9 ? ' danger' : pct >= 0.7 ? ' warn' : '');
+}
+function incrementRPD() {
+    const today = new Date().toISOString().slice(0, 10);
+    const key = `rpd_${today}`;
+    const count = parseInt(localStorage.getItem(key) || '0') + 1;
+    localStorage.setItem(key, count);
+    updateRPD();
+}
+updateRPD();
+
+// ── Dropzone ───────────────────────────────────────────────────────────────
 const dropzone = document.getElementById('dropzone');
 const imageInput = document.getElementById('imageInput');
 const fileCount = document.getElementById('fileCount');
-const flockagesEl = document.getElementById('flockages');
-const generateBtn = document.getElementById('generateBtn');
-const statusEl = document.getElementById('status');
-const progressFill = document.getElementById('progressFill');
-const resultsEl = document.getElementById('results');
-
 let selectedFiles = [];
 let currentItems = [];
+let generatedImages = {}; // index → base64
 
 dropzone.addEventListener('click', () => imageInput.click());
 dropzone.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.classList.add('dragover'); });
@@ -249,40 +364,78 @@ function setFiles(files) {
     fileCount.textContent = files.length ? `${files.length} image(s) sélectionnée(s)` : '';
 }
 
-generateBtn.addEventListener('click', async () => {
-    const lines = flockagesEl.value.split('\n').map(l => l.trim()).filter(Boolean);
+// ── Import CSV ─────────────────────────────────────────────────────────────
+document.getElementById('csvInput').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const text = await file.text();
+    const lines = text.split('\n')
+        .map(l => l.trim().replace(/[;"]/g, '/').replace(/,/g, '/'))
+        .filter(Boolean);
+    document.getElementById('flockages').value = lines.join('\n');
+    e.target.value = '';
+});
 
-    if (selectedFiles.length === 0) {
-        alert("Sélectionne au moins une image.");
+// ── Génération ────────────────────────────────────────────────────────────
+const generateBtn = document.getElementById('generateBtn');
+const zipBtn = document.getElementById('zipBtn');
+const statusEl = document.getElementById('status');
+const progressFill = document.getElementById('progressFill');
+const resultsEl = document.getElementById('results');
+const flockagesEl = document.getElementById('flockages');
+
+generateBtn.addEventListener('click', async () => {
+    const userName = userNameEl.value.trim();
+    if (!userName) {
+        userNameEl.classList.add('error-field');
+        userNameError.style.display = 'block';
+        userNameEl.focus();
         return;
     }
-    if (lines.length === 0) {
-        alert("Renseigne au moins un flocage.");
-        return;
-    }
+
+    const lines = flockagesEl.value.split('\n').map(l => l.trim()).filter(Boolean);
+    if (selectedFiles.length === 0) { alert("Sélectionne au moins une image."); return; }
+    if (lines.length === 0) { alert("Renseigne au moins un flocage."); return; }
     if (lines.length !== selectedFiles.length) {
-        alert(`Le nombre d'images (${selectedFiles.length}) ne correspond pas au nombre de lignes de flocage (${lines.length}).`);
+        alert(`${selectedFiles.length} image(s) mais ${lines.length} ligne(s) de flocage.`);
         return;
     }
 
     generateBtn.disabled = true;
     generateBtn.textContent = "Génération en cours...";
+    zipBtn.style.display = 'none';
     resultsEl.innerHTML = '';
     progressFill.style.width = '0%';
+    generatedImages = {};
+
+    // Lire les originaux en base64 pour l'aperçu
+    const origPreviews = await Promise.all(selectedFiles.map(f => new Promise(res => {
+        const r = new FileReader();
+        r.onload = e => res(e.target.result);
+        r.readAsDataURL(f);
+    })));
 
     for (let i = 0; i < selectedFiles.length; i++) {
         const parts = lines[i].split('/').map(p => p.trim());
         const name = parts[0] || '';
         const number = parts[1] || '';
         const nameBelow = parts[2] || '';
-        currentItems[i] = { file: selectedFiles[i], name, number, name_below: nameBelow };
+        currentItems[i] = { file: selectedFiles[i], name, number, name_below: nameBelow, orig: origPreviews[i] };
 
+        const subtitle = `${name.toUpperCase()}${number ? ' / ' + number : ''}${nameBelow ? ' / ' + nameBelow.toUpperCase() : ''}`;
         const card = document.createElement('div');
         card.className = 'card';
         card.id = `card-${i}`;
         card.innerHTML = `
-            <div class="card-title">${name.toUpperCase()} ${number ? '#' + number : ''}</div>
-            <div class="card-placeholder"><div class="spinner"></div></div>
+            <div class="card-title">IMAGE ${i + 1}</div>
+            <div class="card-subtitle">${subtitle}</div>
+            <div class="card-images">
+                <div class="card-img-wrap">
+                    <div class="card-img-label">Original</div>
+                    <img src="${origPreviews[i]}" alt="original">
+                </div>
+                <div class="card-placeholder"><div class="spinner"></div></div>
+            </div>
         `;
         resultsEl.appendChild(card);
     }
@@ -290,15 +443,13 @@ generateBtn.addEventListener('click', async () => {
     const formData = new FormData();
     selectedFiles.forEach(f => formData.append('images', f));
     formData.append('flockages', lines.join('\n'));
-    formData.append('user', document.getElementById('userName').value.trim());
+    formData.append('user', userName);
 
     try {
         const res = await fetch('/generate_bulk', { method: 'POST', body: formData });
         if (!res.ok) {
             const errData = await res.json();
             statusEl.textContent = "Erreur: " + (errData.error || 'inconnue');
-            generateBtn.disabled = false;
-            generateBtn.textContent = "Lancer la génération";
             return;
         }
 
@@ -314,16 +465,21 @@ generateBtn.addEventListener('click', async () => {
             buffer += decoder.decode(value, { stream: true });
             let lines2 = buffer.split('\n');
             buffer = lines2.pop();
-
             for (const line of lines2) {
                 if (!line.trim()) continue;
                 const data = JSON.parse(line);
                 renderResult(data);
+                incrementRPD();
                 done++;
                 progressFill.style.width = `${Math.round(done / total * 100)}%`;
                 statusEl.textContent = `${done} / ${total} traité(s)`;
             }
         }
+
+        // Notification fin de session
+        notifyDone(total);
+        if (Object.keys(generatedImages).length > 0) zipBtn.style.display = 'inline-block';
+
     } catch (err) {
         statusEl.textContent = "Erreur: " + err.message;
     } finally {
@@ -332,58 +488,136 @@ generateBtn.addEventListener('click', async () => {
     }
 });
 
+// ── Rendu carte ───────────────────────────────────────────────────────────
 function renderResult(data) {
     const card = document.getElementById(`card-${data.index}`);
     if (!card) return;
+    const item = currentItems[data.index];
+    const subtitle = `${(item.name||'').toUpperCase()}${item.number ? ' / ' + item.number : ''}${item.name_below ? ' / ' + item.name_below.toUpperCase() : ''}`;
 
     if (data.image) {
         const imgSrc = `data:image/png;base64,${data.image}`;
+        generatedImages[data.index] = { src: imgSrc, name: item.name, number: item.number };
         card.innerHTML = `
-            <div class="card-title">${(data.name||'').toUpperCase()} ${data.number ? '#' + data.number : ''}</div>
-            <img src="${imgSrc}" alt="result">
-            <a class="download-btn" href="${imgSrc}" download="maillot_${(data.name||'jersey')}_${data.number||''}.png">Télécharger</a>
+            <div class="card-title">IMAGE ${data.index + 1}</div>
+            <div class="card-subtitle">${subtitle}</div>
+            <div class="card-images">
+                <div class="card-img-wrap">
+                    <div class="card-img-label">Original</div>
+                    <img src="${item.orig}" alt="original">
+                </div>
+                <div class="card-img-wrap">
+                    <div class="card-img-label">Généré</div>
+                    <img src="${imgSrc}" alt="result">
+                </div>
+            </div>
+            <a class="download-btn" href="${imgSrc}" download="image_${data.index + 1}_${(item.name||'jersey')}.png">⬇️ Télécharger</a>
             <div class="retry-btn" onclick="retryItem(${data.index})">🔄 Relancer cette génération</div>
         `;
     } else {
         card.innerHTML = `
-            <div class="card-title">${(data.name||'').toUpperCase()} ${data.number ? '#' + data.number : ''}</div>
-            <div class="card-placeholder">❌ Échec</div>
+            <div class="card-title">IMAGE ${data.index + 1}</div>
+            <div class="card-subtitle">${subtitle}</div>
+            <div class="card-images">
+                <div class="card-img-wrap">
+                    <div class="card-img-label">Original</div>
+                    <img src="${item.orig}" alt="original">
+                </div>
+                <div class="card-placeholder">❌ Échec</div>
+            </div>
             <div class="card-error">${data.error || 'Erreur inconnue'}</div>
             <div class="retry-btn" onclick="retryItem(${data.index})">🔄 Relancer cette génération</div>
         `;
     }
 }
 
+// ── Retry ─────────────────────────────────────────────────────────────────
 async function retryItem(index) {
     const item = currentItems[index];
     if (!item) return;
     const card = document.getElementById(`card-${index}`);
     if (!card) return;
-
+    const subtitle = `${item.name.toUpperCase()}${item.number ? ' / ' + item.number : ''}${item.name_below ? ' / ' + item.name_below.toUpperCase() : ''}`;
     card.innerHTML = `
-        <div class="card-title">${item.name.toUpperCase()} ${item.number ? '#' + item.number : ''}</div>
-        <div class="card-placeholder"><div class="spinner"></div></div>
+        <div class="card-title">IMAGE ${index + 1}</div>
+        <div class="card-subtitle">${subtitle}</div>
+        <div class="card-images">
+            <div class="card-img-wrap">
+                <div class="card-img-label">Original</div>
+                <img src="${item.orig}" alt="original">
+            </div>
+            <div class="card-placeholder"><div class="spinner"></div></div>
+        </div>
     `;
-
     const formData = new FormData();
     formData.append('image', item.file);
     formData.append('name', item.name);
     formData.append('number', item.number);
     formData.append('name_below', item.name_below || '');
-    formData.append('user', document.getElementById('userName').value.trim());
-
+    formData.append('user', userNameEl.value.trim());
     try {
         const res = await fetch('/generate_single', { method: 'POST', body: formData });
         const data = await res.json();
-        if (!res.ok || data.error) {
-            renderResult({ index, name: item.name, number: item.number, error: data.error || 'Erreur inconnue' });
-            return;
-        }
-        renderResult({ index, name: item.name, number: item.number, image: data.image });
+        incrementRPD();
+        if (!res.ok || data.error) { renderResult({ index, error: data.error || 'Erreur inconnue' }); return; }
+        renderResult({ index, image: data.image });
+        if (Object.keys(generatedImages).length > 0) zipBtn.style.display = 'inline-block';
     } catch (err) {
-        renderResult({ index, name: item.name, number: item.number, error: err.message });
+        renderResult({ index, error: err.message });
     }
 }
+
+// ── ZIP ───────────────────────────────────────────────────────────────────
+zipBtn.addEventListener('click', async () => {
+    zipBtn.disabled = true;
+    zipBtn.textContent = "Préparation du ZIP...";
+    const zip = new JSZip();
+    for (const [idx, img] of Object.entries(generatedImages)) {
+        const base64 = img.src.split(',')[1];
+        zip.file(`image_${parseInt(idx)+1}_${img.name||'jersey'}.png`, base64, {base64: true});
+    }
+    const blob = await zip.generateAsync({type: 'blob'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `flocages_${new Date().toISOString().slice(0,10)}.zip`;
+    a.click();
+    URL.revokeObjectURL(url);
+    zipBtn.disabled = false;
+    zipBtn.textContent = "📦 Tout télécharger en ZIP";
+});
+
+// ── Notification fin de session ───────────────────────────────────────────
+function notifyDone(total) {
+    // Badge sur l'onglet
+    document.title = `✅ ${total} images prêtes — Générateur`;
+    // Son
+    try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.frequency.value = 880;
+        gain.gain.setValueAtTime(0.3, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
+        osc.start(ctx.currentTime);
+        osc.stop(ctx.currentTime + 0.5);
+    } catch(e) {}
+    // Notification navigateur si autorisée
+    if (Notification.permission === 'granted') {
+        new Notification('✅ Génération terminée', { body: `${total} images prêtes à télécharger.` });
+    } else if (Notification.permission !== 'denied') {
+        Notification.requestPermission().then(p => {
+            if (p === 'granted') new Notification('✅ Génération terminée', { body: `${total} images prêtes.` });
+        });
+    }
+}
+
+// Remettre le titre normal quand on revient sur l'onglet
+document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) document.title = 'Générateur de flocages';
+});
 </script>
 </body>
 </html>
