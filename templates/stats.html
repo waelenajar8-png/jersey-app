@@ -1,74 +1,58 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="fr" data-theme="dark">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Statistiques - Générateur de flocages</title>
+<title>Statistiques — Générateur de flocages</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
-    :root {
-        --bg: #0f1115;
-        --panel: #1a1d24;
-        --border: #2a2e37;
-        --accent: #4ade80;
-        --text: #e5e7eb;
-        --text-dim: #9ca3af;
-        --danger: #f87171;
+    :root[data-theme="dark"] {
+        --bg: #0f1115; --panel: #1a1d24; --border: #2a2e37;
+        --accent: #4ade80; --text: #e5e7eb; --text-dim: #9ca3af;
+        --danger: #f87171; --chart-grid: rgba(255,255,255,0.05);
+    }
+    :root[data-theme="light"] {
+        --bg: #f3f4f6; --panel: #ffffff; --border: #d1d5db;
+        --accent: #16a34a; --text: #111827; --text-dim: #6b7280;
+        --danger: #ef4444; --chart-grid: rgba(0,0,0,0.05);
     }
     * { box-sizing: border-box; }
-    body {
-        margin: 0;
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-        background: var(--bg);
-        color: var(--text);
-        min-height: 100vh;
-        padding: 24px;
+    body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; padding: 24px; }
+    .wrap { max-width: 1000px; margin: 0 auto; }
+    .topbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; }
+    h1 { font-size: 22px; margin: 0; }
+    .topbar-right { display: flex; gap: 12px; }
+    a.back { color: var(--accent); text-decoration: none; font-size: 13px; font-weight: 600; }
+    .theme-btn, .export-btn {
+        background: var(--panel); border: 1px solid var(--border);
+        color: var(--text); padding: 6px 12px; border-radius: 8px;
+        cursor: pointer; font-size: 13px; font-weight: 600;
     }
-    .wrap { max-width: 900px; margin: 0 auto; }
-    h1 { font-size: 22px; margin: 0 0 4px; }
-    .subtitle { color: var(--text-dim); font-size: 13px; margin: 0 0 24px; }
-    a { color: var(--accent); text-decoration: none; font-size: 13px; }
-    .cards {
-        display: grid;
-        grid-template-columns: repeat(3, 1fr);
-        gap: 16px;
-        margin-bottom: 24px;
-    }
+    .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px; }
     @media (max-width: 700px) { .cards { grid-template-columns: 1fr; } }
-    .card {
-        background: var(--panel);
-        border: 1px solid var(--border);
-        border-radius: 12px;
-        padding: 16px;
-    }
+    .card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
     .card .label { font-size: 12px; color: var(--text-dim); margin-bottom: 6px; }
     .card .value { font-size: 24px; font-weight: 700; }
-    table {
-        width: 100%;
-        border-collapse: collapse;
-        background: var(--panel);
-        border: 1px solid var(--border);
-        border-radius: 12px;
-        overflow: hidden;
-    }
-    th, td {
-        text-align: left;
-        padding: 10px 14px;
-        font-size: 13px;
-        border-bottom: 1px solid var(--border);
-    }
+    .chart-panel { background: var(--panel); border: 1px solid var(--border); border-radius: 16px; padding: 24px; margin-bottom: 24px; }
+    .chart-panel h2 { font-size: 15px; margin: 0 0 16px; }
+    table { width: 100%; border-collapse: collapse; background: var(--panel); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+    th, td { text-align: left; padding: 10px 14px; font-size: 13px; border-bottom: 1px solid var(--border); }
     th { color: var(--text-dim); font-weight: 600; }
     tr:last-child td { border-bottom: none; }
-    .empty { color: var(--text-dim); font-size: 13px; padding: 16px; text-align: center; }
     .fail { color: var(--danger); }
+    .empty { color: var(--text-dim); font-size: 13px; padding: 16px; text-align: center; }
 </style>
 </head>
 <body>
 <div class="wrap">
-    <h1>📊 Statistiques d'utilisation</h1>
-    <p class="subtitle">
-        <a href="/">← Retour au générateur</a> &nbsp;·&nbsp;
-        Estimation basée sur ${{ "%.3f"|format(cost_per_image) }} / génération (Gemini 2.5 Flash Image)
-    </p>
+    <div class="topbar">
+        <h1>📊 Statistiques d'utilisation</h1>
+        <div class="topbar-right">
+            <a class="back" href="/">← Retour</a>
+            <button class="export-btn" onclick="exportCSV()">⬇️ Export CSV</button>
+            <button class="theme-btn" id="themeBtn">☀️ Mode clair</button>
+        </div>
+    </div>
 
     <div class="cards">
         <div class="card">
@@ -85,8 +69,13 @@
         </div>
     </div>
 
+    <div class="chart-panel">
+        <h2>Générations par jour</h2>
+        <canvas id="chart" height="100"></canvas>
+    </div>
+
     {% if rows %}
-    <table>
+    <table id="statsTable">
         <thead>
             <tr>
                 <th>Date</th>
@@ -112,5 +101,74 @@
     <div class="empty">Aucune génération enregistrée pour l'instant.</div>
     {% endif %}
 </div>
+
+<script>
+// Thème
+const html = document.documentElement;
+const themeBtn = document.getElementById('themeBtn');
+let currentTheme = localStorage.getItem('theme') || 'dark';
+applyTheme(currentTheme);
+function applyTheme(t) {
+    currentTheme = t;
+    html.setAttribute('data-theme', t);
+    themeBtn.textContent = t === 'dark' ? '☀️ Mode clair' : '🌙 Mode sombre';
+    localStorage.setItem('theme', t);
+}
+themeBtn.addEventListener('click', () => applyTheme(currentTheme === 'dark' ? 'light' : 'dark'));
+
+// Données pour le graphique depuis le tableau
+const rows = {{ rows | tojson }};
+
+// Grouper par jour (somme de toutes les lignes pour un même jour)
+const byDay = {};
+rows.forEach(r => {
+    byDay[r.day] = (byDay[r.day] || 0) + r.total;
+});
+const labels = Object.keys(byDay).sort();
+const values = labels.map(d => byDay[d]);
+
+const ctx = document.getElementById('chart').getContext('2d');
+new Chart(ctx, {
+    type: 'line',
+    data: {
+        labels,
+        datasets: [{
+            label: 'Générations',
+            data: values,
+            borderColor: '#4ade80',
+            backgroundColor: 'rgba(74,222,128,0.1)',
+            borderWidth: 2,
+            pointRadius: 4,
+            pointBackgroundColor: '#4ade80',
+            fill: true,
+            tension: 0.3,
+        }]
+    },
+    options: {
+        responsive: true,
+        plugins: { legend: { display: false } },
+        scales: {
+            x: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#9ca3af' } },
+            y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#9ca3af' }, beginAtZero: true }
+        }
+    }
+});
+
+// Export CSV
+function exportCSV() {
+    const headers = ['Date', 'Utilisateur', 'Générations', 'Réussites', 'Coût ($)'];
+    const csvRows = [headers.join(',')];
+    rows.forEach(r => {
+        csvRows.push([r.day, r.user, r.total, `${r.success}/${r.total}`, r.cost].join(','));
+    });
+    const blob = new Blob([csvRows.join('\n')], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `stats_flocages_${new Date().toISOString().slice(0,10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+}
+</script>
 </body>
 </html>
