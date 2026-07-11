@@ -11,7 +11,7 @@ app = Flask(__name__)
 API_KEY = os.environ.get("GEMINI_API_KEY")
 MODEL_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-image:generateContent"
 
-COST_PER_IMAGE = 0.134
+COST_PER_IMAGE = 0.070
 LOG_FILE = "/tmp/generation_log.jsonl"
 
 
