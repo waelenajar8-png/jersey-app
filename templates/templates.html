@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Templates — Générateur</title>
+<style>
+:root[data-theme="dark"]{--bg:#0f1115;--panel:#1a1d24;--border:#2a2e37;--accent:#4ade80;--text:#e5e7eb;--text-dim:#9ca3af;--danger:#f87171}
+:root[data-theme="light"]{--bg:#f3f4f6;--panel:#fff;--border:#d1d5db;--accent:#16a34a;--text:#111827;--text-dim:#6b7280;--danger:#ef4444}
+*{box-sizing:border-box}
+body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;padding:24px}
+.wrap{max-width:1200px;margin:0 auto}
+.topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;flex-wrap:wrap;gap:12px}
+h1{font-size:22px;margin:0}
+.nav{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.nav a{color:var(--accent);text-decoration:none;font-size:13px;font-weight:600}
+.btn{padding:10px 18px;background:var(--accent);color:#0f1115;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer}
+.btn-sec{padding:10px 18px;background:var(--panel);border:1px solid var(--border);color:var(--text);border-radius:8px;font-size:13px;font-weight:600;cursor:pointer}
+.btn:disabled{opacity:0.5;cursor:not-allowed}
+.theme-btn{background:var(--panel);border:1px solid var(--border);color:var(--text);padding:6px 12px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600}
+.toolbar{display:flex;gap:10px;margin-bottom:20px;flex-wrap:wrap;align-items:center}
+.count{color:var(--text-dim);font-size:13px}
+.dropzone{border:2px dashed var(--border);border-radius:12px;padding:32px;text-align:center;cursor:pointer;color:var(--text-dim);font-size:14px;margin-bottom:20px;transition:border-color 0.2s}
+.dropzone:hover,.dropzone.drag{border-color:var(--accent);color:var(--text)}
+input[type=file]{display:none}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:10px;overflow:hidden;position:relative;cursor:pointer;transition:border-color 0.15s}
+.card:hover{border-color:var(--accent)}
+.card.selected{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent)}
+.card img{width:100%;aspect-ratio:3/4;object-fit:cover;display:block}
+.card-name{padding:6px 8px;font-size:11px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.card-del{position:absolute;top:4px;right:4px;background:rgba(0,0,0,0.7);color:#fff;border:none;border-radius:4px;padding:2px 6px;font-size:10px;cursor:pointer;display:none}
+.card:hover .card-del{display:block}
+.check{position:absolute;top:4px;left:4px;width:18px;height:18px;background:var(--accent);border-radius:4px;display:none;align-items:center;justify-content:center;color:#000;font-size:11px;font-weight:700}
+.card.selected .check{display:flex}
+.loading{text-align:center;color:var(--text-dim);padding:40px;font-size:14px}
+.empty{text-align:center;color:var(--text-dim);padding:40px;font-size:14px}
+.upload-progress{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:12px 16px;margin-bottom:16px;font-size:13px;display:none}
+</style>
+</head>
+<body>
+<div class="wrap">
+    <div class="topbar">
+        <h1>🗂️ Templates maillots</h1>
+        <div class="nav">
+            <a href="/">🎨 Générateur</a>
+            <a href="/dashboard">📊 Dashboard</a>
+            <a href="/stats">📈 Stats</a>
+            <button class="theme-btn" id="themeBtn">☀️ Mode clair</button>
+        </div>
+    </div>
+
+    <div class="dropzone" id="dropzone">
+        📁 Clique ou dépose des images pour ajouter des templates
+        <input type="file" id="fileInput" multiple accept="image/*">
+    </div>
+
+    <div class="upload-progress" id="uploadProgress">⏳ Upload en cours...</div>
+
+    <div class="toolbar">
+        <button class="btn-sec" id="shuffleBtn">🔀 Ordre aléatoire</button>
+        <button class="btn-sec" id="selectAllBtn">☑️ Tout sélectionner</button>
+        <button class="btn-sec" id="deselectBtn" style="display:none">✖️ Désélectionner</button>
+        <button class="btn" id="useSelectedBtn" style="display:none">✅ Utiliser la sélection (0)</button>
+        <span class="count" id="countLabel">Chargement...</span>
+    </div>
+
+    <div id="grid" class="grid">
+        <div class="loading">⏳ Chargement des templates...</div>
+    </div>
+</div>
+
+<script>
+// Thème
+const html = document.documentElement;
+const themeBtn = document.getElementById('themeBtn');
+let currentTheme = localStorage.getItem('theme') || 'dark';
+applyTheme(currentTheme);
+function applyTheme(t) {
+    currentTheme = t;
+    html.setAttribute('data-theme', t);
+    themeBtn.textContent = t === 'dark' ? '☀️ Mode clair' : '🌙 Mode sombre';
+    localStorage.setItem('theme', t);
+}
+themeBtn.addEventListener('click', () => applyTheme(currentTheme === 'dark' ? 'light' : 'dark'));
+
+let templates = [];
+let selected = new Set();
+let order = [];
+
+async function loadTemplates() {
+    const res = await fetch('/api/templates');
+    const data = await res.json();
+    templates = data.templates || [];
+    // Restore saved order
+    const savedOrder = JSON.parse(localStorage.getItem('template_order') || '[]');
+    if (savedOrder.length) {
+        order = savedOrder.filter(k => templates.find(t => t.key === k));
+        const remaining = templates.filter(t => !order.includes(t.key)).map(t => t.key);
+        order = [...order, ...remaining];
+    } else {
+        order = templates.map(t => t.key);
+    }
+    renderGrid();
+}
+
+function renderGrid() {
+    const grid = document.getElementById('grid');
+    const countLabel = document.getElementById('countLabel');
+    countLabel.textContent = `${templates.length} template(s)`;
+    if (!templates.length) {
+        grid.innerHTML = '<div class="empty">Aucun template — uploadez des images ci-dessus</div>';
+        return;
+    }
+    const sorted = order.map(k => templates.find(t => t.key === k)).filter(Boolean);
+    grid.innerHTML = sorted.map(t => `
+        <div class="card ${selected.has(t.key) ? 'selected' : ''}" data-key="${t.key}" onclick="toggleSelect('${t.key}')">
+            <div class="check">✓</div>
+            <img src="${t.url}" loading="lazy" alt="${t.name}">
+            <div class="card-name">${t.name}</div>
+            <button class="card-del" onclick="deleteTemplate(event, '${t.key}')">🗑️</button>
+        </div>
+    `).join('');
+    updateSelectionUI();
+}
+
+function toggleSelect(key) {
+    if (selected.has(key)) selected.delete(key);
+    else selected.add(key);
+    renderGrid();
+}
+
+function updateSelectionUI() {
+    const useBtn = document.getElementById('useSelectedBtn');
+    const deselectBtn = document.getElementById('deselectBtn');
+    if (selected.size > 0) {
+        useBtn.style.display = 'inline-block';
+        useBtn.textContent = `✅ Utiliser la sélection (${selected.size})`;
+        deselectBtn.style.display = 'inline-block';
+    } else {
+        useBtn.style.display = 'none';
+        deselectBtn.style.display = 'none';
+    }
+}
+
+document.getElementById('shuffleBtn').addEventListener('click', () => {
+    for (let i = order.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [order[i], order[j]] = [order[j], order[i]];
+    }
+    localStorage.setItem('template_order', JSON.stringify(order));
+    renderGrid();
+});
+
+document.getElementById('selectAllBtn').addEventListener('click', () => {
+    order.forEach(k => selected.add(k));
+    renderGrid();
+});
+
+document.getElementById('deselectBtn').addEventListener('click', () => {
+    selected.clear();
+    renderGrid();
+});
+
+document.getElementById('useSelectedBtn').addEventListener('click', () => {
+    const keys = order.filter(k => selected.has(k));
+    localStorage.setItem('selected_templates', JSON.stringify(keys));
+    window.location.href = '/';
+});
+
+async function deleteTemplate(e, key) {
+    e.stopPropagation();
+    if (!confirm(`Supprimer "${key}" ?`)) return;
+    await fetch('/api/templates/delete', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({key})
+    });
+    templates = templates.filter(t => t.key !== key);
+    order = order.filter(k => k !== key);
+    selected.delete(key);
+    renderGrid();
+}
+
+// Upload
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('fileInput');
+const uploadProgress = document.getElementById('uploadProgress');
+
+dropzone.addEventListener('click', () => fileInput.click());
+dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('drag'); });
+dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag'));
+dropzone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropzone.classList.remove('drag');
+    uploadFiles(Array.from(e.dataTransfer.files));
+});
+fileInput.addEventListener('change', e => { uploadFiles(Array.from(e.target.files)); e.target.value = ''; });
+
+async function uploadFiles(files) {
+    if (!files.length) return;
+    uploadProgress.style.display = 'block';
+    uploadProgress.textContent = `⏳ Upload de ${files.length} fichier(s)...`;
+    const formData = new FormData();
+    files.forEach(f => formData.append('files', f));
+    const res = await fetch('/api/templates/upload', { method: 'POST', body: formData });
+    const data = await res.json();
+    uploadProgress.textContent = `✅ ${data.uploaded?.length || 0} fichier(s) uploadé(s)`;
+    setTimeout(() => { uploadProgress.style.display = 'none'; }, 2000);
+    await loadTemplates();
+}
+
+loadTemplates();
+</script>
+</body>
+</html>
