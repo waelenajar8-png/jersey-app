@@ -79,6 +79,8 @@ input[type=file]{display:none}
     <div class="topbar-right">
         <div class="rpd-badge" id="rpdBadge">⚡ — / 1000</div>
         <a href="/dashboard" class="nav-link">📊 Dashboard</a>
+        <a href="/queue" class="nav-link">📋 File d'attente</a>
+        <a href="/scheduled" class="nav-link">✅ Programmés</a>
         <a href="/templates" class="nav-link">🗂️ Templates</a>
         <a href="/stats" class="nav-link">📈 Stats</a>
         <button class="theme-btn" id="themeBtn">☀️</button>
@@ -309,7 +311,7 @@ async function launch(testMode=false){
             const{value,done:sd}=await reader.read();if(sd)break;
             buffer+=decoder.decode(value,{stream:true});
             let lines2=buffer.split('\n');buffer=lines2.pop();
-            for(const line of lines2){if(!line.trim())continue;const data=JSON.parse(line);renderResult(data);incrRPD();done++;progressFill.style.width=`${Math.round(done/total*100)}%`;statusEl.textContent=`${done}/${total} traité(s)`}
+            for(const line of lines2){if(!line.trim())continue;const data=JSON.parse(line);if(data.tiktok_created){statusEl.innerHTML=`✅ TikTok ${data.tiktok_created} créé ! <a href="/queue" style="color:var(--accent);font-weight:700">Voir la file d'attente →</a>`;continue;}renderResult(data);incrRPD();done++;progressFill.style.width=`${Math.round(done/total*100)}%`;statusEl.textContent=`${done}/${total} traité(s)`;}
         }
         notifyDone(total,testMode);
         if(Object.keys(generatedImages).length>0)zipBtn.style.display='inline-block';
