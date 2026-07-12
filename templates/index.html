@@ -78,6 +78,7 @@ input[type=file]{display:none}
     <h1>🎨 Générateur de flocages</h1>
     <div class="topbar-right">
         <div class="rpd-badge" id="rpdBadge">⚡ — / 1000</div>
+        <div class="rpd-badge" id="bufferBadge" style="color:#fbbf24;border-color:#fbbf24;display:none">⏳ buffer: —/7</div>
         <a href="/dashboard" class="nav-link">📊 Dashboard</a>
         <a href="/queue" class="nav-link">📋 File d'attente</a>
         <a href="/scheduled" class="nav-link">✅ Programmés</a>
@@ -161,6 +162,23 @@ const rpdBadge=document.getElementById('rpdBadge');
 function updateRPD(){const k=`rpd_${new Date().toISOString().slice(0,10)}`;const c=parseInt(localStorage.getItem(k)||'0');const pct=c/1000;rpdBadge.textContent=`⚡ ${c}/1000`;rpdBadge.className='rpd-badge'+(pct>=.9?' danger':pct>=.7?' warn':'')}
 function incrRPD(){const k=`rpd_${new Date().toISOString().slice(0,10)}`;localStorage.setItem(k,parseInt(localStorage.getItem(k)||'0')+1);updateRPD()}
 updateRPD();
+
+// ── Buffer badge ───────────────────────────────────────────────────────────
+const bufferBadge=document.getElementById('bufferBadge');
+async function updateBufferBadge(){
+    try{
+        const res=await fetch('/api/buffer');
+        const d=await res.json();
+        if(d.pending>0){
+            bufferBadge.style.display='block';
+            bufferBadge.textContent=`⏳ buffer: ${d.pending}/7`;
+        } else {
+            bufferBadge.style.display='none';
+        }
+    }catch(e){}
+}
+updateBufferBadge();
+setInterval(updateBufferBadge, 15000);
 
 // ── Fichiers ───────────────────────────────────────────────────────────────
 const dropzone=document.getElementById('dropzone');
@@ -307,11 +325,16 @@ async function launch(testMode=false){
         if(!res.ok){const d=await res.json();statusEl.textContent='Erreur: '+(d.error||'inconnue');return}
         const reader=res.body.getReader();const decoder=new TextDecoder();
         let buffer='';let done=0;const total=filesToUse.length;
+        // Timeout de sécurité : si le stream bloque plus de 30s après la dernière image, on arrête
+        let lastActivity=Date.now();
+        const safetyTimer=setInterval(()=>{if(done>=total&&Date.now()-lastActivity>30000){reader.cancel();clearInterval(safetyTimer)}},5000);
         while(true){
-            const{value,done:sd}=await reader.read();if(sd)break;
+            const{value,done:sd}=await reader.read();if(sd){clearInterval(safetyTimer);break;}
+            lastActivity=Date.now();
             buffer+=decoder.decode(value,{stream:true});
             let lines2=buffer.split('\n');buffer=lines2.pop();
-            for(const line of lines2){if(!line.trim())continue;const data=JSON.parse(line);if(data.tiktok_created){statusEl.innerHTML=`✅ TikTok ${data.tiktok_created} créé ! <a href="/queue" style="color:var(--accent);font-weight:700">Voir la file d'attente →</a>`;continue;}renderResult(data);incrRPD();done++;progressFill.style.width=`${Math.round(done/total*100)}%`;statusEl.textContent=`${done}/${total} traité(s)`;}
+            for(const line of lines2){if(!line.trim())continue;const data=JSON.parse(line);if(data.tiktok_created){statusEl.innerHTML=`✅ TikTok ${data.tiktok_created} créé ! <a href="/queue" style="color:var(--accent);font-weight:700">Voir la file d'attente →</a>`;updateBufferBadge();continue;}if(data.buffer_update){statusEl.innerHTML=`⏳ ${data.pending}/7 images en buffer — encore ${data.needed} avant le prochain TikTok`;updateBufferBadge();continue;}renderResult(data);incrRPD();done++;progressFill.style.width=`${Math.round(done/total*100)}%`;if(done<total)statusEl.textContent=`${done}/${total} traité(s)`;}
+        }
         }
         notifyDone(total,testMode);
         if(Object.keys(generatedImages).length>0)zipBtn.style.display='inline-block';
