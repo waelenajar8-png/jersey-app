@@ -602,7 +602,12 @@ def generate_bulk():
         # Ajouter au buffer et créer TikToks en arrière-plan
         if auto_queue and new_b64:
             def save_to_r2():
-                created, remaining = add_to_buffer_and_create_tiktoks(new_b64, new_floc, user)
+                try:
+                    print(f"[BUFFER] Saving {len(new_b64)} images to buffer...")
+                    created, remaining = add_to_buffer_and_create_tiktoks(new_b64, new_floc, user)
+                    print(f"[BUFFER] Created {len(created)} TikToks, {remaining} remaining in buffer")
+                except Exception as e:
+                    print(f"[BUFFER ERROR] {e}")
             threading.Thread(target=save_to_r2, daemon=True).start()
 
         success_count = sum(1 for r in results_map.values() if "image" in r)
