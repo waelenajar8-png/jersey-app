@@ -599,13 +599,11 @@ def generate_bulk():
                 nts += 1
             else: time.sleep(0.05)
 
-        # Ajouter au buffer et créer TikToks
+        # Ajouter au buffer et créer TikToks en arrière-plan
         if auto_queue and new_b64:
-            created, remaining = add_to_buffer_and_create_tiktoks(new_b64, new_floc, user)
-            for n in created:
-                yield json.dumps({"tiktok_created":n,"images_count":TIKTOK_SIZE})+"\n"
-            if remaining > 0:
-                yield json.dumps({"buffer_update":True,"pending":remaining,"needed":TIKTOK_SIZE-remaining})+"\n"
+            def save_to_r2():
+                created, remaining = add_to_buffer_and_create_tiktoks(new_b64, new_floc, user)
+            threading.Thread(target=save_to_r2, daemon=True).start()
 
         success_count = sum(1 for r in results_map.values() if "image" in r)
         r2_put_json(f"sessions/{session_id}.json", {
