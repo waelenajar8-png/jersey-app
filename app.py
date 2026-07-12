@@ -120,13 +120,12 @@ def r2_presigned(key, expires=86400):  # 24h
 
 # ── Compteur TikTok (atomique via R2) ─────────────────────────────────────
 def get_next_tiktok_number():
-    """Incrémente et retourne le prochain numéro de TikTok (thread-safe)"""
-    with _r2_lock:
-        data = r2_get_json(KEY_COUNTER) or {"next": 1}
-        num = data["next"]
-        data["next"] = num + 1
-        r2_put_json(KEY_COUNTER, data)
-        return num
+    """Incrémente et retourne le prochain numéro de TikTok"""
+    data = r2_get_json(KEY_COUNTER) or {"next": 1}
+    num = data["next"]
+    data["next"] = num + 1
+    r2_put_json(KEY_COUNTER, data)
+    return num
 
 # ── Logs persistants sur R2 ────────────────────────────────────────────────
 def log_generation(user, success):
@@ -175,57 +174,51 @@ def save_accounts(data):
     return r2_put_json(KEY_ACCOUNTS, data)
 
 # ── Buffer persistant R2 ───────────────────────────────────────────────────
+
+# ── Buffer local (/tmp) ────────────────────────────────────────────────────
+BUFFER_FILE = "/tmp/tiktok_buffer.json"
+
 def get_buffer():
-    data = r2_get_json(KEY_BUFFER)
-    return data if data else {"image_keys": [], "flockages": [], "user": None}
+    try:
+        if os.path.exists(BUFFER_FILE):
+            with open(BUFFER_FILE) as f:
+                return json.load(f)
+    except Exception:
+        pass
+    return {"images_b64": [], "flockages": [], "user": None}
 
 def _save_buffer(buf):
-    return r2_put_json(KEY_BUFFER, buf)
+    try:
+        with open(BUFFER_FILE, "w") as f:
+            json.dump(buf, f)
+        return True
+    except Exception as e:
+        print(f"[BUFFER SAVE ERROR] {e}")
+        return False
 
 def add_to_buffer_and_create_tiktoks(new_images_b64, new_flockages, user):
-    """
-    Stocke les nouvelles images sur R2 puis les ajoute au buffer.
-    Quand buffer >= 7 → crée un TikTok complet.
-    Retourne (liste des numéros créés, nombre d'images restantes dans le buffer).
-    """
-    with _r2_lock:
-        buf = get_buffer()
-        if not buf.get("user"):
-            buf["user"] = user
+    buf = get_buffer()
+    if not buf.get("user"):
+        buf["user"] = user
+    buf["images_b64"].extend(new_images_b64)
+    buf["flockages"].extend(new_flockages)
+    print(f"[BUFFER] Now has {len(buf['images_b64'])} images")
 
-        # Stocker chaque image sur R2 et garder la clé
-        ts = int(time.time() * 1000)
-        for i, img_b64 in enumerate(new_images_b64):
-            img_key = f"buffer/imgs/{ts}_{i:03d}.png"
-            r2_put_image(img_key, base64.b64decode(img_b64))
-            buf["image_keys"].append(img_key)
-            buf["flockages"].append(new_flockages[i] if i < len(new_flockages) else "")
+    created = []
+    while len(buf["images_b64"]) >= TIKTOK_SIZE:
+        batch_b64  = buf["images_b64"][:TIKTOK_SIZE]
+        batch_floc = buf["flockages"][:TIKTOK_SIZE]
+        tiktok_num = get_next_tiktok_number()
+        print(f"[BUFFER] Creating TikTok {tiktok_num}...")
+        _save_tiktok(tiktok_num, batch_b64, buf["user"], batch_floc)
+        created.append(tiktok_num)
+        buf["images_b64"] = buf["images_b64"][TIKTOK_SIZE:]
+        buf["flockages"]  = buf["flockages"][TIKTOK_SIZE:]
 
-        created = []
-        while len(buf["image_keys"]) >= TIKTOK_SIZE:
-            batch_keys  = buf["image_keys"][:TIKTOK_SIZE]
-            batch_floc  = buf["flockages"][:TIKTOK_SIZE]
+    _save_buffer(buf)
+    print(f"[BUFFER] Done — {len(created)} TikToks created, {len(buf['images_b64'])} pending")
+    return created, len(buf["images_b64"])
 
-            # Charger les images depuis R2 pour les sauvegarder dans le TikTok
-            batch_b64 = []
-            for k in batch_keys:
-                r2c = get_r2()
-                try:
-                    obj = r2c.get_object(Bucket=R2_BUCKET, Key=k)
-                    batch_b64.append(base64.b64encode(obj["Body"].read()).decode())
-                    r2_delete(k)  # nettoyer le buffer img
-                except Exception:
-                    batch_b64.append("")
-
-            tiktok_num = get_next_tiktok_number()
-            _save_tiktok(tiktok_num, batch_b64, buf["user"], batch_floc)
-            created.append(tiktok_num)
-
-            buf["image_keys"] = buf["image_keys"][TIKTOK_SIZE:]
-            buf["flockages"]  = buf["flockages"][TIKTOK_SIZE:]
-
-        _save_buffer(buf)
-        return created, len(buf["image_keys"])
 
 # ── TikTok queue ───────────────────────────────────────────────────────────
 def _save_tiktok(num, images_b64, user, flockages):
@@ -394,14 +387,12 @@ def stats():
 @app.route("/api/buffer")
 def api_buffer():
     buf = get_buffer()
-    pending = len(buf.get("image_keys",[]))
-    return jsonify({"pending": pending, "needed": max(0, TIKTOK_SIZE-pending)})
+    pending = len(buf.get("images_b64", []))
+    return jsonify({"pending": pending, "needed": max(0, TIKTOK_SIZE - pending)})
 
 @app.route("/api/buffer/clear", methods=["POST"])
 def api_buffer_clear():
-    buf = get_buffer()
-    for k in buf.get("image_keys",[]): r2_delete(k)
-    _save_buffer({"image_keys":[],"flockages":[],"user":None})
+    _save_buffer({"images_b64": [], "flockages": [], "user": None})
     return jsonify({"success": True})
 
 # ── API Comptes ─────────────────────────────────────────────────────────────
