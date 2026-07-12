@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>File d'attente — TikToks</title>
+<style>
+:root[data-theme="dark"]{--bg:#0f1115;--panel:#1a1d24;--border:#2a2e37;--accent:#4ade80;--text:#e5e7eb;--text-dim:#9ca3af;--danger:#f87171;--warn:#fbbf24;--purple:#a78bfa}
+:root[data-theme="light"]{--bg:#f3f4f6;--panel:#fff;--border:#d1d5db;--accent:#16a34a;--text:#111827;--text-dim:#6b7280;--danger:#ef4444;--warn:#d97706;--purple:#7c3aed}
+*{box-sizing:border-box}
+body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;padding:24px}
+.wrap{max-width:1400px;margin:0 auto}
+.topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;flex-wrap:wrap;gap:12px}
+h1{font-size:22px;margin:0}
+.nav{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.nav a{color:var(--accent);text-decoration:none;font-size:13px;font-weight:600}
+.theme-btn{background:var(--panel);border:1px solid var(--border);color:var(--text);padding:6px 12px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600}
+.toolbar{display:flex;gap:10px;margin-bottom:20px;flex-wrap:wrap;align-items:center}
+.btn{padding:10px 18px;background:var(--accent);color:#0f1115;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn-sec{padding:10px 18px;background:var(--panel);border:1px solid var(--border);color:var(--text);border-radius:8px;font-size:13px;font-weight:600;cursor:pointer}
+.btn-purple{background:var(--purple);color:#fff}
+.btn-danger{background:var(--danger);color:#fff}
+.count-badge{background:var(--panel);border:1px solid var(--border);padding:6px 12px;border-radius:8px;font-size:13px;font-weight:600}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:12px;overflow:hidden;transition:border-color .15s}
+.card.selected{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent)}
+.card-header{padding:10px 14px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border)}
+.card-num{font-size:14px;font-weight:700}
+.card-user{font-size:11px;color:var(--text-dim)}
+.card-date{font-size:10px;color:var(--text-dim)}
+.images-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:2px;padding:8px}
+.images-grid img{width:100%;aspect-ratio:3/4;object-fit:cover;border-radius:4px}
+.images-grid .more{display:flex;align-items:center;justify-content:center;background:var(--bg);border-radius:4px;aspect-ratio:3/4;font-size:11px;color:var(--text-dim);font-weight:700}
+.card-footer{padding:10px 14px;display:flex;flex-direction:column;gap:8px;border-top:1px solid var(--border)}
+.account-select{width:100%;padding:7px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;font-weight:600}
+.card-actions{display:flex;gap:6px}
+.select-btn{flex:1;padding:7px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;text-align:center}
+.select-btn.active{background:var(--accent);color:#0f1115;border-color:var(--accent)}
+.del-btn{padding:7px 10px;background:rgba(248,113,113,.1);border:1px solid rgba(248,113,113,.3);color:var(--danger);border-radius:6px;font-size:11px;cursor:pointer}
+.empty{text-align:center;color:var(--text-dim);padding:60px;font-size:14px}
+.loading{text-align:center;color:var(--text-dim);padding:60px}
+.spinner{width:32px;height:32px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 12px}
+@keyframes spin{to{transform:rotate(360deg)}}
+.status-bar{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:12px 16px;margin-bottom:16px;font-size:13px;display:none}
+.status-bar.show{display:block}
+.progress{height:4px;background:var(--border);border-radius:2px;margin-top:8px;overflow:hidden}
+.progress-fill{height:100%;background:var(--accent);width:0%;transition:width .3s}
+.select-all-row{display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap}
+.select-all-row span{font-size:12px;color:var(--text-dim)}
+</style>
+</head>
+<body>
+<div class="wrap">
+    <div class="topbar">
+        <div>
+            <h1>📋 TikToks en attente</h1>
+            <div style="color:var(--text-dim);font-size:12px;margin-top:4px">Images générées, prêtes à programmer sur RobinReach</div>
+        </div>
+        <div class="nav">
+            <a href="/">🎨 Générateur</a>
+            <a href="/scheduled">✅ Programmés</a>
+            <a href="/dashboard">📊 Dashboard</a>
+            <a href="/stats">📈 Stats</a>
+            <button class="theme-btn" id="themeBtn">☀️</button>
+        </div>
+    </div>
+
+    <div class="status-bar" id="statusBar">
+        <span id="statusText">En cours...</span>
+        <div class="progress"><div class="progress-fill" id="progressFill"></div></div>
+    </div>
+
+    <div class="toolbar">
+        <span class="count-badge" id="countBadge">⏳ Chargement...</span>
+        <button class="btn btn-purple" id="dispatchBtn" disabled>🔀 Dispatcher le reste auto</button>
+        <button class="btn" id="scheduleBtn" disabled>🚀 Programmer sur RobinReach</button>
+        <button class="btn-sec btn-danger" id="deleteSelectedBtn" style="display:none">🗑️ Supprimer sélection</button>
+    </div>
+
+    <div class="select-all-row">
+        <button class="btn-sec" id="selectAllBtn" style="padding:6px 12px;font-size:12px">☑️ Tout sélectionner pour compte principal</button>
+        <button class="btn-sec" id="deselectAllBtn" style="padding:6px 12px;font-size:12px;display:none">✖️ Désélectionner tout</button>
+        <span id="selectedCount"></span>
+    </div>
+
+    <div id="grid" class="grid">
+        <div class="loading"><div class="spinner"></div>Chargement des TikToks...</div>
+    </div>
+</div>
+
+<script>
+// Thème
+const html = document.documentElement;
+const themeBtn = document.getElementById('themeBtn');
+let theme = localStorage.getItem('theme') || 'dark';
+applyTheme(theme);
+function applyTheme(t){theme=t;html.setAttribute('data-theme',t);themeBtn.textContent=t==='dark'?'☀️':'🌙';localStorage.setItem('theme',t)}
+themeBtn.addEventListener('click',()=>applyTheme(theme==='dark'?'light':'dark'));
+
+// Comptes TikTok (à configurer)
+const ACCOUNTS = JSON.parse(localStorage.getItem('tiktok_accounts') || '[]');
+const MAIN_ACCOUNT = localStorage.getItem('main_account') || '';
+
+let tiktoks = [];
+let selectedForMain = new Set(); // keys sélectionnés pour compte principal
+
+async function load() {
+    const res = await fetch('/api/queue');
+    const data = await res.json();
+    tiktoks = data.tiktoks || [];
+    render();
+}
+
+function render() {
+    const grid = document.getElementById('grid');
+    const countBadge = document.getElementById('countBadge');
+    const dispatchBtn = document.getElementById('dispatchBtn');
+    const scheduleBtn = document.getElementById('scheduleBtn');
+    const deleteSelectedBtn = document.getElementById('deleteSelectedBtn');
+    const selectedCountEl = document.getElementById('selectedCount');
+    const deselectAllBtn = document.getElementById('deselectAllBtn');
+
+    countBadge.textContent = `${tiktoks.length} TikTok(s) en attente`;
+    dispatchBtn.disabled = tiktoks.length === 0;
+    scheduleBtn.disabled = !tiktoks.some(t => t.account);
+
+    if (selectedForMain.size > 0) {
+        deleteSelectedBtn.style.display = 'inline-block';
+        deselectAllBtn.style.display = 'inline-block';
+        selectedCountEl.textContent = `${selectedForMain.size} sélectionné(s) pour compte principal`;
+    } else {
+        deleteSelectedBtn.style.display = 'none';
+        deselectAllBtn.style.display = 'none';
+        selectedCountEl.textContent = '';
+    }
+
+    if (!tiktoks.length) {
+        grid.innerHTML = '<div class="empty">📭 Aucun TikTok en attente<br><br><a href="/" style="color:var(--accent)">← Générer des images</a></div>';
+        return;
+    }
+
+    grid.innerHTML = tiktoks.map(t => {
+        const isSelected = selectedForMain.has(t.r2_key);
+        const imgs = t.image_urls || [];
+        const displayImgs = imgs.slice(0, 4);
+        const remaining = imgs.length - 4;
+        const date = new Date(t.created_at).toLocaleDateString('fr-FR', {day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit'});
+
+        return `<div class="card ${isSelected ? 'selected' : ''}" id="card-${t.id}">
+            <div class="card-header">
+                <div>
+                    <div class="card-num">TikTok ${t.number} <span style="font-size:10px;color:var(--text-dim)">(${t.image_keys?.length || 0} images)</span></div>
+                    <div class="card-user">Par ${t.user} · ${date}</div>
+                </div>
+                ${t.account ? `<span style="background:rgba(74,222,128,.1);color:var(--accent);padding:3px 8px;border-radius:100px;font-size:10px;font-weight:700">${t.account}</span>` : ''}
+            </div>
+            <div class="images-grid">
+                ${displayImgs.map(url => `<img src="${url}" loading="lazy" onerror="this.style.background='var(--bg)'">`).join('')}
+                ${remaining > 0 ? `<div class="more">+${remaining}</div>` : ''}
+            </div>
+            <div class="card-footer">
+                <select class="account-select" onchange="assignAccount('${t.r2_key}', this.value)">
+                    <option value="">— Choisir un compte —</option>
+                    ${ACCOUNTS.map(a => `<option value="${a}" ${t.account === a ? 'selected' : ''}>${a}</option>`).join('')}
+                </select>
+                <div class="card-actions">
+                    <button class="select-btn ${isSelected ? 'active' : ''}" onclick="toggleMain('${t.r2_key}')">
+                        ${isSelected ? '⭐ Compte principal' : '☆ Marquer principal'}
+                    </button>
+                    <button class="del-btn" onclick="deleteTiktok('${t.r2_key}')">🗑️</button>
+                </div>
+            </div>
+        </div>`;
+    }).join('');
+}
+
+function toggleMain(key) {
+    if (selectedForMain.has(key)) {
+        selectedForMain.delete(key);
+        // Retirer l'assignation compte principal
+        assignAccount(key, '');
+    } else {
+        selectedForMain.add(key);
+        // Assigner le compte principal
+        if (MAIN_ACCOUNT) assignAccount(key, MAIN_ACCOUNT);
+    }
+    render();
+}
+
+async function assignAccount(key, account) {
+    await fetch('/api/queue/assign', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({key, account})
+    });
+    const t = tiktoks.find(t => t.r2_key === key);
+    if (t) t.account = account;
+    render();
+}
+
+document.getElementById('selectAllBtn').addEventListener('click', () => {
+    tiktoks.forEach(t => {
+        selectedForMain.add(t.r2_key);
+        if (MAIN_ACCOUNT) {
+            t.account = MAIN_ACCOUNT;
+            fetch('/api/queue/assign', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:t.r2_key,account:MAIN_ACCOUNT})});
+        }
+    });
+    render();
+});
+
+document.getElementById('deselectAllBtn').addEventListener('click', () => {
+    selectedForMain.clear();
+    render();
+});
+
+document.getElementById('dispatchBtn').addEventListener('click', async () => {
+    const otherAccounts = ACCOUNTS.filter(a => a !== MAIN_ACCOUNT);
+    if (!otherAccounts.length) {
+        alert('Configure tes autres comptes TikTok dans les paramètres.');
+        return;
+    }
+    const res = await fetch('/api/queue/dispatch', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({accounts: otherAccounts})
+    });
+    const data = await res.json();
+    showStatus(`✅ ${data.count} TikTok(s) dispatchés automatiquement`, 100);
+    await load();
+});
+
+document.getElementById('scheduleBtn').addEventListener('click', async () => {
+    const assigned = tiktoks.filter(t => t.account);
+    if (!assigned.length) { alert('Aucun TikTok avec compte assigné.'); return; }
+    showStatus(`🚀 Programmation de ${assigned.length} TikTok(s)...`, 0);
+    const res = await fetch('/api/queue/schedule', {method: 'POST', headers: {'Content-Type': 'application/json'}});
+    const data = await res.json();
+    showStatus(`✅ ${data.scheduled} TikTok(s) programmés !${data.errors?.length ? ` (${data.errors.length} erreurs)` : ''}`, 100);
+    setTimeout(() => { load(); }, 1500);
+});
+
+document.getElementById('deleteSelectedBtn').addEventListener('click', async () => {
+    if (!confirm(`Supprimer ${selectedForMain.size} TikTok(s) ?`)) return;
+    for (const key of selectedForMain) {
+        await fetch('/api/queue/delete', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key})});
+    }
+    selectedForMain.clear();
+    await load();
+});
+
+async function deleteTiktok(key) {
+    if (!confirm('Supprimer ce TikTok ?')) return;
+    await fetch('/api/queue/delete', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key})});
+    selectedForMain.delete(key);
+    await load();
+}
+
+function showStatus(text, pct) {
+    const bar = document.getElementById('statusBar');
+    document.getElementById('statusText').textContent = text;
+    document.getElementById('progressFill').style.width = pct + '%';
+    bar.classList.add('show');
+    if (pct >= 100) setTimeout(() => bar.classList.remove('show'), 3000);
+}
+
+// Config comptes — si pas encore configurés, afficher un message
+if (!ACCOUNTS.length) {
+    const msg = document.createElement('div');
+    msg.style = 'background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.3);color:#fbbf24;padding:12px 16px;border-radius:10px;margin-bottom:16px;font-size:13px';
+    msg.innerHTML = '⚠️ Configure tes comptes TikTok : <button onclick="configAccounts()" style="background:none;border:none;color:#fbbf24;cursor:pointer;font-weight:700;text-decoration:underline">Cliquer ici</button>';
+    document.querySelector('.toolbar').after(msg);
+}
+
+function configAccounts() {
+    const main = prompt('Compte principal (ex: @volakits) :');
+    if (main) {
+        localStorage.setItem('main_account', main);
+        const others = prompt('Autres comptes séparés par virgule (ex: @volakits2,@volakits3) :');
+        const all = [main, ...(others ? others.split(',').map(s=>s.trim()) : [])];
+        localStorage.setItem('tiktok_accounts', JSON.stringify(all));
+        location.reload();
+    }
+}
+
+load();
+// Auto-refresh toutes les 30 secondes
+setInterval(load, 30000);
+</script>
+</body>
+</html>
