@@ -10,44 +10,59 @@
 *{box-sizing:border-box}
 body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;padding:24px}
 .wrap{max-width:1400px;margin:0 auto}
-.topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;flex-wrap:wrap;gap:12px}
+.topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px}
 h1{font-size:22px;margin:0}
 .nav{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
 .nav a{color:var(--accent);text-decoration:none;font-size:13px;font-weight:600}
-.theme-btn{background:var(--panel);border:1px solid var(--border);color:var(--text);padding:6px 12px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600}
-.toolbar{display:flex;gap:10px;margin-bottom:20px;flex-wrap:wrap;align-items:center}
+.theme-btn,.config-btn{background:var(--panel);border:1px solid var(--border);color:var(--text);padding:6px 12px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600}
+/* Buffer bar */
+.buffer-bar{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.buffer-label{font-size:13px;font-weight:600;color:var(--warn)}
+.buffer-track{flex:1;min-width:120px;height:8px;background:var(--border);border-radius:4px;overflow:hidden}
+.buffer-fill{height:100%;background:var(--warn);border-radius:4px;transition:width .3s}
+.buffer-text{font-size:12px;color:var(--text-dim);white-space:nowrap}
+/* Toolbar */
+.toolbar{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;align-items:center}
 .btn{padding:10px 18px;background:var(--accent);color:#0f1115;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer}
 .btn:disabled{opacity:.5;cursor:not-allowed}
 .btn-sec{padding:10px 18px;background:var(--panel);border:1px solid var(--border);color:var(--text);border-radius:8px;font-size:13px;font-weight:600;cursor:pointer}
-.btn-purple{background:var(--purple);color:#fff}
-.btn-danger{background:var(--danger);color:#fff}
+.btn-purple{background:var(--purple);color:#fff;border:none}
+.btn-danger{background:rgba(248,113,113,.15);border:1px solid rgba(248,113,113,.4);color:var(--danger)}
 .count-badge{background:var(--panel);border:1px solid var(--border);padding:6px 12px;border-radius:8px;font-size:13px;font-weight:600}
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px}
-.card{background:var(--panel);border:1px solid var(--border);border-radius:12px;overflow:hidden;transition:border-color .15s}
-.card.selected{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent)}
-.card-header{padding:10px 14px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border)}
-.card-num{font-size:14px;font-weight:700}
-.card-user{font-size:11px;color:var(--text-dim)}
-.card-date{font-size:10px;color:var(--text-dim)}
-.images-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:2px;padding:8px}
-.images-grid img{width:100%;aspect-ratio:3/4;object-fit:cover;border-radius:4px}
-.images-grid .more{display:flex;align-items:center;justify-content:center;background:var(--bg);border-radius:4px;aspect-ratio:3/4;font-size:11px;color:var(--text-dim);font-weight:700}
-.card-footer{padding:10px 14px;display:flex;flex-direction:column;gap:8px;border-top:1px solid var(--border)}
-.account-select{width:100%;padding:7px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;font-weight:600}
-.card-actions{display:flex;gap:6px}
-.select-btn{flex:1;padding:7px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;text-align:center}
-.select-btn.active{background:var(--accent);color:#0f1115;border-color:var(--accent)}
-.del-btn{padding:7px 10px;background:rgba(248,113,113,.1);border:1px solid rgba(248,113,113,.3);color:var(--danger);border-radius:6px;font-size:11px;cursor:pointer}
-.empty{text-align:center;color:var(--text-dim);padding:60px;font-size:14px}
-.loading{text-align:center;color:var(--text-dim);padding:60px}
-.spinner{width:32px;height:32px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 12px}
-@keyframes spin{to{transform:rotate(360deg)}}
-.status-bar{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:12px 16px;margin-bottom:16px;font-size:13px;display:none}
+.select-row{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center}
+.select-row span{font-size:12px;color:var(--text-dim)}
+/* Status bar */
+.status-bar{background:rgba(74,222,128,.08);border:1px solid rgba(74,222,128,.25);border-radius:10px;padding:12px 16px;margin-bottom:16px;font-size:13px;display:none}
 .status-bar.show{display:block}
-.progress{height:4px;background:var(--border);border-radius:2px;margin-top:8px;overflow:hidden}
-.progress-fill{height:100%;background:var(--accent);width:0%;transition:width .3s}
-.select-all-row{display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap}
-.select-all-row span{font-size:12px;color:var(--text-dim)}
+/* Grid */
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px}
+.card{background:var(--panel);border:2px solid var(--border);border-radius:12px;overflow:hidden;transition:border-color .15s}
+.card.selected{border-color:var(--accent)}
+.card-header{padding:10px 12px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border)}
+.card-num{font-size:13px;font-weight:700}
+.card-meta{font-size:10px;color:var(--text-dim);margin-top:1px}
+.account-tag{background:rgba(74,222,128,.1);color:var(--accent);padding:2px 8px;border-radius:100px;font-size:10px;font-weight:700}
+.imgs-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:2px;padding:6px}
+.imgs-grid img{width:100%;aspect-ratio:3/4;object-fit:cover;border-radius:3px;background:var(--bg)}
+.more-imgs{display:flex;align-items:center;justify-content:center;background:var(--bg);border-radius:3px;aspect-ratio:3/4;font-size:10px;color:var(--text-dim);font-weight:700}
+.card-footer{padding:8px 10px;display:flex;flex-direction:column;gap:6px;border-top:1px solid var(--border)}
+.account-select{width:100%;padding:6px 9px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;font-weight:600}
+.card-actions{display:flex;gap:5px}
+.mark-btn{flex:1;padding:6px;background:var(--bg);border:1px solid var(--border);color:var(--text-dim);border-radius:5px;font-size:11px;font-weight:600;cursor:pointer;text-align:center;transition:all .15s}
+.mark-btn.on{background:var(--accent);color:#0f1115;border-color:var(--accent)}
+.del-btn{padding:6px 9px;background:rgba(248,113,113,.1);border:1px solid rgba(248,113,113,.3);color:var(--danger);border-radius:5px;font-size:11px;cursor:pointer}
+.empty{text-align:center;color:var(--text-dim);padding:60px;font-size:14px}
+.spinner{width:28px;height:28px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 12px}
+@keyframes spin{to{transform:rotate(360deg)}}
+/* Modal config */
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:100;display:none}
+.modal-bg.open{display:flex}
+.modal{background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:24px;width:100%;max-width:440px}
+.modal h2{font-size:16px;margin:0 0 16px}
+.modal label{display:block;font-size:12px;color:var(--text-dim);margin-bottom:4px;margin-top:12px;font-weight:600}
+.modal input{width:100%;padding:9px 11px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px}
+.modal-hint{font-size:11px;color:var(--text-dim);margin-top:4px}
+.modal-actions{display:flex;gap:8px;margin-top:20px;justify-content:flex-end}
 </style>
 </head>
 <body>
@@ -55,238 +70,262 @@ h1{font-size:22px;margin:0}
     <div class="topbar">
         <div>
             <h1>📋 TikToks en attente</h1>
-            <div style="color:var(--text-dim);font-size:12px;margin-top:4px">Images générées, prêtes à programmer sur RobinReach</div>
+            <div style="color:var(--text-dim);font-size:12px;margin-top:2px">Images générées, groupées par 7, prêtes à programmer</div>
         </div>
         <div class="nav">
             <a href="/">🎨 Générateur</a>
             <a href="/scheduled">✅ Programmés</a>
             <a href="/dashboard">📊 Dashboard</a>
             <a href="/stats">📈 Stats</a>
+            <button class="config-btn" onclick="openConfig()">⚙️ Comptes</button>
             <button class="theme-btn" id="themeBtn">☀️</button>
         </div>
     </div>
 
-    <div class="status-bar" id="statusBar">
-        <span id="statusText">En cours...</span>
-        <div class="progress"><div class="progress-fill" id="progressFill"></div></div>
+    <!-- Buffer bar -->
+    <div class="buffer-bar" id="bufferBar" style="display:none">
+        <span class="buffer-label">⏳ Buffer en cours</span>
+        <div class="buffer-track"><div class="buffer-fill" id="bufferFill"></div></div>
+        <span class="buffer-text" id="bufferText">—/7 images</span>
+        <button class="btn-sec" style="padding:5px 10px;font-size:11px" onclick="clearBuffer()">🗑️ Vider le buffer</button>
     </div>
+
+    <div class="status-bar" id="statusBar"></div>
 
     <div class="toolbar">
         <span class="count-badge" id="countBadge">⏳ Chargement...</span>
-        <button class="btn btn-purple" id="dispatchBtn" disabled>🔀 Dispatcher le reste auto</button>
-        <button class="btn" id="scheduleBtn" disabled>🚀 Programmer sur RobinReach</button>
-        <button class="btn-sec btn-danger" id="deleteSelectedBtn" style="display:none">🗑️ Supprimer sélection</button>
+        <button class="btn btn-purple" id="dispatchBtn" disabled onclick="dispatchAuto()">🔀 Dispatcher le reste auto</button>
+        <button class="btn" id="scheduleBtn" disabled onclick="scheduleAll()">🚀 Programmer sur RobinReach</button>
+        <button class="btn-sec btn-danger" id="deleteSelBtn" style="display:none" onclick="deleteSelected()">🗑️ Supprimer sélection</button>
     </div>
 
-    <div class="select-all-row">
-        <button class="btn-sec" id="selectAllBtn" style="padding:6px 12px;font-size:12px">☑️ Tout sélectionner pour compte principal</button>
-        <button class="btn-sec" id="deselectAllBtn" style="padding:6px 12px;font-size:12px;display:none">✖️ Désélectionner tout</button>
-        <span id="selectedCount"></span>
+    <div class="select-row">
+        <button class="btn-sec" style="padding:6px 12px;font-size:12px" onclick="selectAll()">⭐ Tout → Compte principal</button>
+        <button class="btn-sec" style="padding:6px 12px;font-size:12px;display:none" id="deselectBtn" onclick="deselectAll()">✖️ Désélectionner tout</button>
+        <span id="selCount"></span>
     </div>
 
     <div id="grid" class="grid">
-        <div class="loading"><div class="spinner"></div>Chargement des TikToks...</div>
+        <div style="text-align:center;padding:60px;color:var(--text-dim)"><div class="spinner"></div>Chargement...</div>
+    </div>
+</div>
+
+<!-- Modal config comptes -->
+<div class="modal-bg" id="configModal">
+    <div class="modal">
+        <h2>⚙️ Configuration des comptes TikTok</h2>
+        <label>Compte principal (celui qui performe le mieux)</label>
+        <input id="mainAccount" placeholder="ex: @volakits">
+        <div class="modal-hint">Les TikToks que tu sélectionnes manuellement iront sur ce compte</div>
+        <label>Autres comptes (séparés par virgule)</label>
+        <input id="otherAccounts" placeholder="ex: @volakits2, @volakits3, @volakits4, @volakits5">
+        <div class="modal-hint">Le reste sera dispatché automatiquement sur ces comptes</div>
+        <div class="modal-actions">
+            <button class="btn-sec" onclick="closeConfig()">Annuler</button>
+            <button class="btn" onclick="saveConfig()">💾 Sauvegarder</button>
+        </div>
     </div>
 </div>
 
 <script>
-// Thème
-const html = document.documentElement;
-const themeBtn = document.getElementById('themeBtn');
-let theme = localStorage.getItem('theme') || 'dark';
+// ── Thème ──────────────────────────────────────────────────────────────────
+const html=document.documentElement;
+const themeBtn=document.getElementById('themeBtn');
+let theme=localStorage.getItem('theme')||'dark';
 applyTheme(theme);
 function applyTheme(t){theme=t;html.setAttribute('data-theme',t);themeBtn.textContent=t==='dark'?'☀️':'🌙';localStorage.setItem('theme',t)}
 themeBtn.addEventListener('click',()=>applyTheme(theme==='dark'?'light':'dark'));
 
-// Comptes TikTok (à configurer)
-const ACCOUNTS = JSON.parse(localStorage.getItem('tiktok_accounts') || '[]');
-const MAIN_ACCOUNT = localStorage.getItem('main_account') || '';
+// ── State ──────────────────────────────────────────────────────────────────
+let tiktoks=[];
+let selectedForMain=new Set();
+let accounts={main:'',others:[]};
 
-let tiktoks = [];
-let selectedForMain = new Set(); // keys sélectionnés pour compte principal
+// ── Chargement initial ─────────────────────────────────────────────────────
+async function init(){
+    const [acRes, bufRes] = await Promise.all([fetch('/api/accounts'), fetch('/api/buffer')]);
+    accounts = await acRes.json();
+    const buf = await bufRes.json();
+    updateBufferBar(buf.pending, buf.pending + buf.needed);
+    await loadQueue();
+}
 
-async function load() {
-    const res = await fetch('/api/queue');
-    const data = await res.json();
-    tiktoks = data.tiktoks || [];
+async function loadQueue(){
+    const res=await fetch('/api/queue');
+    const data=await res.json();
+    tiktoks=data.tiktoks||[];
     render();
 }
 
-function render() {
-    const grid = document.getElementById('grid');
-    const countBadge = document.getElementById('countBadge');
-    const dispatchBtn = document.getElementById('dispatchBtn');
-    const scheduleBtn = document.getElementById('scheduleBtn');
-    const deleteSelectedBtn = document.getElementById('deleteSelectedBtn');
-    const selectedCountEl = document.getElementById('selectedCount');
-    const deselectAllBtn = document.getElementById('deselectAllBtn');
-
-    countBadge.textContent = `${tiktoks.length} TikTok(s) en attente`;
-    dispatchBtn.disabled = tiktoks.length === 0;
-    scheduleBtn.disabled = !tiktoks.some(t => t.account);
-
-    if (selectedForMain.size > 0) {
-        deleteSelectedBtn.style.display = 'inline-block';
-        deselectAllBtn.style.display = 'inline-block';
-        selectedCountEl.textContent = `${selectedForMain.size} sélectionné(s) pour compte principal`;
+// ── Buffer bar ─────────────────────────────────────────────────────────────
+function updateBufferBar(pending, total){
+    const bar=document.getElementById('bufferBar');
+    const fill=document.getElementById('bufferFill');
+    const text=document.getElementById('bufferText');
+    if(pending>0){
+        bar.style.display='flex';
+        fill.style.width=`${Math.round(pending/total*100)}%`;
+        text.textContent=`${pending}/7 images — encore ${total-pending} avant le prochain TikTok`;
     } else {
-        deleteSelectedBtn.style.display = 'none';
-        deselectAllBtn.style.display = 'none';
-        selectedCountEl.textContent = '';
+        bar.style.display='none';
     }
+}
 
-    if (!tiktoks.length) {
-        grid.innerHTML = '<div class="empty">📭 Aucun TikTok en attente<br><br><a href="/" style="color:var(--accent)">← Générer des images</a></div>';
+async function clearBuffer(){
+    if(!confirm('Vider le buffer ? Les images en attente seront perdues.')) return;
+    await fetch('/api/buffer/clear',{method:'POST'});
+    const res=await fetch('/api/buffer');
+    const buf=await res.json();
+    updateBufferBar(buf.pending,buf.pending+buf.needed);
+    showStatus('🗑️ Buffer vidé');
+}
+
+// ── Render ─────────────────────────────────────────────────────────────────
+function render(){
+    const grid=document.getElementById('grid');
+    const countBadge=document.getElementById('countBadge');
+    const dispatchBtn=document.getElementById('dispatchBtn');
+    const scheduleBtn=document.getElementById('scheduleBtn');
+    const deleteSelBtn=document.getElementById('deleteSelBtn');
+    const deselectBtn=document.getElementById('deselectBtn');
+    const selCountEl=document.getElementById('selCount');
+
+    countBadge.textContent=`${tiktoks.length} TikTok(s) en attente`;
+    dispatchBtn.disabled=tiktoks.length===0||!accounts.others?.length;
+    scheduleBtn.disabled=!tiktoks.some(t=>t.account);
+    deleteSelBtn.style.display=selectedForMain.size>0?'inline-block':'none';
+    deselectBtn.style.display=selectedForMain.size>0?'inline-block':'none';
+    selCountEl.textContent=selectedForMain.size>0?`${selectedForMain.size} sélectionné(s) → ${accounts.main||'compte principal'}`:'';
+
+    if(!tiktoks.length){
+        grid.innerHTML='<div class="empty">📭 Aucun TikTok en attente<br><br>Génère des images sur le <a href="/" style="color:var(--accent)">Générateur</a> — elles seront automatiquement regroupées ici par 7</div>';
         return;
     }
 
-    grid.innerHTML = tiktoks.map(t => {
-        const isSelected = selectedForMain.has(t.r2_key);
-        const imgs = t.image_urls || [];
-        const displayImgs = imgs.slice(0, 4);
-        const remaining = imgs.length - 4;
-        const date = new Date(t.created_at).toLocaleDateString('fr-FR', {day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit'});
+    const allAccounts=[accounts.main,...(accounts.others||[])].filter(Boolean);
 
-        return `<div class="card ${isSelected ? 'selected' : ''}" id="card-${t.id}">
+    grid.innerHTML=tiktoks.map(t=>{
+        const sel=selectedForMain.has(t.r2_key);
+        const imgs=t.image_urls||[];
+        const show=imgs.slice(0,3);
+        const rem=imgs.length-3;
+        const date=new Date(t.created_at).toLocaleDateString('fr-FR',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});
+        return `<div class="card ${sel?'selected':''}" id="c-${t.id}">
             <div class="card-header">
                 <div>
-                    <div class="card-num">TikTok ${t.number} <span style="font-size:10px;color:var(--text-dim)">(${t.image_keys?.length || 0} images)</span></div>
-                    <div class="card-user">Par ${t.user} · ${date}</div>
+                    <div class="card-num">TikTok ${t.number} <span style="font-size:10px;color:var(--text-dim)">${t.image_keys?.length||0} images</span></div>
+                    <div class="card-meta">${t.user} · ${date}</div>
                 </div>
-                ${t.account ? `<span style="background:rgba(74,222,128,.1);color:var(--accent);padding:3px 8px;border-radius:100px;font-size:10px;font-weight:700">${t.account}</span>` : ''}
+                ${t.account?`<span class="account-tag">${t.account}</span>`:''}
             </div>
-            <div class="images-grid">
-                ${displayImgs.map(url => `<img src="${url}" loading="lazy" onerror="this.style.background='var(--bg)'">`).join('')}
-                ${remaining > 0 ? `<div class="more">+${remaining}</div>` : ''}
+            <div class="imgs-grid">
+                ${show.map(u=>`<img src="${u||''}" loading="lazy" onerror="this.style.opacity='.2'">`).join('')}
+                ${rem>0?`<div class="more-imgs">+${rem}</div>`:''}
             </div>
             <div class="card-footer">
-                <select class="account-select" onchange="assignAccount('${t.r2_key}', this.value)">
+                <select class="account-select" onchange="assign('${t.r2_key}',this.value)">
                     <option value="">— Choisir un compte —</option>
-                    ${ACCOUNTS.map(a => `<option value="${a}" ${t.account === a ? 'selected' : ''}>${a}</option>`).join('')}
+                    ${allAccounts.map(a=>`<option value="${a}" ${t.account===a?'selected':''}>${a}${a===accounts.main?' ⭐':''}</option>`).join('')}
                 </select>
                 <div class="card-actions">
-                    <button class="select-btn ${isSelected ? 'active' : ''}" onclick="toggleMain('${t.r2_key}')">
-                        ${isSelected ? '⭐ Compte principal' : '☆ Marquer principal'}
-                    </button>
-                    <button class="del-btn" onclick="deleteTiktok('${t.r2_key}')">🗑️</button>
+                    <div class="mark-btn ${sel?'on':''}" onclick="toggleMain('${t.r2_key}')">
+                        ${sel?'⭐ Compte principal':'☆ Marquer principal'}
+                    </div>
+                    <div class="del-btn" onclick="deleteTiktok('${t.r2_key}')">🗑️</div>
                 </div>
             </div>
         </div>`;
     }).join('');
 }
 
-function toggleMain(key) {
-    if (selectedForMain.has(key)) {
-        selectedForMain.delete(key);
-        // Retirer l'assignation compte principal
-        assignAccount(key, '');
-    } else {
-        selectedForMain.add(key);
-        // Assigner le compte principal
-        if (MAIN_ACCOUNT) assignAccount(key, MAIN_ACCOUNT);
-    }
+// ── Actions ────────────────────────────────────────────────────────────────
+function toggleMain(key){
+    if(selectedForMain.has(key)){selectedForMain.delete(key);assign(key,'')}
+    else{selectedForMain.add(key);if(accounts.main)assign(key,accounts.main)}
     render();
 }
 
-async function assignAccount(key, account) {
-    await fetch('/api/queue/assign', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({key, account})
-    });
-    const t = tiktoks.find(t => t.r2_key === key);
-    if (t) t.account = account;
+async function assign(key,account){
+    await fetch('/api/queue/assign',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key,account})});
+    const t=tiktoks.find(t=>t.r2_key===key);
+    if(t) t.account=account;
     render();
 }
 
-document.getElementById('selectAllBtn').addEventListener('click', () => {
-    tiktoks.forEach(t => {
-        selectedForMain.add(t.r2_key);
-        if (MAIN_ACCOUNT) {
-            t.account = MAIN_ACCOUNT;
-            fetch('/api/queue/assign', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:t.r2_key,account:MAIN_ACCOUNT})});
-        }
-    });
+function selectAll(){
+    tiktoks.forEach(t=>{selectedForMain.add(t.r2_key);if(accounts.main)assign(t.r2_key,accounts.main)});
     render();
-});
+}
+function deselectAll(){selectedForMain.clear();render()}
 
-document.getElementById('deselectAllBtn').addEventListener('click', () => {
-    selectedForMain.clear();
-    render();
-});
+async function dispatchAuto(){
+    if(!accounts.others?.length){alert('Configure d\'abord tes autres comptes (bouton ⚙️ Comptes)');return}
+    const res=await fetch('/api/queue/dispatch',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({accounts:accounts.others})});
+    const d=await res.json();
+    showStatus(`✅ ${d.count} TikTok(s) dispatchés sur ${accounts.others.join(', ')}`);
+    await loadQueue();
+}
 
-document.getElementById('dispatchBtn').addEventListener('click', async () => {
-    const otherAccounts = ACCOUNTS.filter(a => a !== MAIN_ACCOUNT);
-    if (!otherAccounts.length) {
-        alert('Configure tes autres comptes TikTok dans les paramètres.');
-        return;
-    }
-    const res = await fetch('/api/queue/dispatch', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({accounts: otherAccounts})
-    });
-    const data = await res.json();
-    showStatus(`✅ ${data.count} TikTok(s) dispatchés automatiquement`, 100);
-    await load();
-});
+async function scheduleAll(){
+    const assigned=tiktoks.filter(t=>t.account);
+    if(!assigned.length){alert('Assigne d\'abord un compte à chaque TikTok');return}
+    showStatus(`🚀 Programmation de ${assigned.length} TikTok(s) en cours...`);
+    const res=await fetch('/api/queue/schedule',{method:'POST',headers:{'Content-Type':'application/json'}});
+    const d=await res.json();
+    if(d.errors?.length) showStatus(`✅ ${d.scheduled} programmés — ⚠️ ${d.errors.length} erreur(s)`);
+    else showStatus(`✅ ${d.scheduled} TikTok(s) programmés sur RobinReach !`);
+    setTimeout(loadQueue,1500);
+}
 
-document.getElementById('scheduleBtn').addEventListener('click', async () => {
-    const assigned = tiktoks.filter(t => t.account);
-    if (!assigned.length) { alert('Aucun TikTok avec compte assigné.'); return; }
-    showStatus(`🚀 Programmation de ${assigned.length} TikTok(s)...`, 0);
-    const res = await fetch('/api/queue/schedule', {method: 'POST', headers: {'Content-Type': 'application/json'}});
-    const data = await res.json();
-    showStatus(`✅ ${data.scheduled} TikTok(s) programmés !${data.errors?.length ? ` (${data.errors.length} erreurs)` : ''}`, 100);
-    setTimeout(() => { load(); }, 1500);
-});
-
-document.getElementById('deleteSelectedBtn').addEventListener('click', async () => {
-    if (!confirm(`Supprimer ${selectedForMain.size} TikTok(s) ?`)) return;
-    for (const key of selectedForMain) {
-        await fetch('/api/queue/delete', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key})});
-    }
-    selectedForMain.clear();
-    await load();
-});
-
-async function deleteTiktok(key) {
-    if (!confirm('Supprimer ce TikTok ?')) return;
-    await fetch('/api/queue/delete', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key})});
+async function deleteTiktok(key){
+    if(!confirm('Supprimer ce TikTok et ses images ?')) return;
+    await fetch('/api/queue/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key})});
     selectedForMain.delete(key);
-    await load();
+    await loadQueue();
 }
 
-function showStatus(text, pct) {
-    const bar = document.getElementById('statusBar');
-    document.getElementById('statusText').textContent = text;
-    document.getElementById('progressFill').style.width = pct + '%';
-    bar.classList.add('show');
-    if (pct >= 100) setTimeout(() => bar.classList.remove('show'), 3000);
-}
-
-// Config comptes — si pas encore configurés, afficher un message
-if (!ACCOUNTS.length) {
-    const msg = document.createElement('div');
-    msg.style = 'background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.3);color:#fbbf24;padding:12px 16px;border-radius:10px;margin-bottom:16px;font-size:13px';
-    msg.innerHTML = '⚠️ Configure tes comptes TikTok : <button onclick="configAccounts()" style="background:none;border:none;color:#fbbf24;cursor:pointer;font-weight:700;text-decoration:underline">Cliquer ici</button>';
-    document.querySelector('.toolbar').after(msg);
-}
-
-function configAccounts() {
-    const main = prompt('Compte principal (ex: @volakits) :');
-    if (main) {
-        localStorage.setItem('main_account', main);
-        const others = prompt('Autres comptes séparés par virgule (ex: @volakits2,@volakits3) :');
-        const all = [main, ...(others ? others.split(',').map(s=>s.trim()) : [])];
-        localStorage.setItem('tiktok_accounts', JSON.stringify(all));
-        location.reload();
+async function deleteSelected(){
+    if(!confirm(`Supprimer ${selectedForMain.size} TikTok(s) ?`)) return;
+    for(const key of selectedForMain){
+        await fetch('/api/queue/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key})});
     }
+    selectedForMain.clear();
+    await loadQueue();
 }
 
-load();
-// Auto-refresh toutes les 30 secondes
-setInterval(load, 30000);
+// ── Config comptes ─────────────────────────────────────────────────────────
+function openConfig(){
+    document.getElementById('mainAccount').value=accounts.main||'';
+    document.getElementById('otherAccounts').value=(accounts.others||[]).join(', ');
+    document.getElementById('configModal').classList.add('open');
+}
+function closeConfig(){document.getElementById('configModal').classList.remove('open')}
+async function saveConfig(){
+    const main=document.getElementById('mainAccount').value.trim();
+    const others=document.getElementById('otherAccounts').value.split(',').map(s=>s.trim()).filter(Boolean);
+    await fetch('/api/accounts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({main,others})});
+    accounts={main,others};
+    closeConfig();
+    showStatus('✅ Comptes sauvegardés');
+    render();
+}
+
+// ── Status ─────────────────────────────────────────────────────────────────
+function showStatus(msg){
+    const bar=document.getElementById('statusBar');
+    bar.textContent=msg;bar.classList.add('show');
+    setTimeout(()=>bar.classList.remove('show'),4000);
+}
+
+// ── Init ───────────────────────────────────────────────────────────────────
+init();
+setInterval(async()=>{
+    const res=await fetch('/api/buffer');
+    const buf=await res.json();
+    updateBufferBar(buf.pending,buf.pending+buf.needed);
+},15000);
+setInterval(loadQueue,30000);
 </script>
 </body>
 </html>
