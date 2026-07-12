@@ -325,15 +325,20 @@ async function launch(testMode=false){
         if(!res.ok){const d=await res.json();statusEl.textContent='Erreur: '+(d.error||'inconnue');return}
         const reader=res.body.getReader();const decoder=new TextDecoder();
         let buffer='';let done=0;const total=filesToUse.length;
-        // Timeout de sécurité : si le stream bloque plus de 30s après la dernière image, on arrête
-        let lastActivity=Date.now();
-        const safetyTimer=setInterval(()=>{if(done>=total&&Date.now()-lastActivity>30000){reader.cancel();clearInterval(safetyTimer)}},5000);
         while(true){
-            const{value,done:sd}=await reader.read();if(sd){clearInterval(safetyTimer);break;}
-            lastActivity=Date.now();
+            const{value,done:sd}=await reader.read();if(sd)break;
             buffer+=decoder.decode(value,{stream:true});
             let lines2=buffer.split('\n');buffer=lines2.pop();
-            for(const line of lines2){if(!line.trim())continue;const data=JSON.parse(line);if(data.tiktok_created){statusEl.innerHTML=`✅ TikTok ${data.tiktok_created} créé ! <a href="/queue" style="color:var(--accent);font-weight:700">Voir la file d'attente →</a>`;updateBufferBadge();continue;}if(data.buffer_update){statusEl.innerHTML=`⏳ ${data.pending}/7 images en buffer — encore ${data.needed} avant le prochain TikTok`;updateBufferBadge();continue;}renderResult(data);incrRPD();done++;progressFill.style.width=`${Math.round(done/total*100)}%`;if(done<total)statusEl.textContent=`${done}/${total} traité(s)`;}
+            for(const line of lines2){
+                if(!line.trim())continue;
+                const data=JSON.parse(line);
+                if(data.tiktok_created){statusEl.innerHTML=`✅ TikTok ${data.tiktok_created} créé ! <a href="/queue" style="color:var(--accent);font-weight:700">Voir la file d'attente →</a>`;updateBufferBadge();continue;}
+                if(data.buffer_update){statusEl.innerHTML=`⏳ ${data.pending}/7 images en buffer — encore ${data.needed} avant le prochain TikTok`;updateBufferBadge();continue;}
+                renderResult(data);incrRPD();done++;
+                progressFill.style.width=`${Math.round(done/total*100)}%`;
+                if(done<total)statusEl.textContent=`${done}/${total} traité(s)`;
+            }
+        }
         }
         }
         notifyDone(total,testMode);
