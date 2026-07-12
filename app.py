@@ -3,59 +3,69 @@ import base64
 import json
 import time
 import uuid
+import threading
 import requests
 import boto3
 from datetime import datetime, timezone, timedelta
 from concurrent.futures import ThreadPoolExecutor
 from flask import Flask, render_template, request, Response, jsonify
 from botocore.config import Config
-from io import BytesIO
 
 app = Flask(__name__)
 
 # ── Config ─────────────────────────────────────────────────────────────────
-API_KEY = os.environ.get("GEMINI_API_KEY")
-MODEL_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-image:generateContent"
+API_KEY        = os.environ.get("GEMINI_API_KEY")
+MODEL_URL      = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-image:generateContent"
 COST_PER_IMAGE = 0.067
-LOG_FILE = "/tmp/generation_log.jsonl"
-SESSION_FILE = "/tmp/sessions.jsonl"
-TIKTOK_SIZE = 7  # images par TikTok
-FIXED_CAPTION = "3 Maillot Acheté 1 Offert 🎁 #volakits #ete #foot"
-SCHEDULE_TIMES = ["12:30", "16:00", "19:30", "21:00"]  # créneaux fixes
+TIKTOK_SIZE    = 7
+FIXED_CAPTION  = "3 Maillot Acheté 1 Offert 🎁 #volakits #ete #foot"
+SCHEDULE_TIMES = ["12:30", "16:00", "19:30", "21:00"]
 
-# ── Cloudflare R2 ──────────────────────────────────────────────────────────
-R2_ENDPOINT = os.environ.get("R2_ENDPOINT")
+R2_ENDPOINT   = os.environ.get("R2_ENDPOINT")
 R2_ACCESS_KEY = os.environ.get("R2_ACCESS_KEY_ID")
 R2_SECRET_KEY = os.environ.get("R2_SECRET_ACCESS_KEY")
-R2_BUCKET = os.environ.get("R2_BUCKET", "jersey-templates")
-R2_QUEUE_PREFIX = "queue/"
-R2_SCHEDULED_PREFIX = "scheduled/"
-R2_TEMPLATES_PREFIX = "templates/"
+R2_BUCKET     = os.environ.get("R2_BUCKET", "jersey-templates")
 
+ROBINREACH_API_KEY  = os.environ.get("ROBINREACH_API_KEY")
+ROBINREACH_BRAND_ID = os.environ.get("ROBINREACH_BRAND_ID")
+
+# Préfixes R2
+PFX_QUEUE     = "queue/"
+PFX_SCHEDULED = "scheduled/"
+PFX_TEMPLATES = "templates/"
+PFX_LOGS      = "logs/"
+KEY_BUFFER    = "buffer/pending.json"
+KEY_COUNTER   = "meta/tiktok_counter.json"
+KEY_ACCOUNTS  = "meta/accounts.json"
+
+# Lock pour éviter race conditions sur le compteur/buffer
+_r2_lock = threading.Lock()
+
+# ── R2 client singleton ────────────────────────────────────────────────────
+_r2_client = None
 def get_r2():
-    if not R2_ENDPOINT:
-        return None
-    return boto3.client(
-        "s3",
-        endpoint_url=R2_ENDPOINT,
-        aws_access_key_id=R2_ACCESS_KEY,
-        aws_secret_access_key=R2_SECRET_KEY,
-        config=Config(signature_version="s3v4"),
-        region_name="auto",
-    )
+    global _r2_client
+    if _r2_client is None and R2_ENDPOINT:
+        _r2_client = boto3.client(
+            "s3",
+            endpoint_url=R2_ENDPOINT,
+            aws_access_key_id=R2_ACCESS_KEY,
+            aws_secret_access_key=R2_SECRET_KEY,
+            config=Config(signature_version="s3v4"),
+            region_name="auto",
+        )
+    return _r2_client
 
 def r2_put_json(key, data):
     r2 = get_r2()
     if not r2: return False
     try:
-        r2.put_object(
-            Bucket=R2_BUCKET, Key=key,
+        r2.put_object(Bucket=R2_BUCKET, Key=key,
             Body=json.dumps(data, ensure_ascii=False).encode(),
-            ContentType="application/json"
-        )
+            ContentType="application/json")
         return True
     except Exception as e:
-        print(f"R2 put error: {e}")
+        print(f"[R2 put_json error] {key}: {e}")
         return False
 
 def r2_get_json(key):
@@ -67,14 +77,21 @@ def r2_get_json(key):
     except Exception:
         return None
 
-def r2_list_keys(prefix):
+def r2_list_keys(prefix, suffix=".json"):
+    """Liste les clés R2 avec pagination complète"""
     r2 = get_r2()
     if not r2: return []
-    try:
-        resp = r2.list_objects_v2(Bucket=R2_BUCKET, Prefix=prefix)
-        return [o["Key"] for o in resp.get("Contents", []) if o["Key"].endswith(".json")]
-    except Exception:
-        return []
+    keys = []
+    kwargs = {"Bucket": R2_BUCKET, "Prefix": prefix}
+    while True:
+        resp = r2.list_objects_v2(**kwargs)
+        for obj in resp.get("Contents", []):
+            if obj["Key"].endswith(suffix):
+                keys.append(obj["Key"])
+        if not resp.get("IsTruncated"):
+            break
+        kwargs["ContinuationToken"] = resp["NextContinuationToken"]
+    return keys
 
 def r2_delete(key):
     r2 = get_r2()
@@ -92,10 +109,10 @@ def r2_put_image(key, img_bytes, mime="image/png"):
         r2.put_object(Bucket=R2_BUCKET, Key=key, Body=img_bytes, ContentType=mime)
         return True
     except Exception as e:
-        print(f"R2 image put error: {e}")
+        print(f"[R2 put_image error] {key}: {e}")
         return False
 
-def r2_get_presigned(key, expires=3600):
+def r2_presigned(key, expires=86400):  # 24h
     r2 = get_r2()
     if not r2: return None
     try:
@@ -104,78 +121,129 @@ def r2_get_presigned(key, expires=3600):
     except Exception:
         return None
 
-# ── Logging ────────────────────────────────────────────────────────────────
-def log_generation(user, success):
-    entry = {"timestamp": datetime.now(timezone.utc).isoformat(), "user": user or "Inconnu", "success": success}
-    try:
-        with open(LOG_FILE, "a") as f:
-            f.write(json.dumps(entry) + "\n")
-    except Exception:
-        pass
+# ── Compteur TikTok (atomique via R2) ─────────────────────────────────────
+def get_next_tiktok_number():
+    """Incrémente et retourne le prochain numéro de TikTok (thread-safe)"""
+    with _r2_lock:
+        data = r2_get_json(KEY_COUNTER) or {"next": 1}
+        num = data["next"]
+        data["next"] = num + 1
+        r2_put_json(KEY_COUNTER, data)
+        return num
 
-def read_logs():
-    if not os.path.exists(LOG_FILE): return []
+# ── Logs persistants sur R2 ────────────────────────────────────────────────
+def log_generation(user, success):
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    key = f"{PFX_LOGS}{today}.jsonl"
+    entry = json.dumps({
+        "ts": datetime.now(timezone.utc).isoformat(),
+        "user": user or "Inconnu",
+        "success": success
+    }) + "\n"
+    r2 = get_r2()
+    if not r2: return
+    try:
+        try:
+            obj = r2.get_object(Bucket=R2_BUCKET, Key=key)
+            existing = obj["Body"].read().decode()
+        except Exception:
+            existing = ""
+        r2.put_object(Bucket=R2_BUCKET, Key=key,
+            Body=(existing + entry).encode(), ContentType="text/plain")
+    except Exception as e:
+        print(f"[log error] {e}")
+
+def read_logs(days=30):
+    r2 = get_r2()
+    if not r2: return []
     entries = []
-    with open(LOG_FILE) as f:
-        for line in f:
-            line = line.strip()
-            if not line: continue
-            try: entries.append(json.loads(line))
-            except: continue
+    keys = r2_list_keys(PFX_LOGS, suffix=".jsonl")
+    for key in sorted(keys)[-days:]:
+        try:
+            obj = r2.get_object(Bucket=R2_BUCKET, Key=key)
+            for line in obj["Body"].read().decode().splitlines():
+                if line.strip():
+                    try: entries.append(json.loads(line))
+                    except: pass
+        except Exception:
+            pass
     return entries
 
-def save_session(session):
-    try:
-        with open(SESSION_FILE, "a") as f:
-            f.write(json.dumps(session) + "\n")
-    except: pass
+# ── Comptes TikTok (stockés sur R2) ───────────────────────────────────────
+def get_accounts():
+    data = r2_get_json(KEY_ACCOUNTS)
+    return data if data else {"main": "", "others": []}
 
-def read_sessions():
-    if not os.path.exists(SESSION_FILE): return []
-    sessions = []
-    with open(SESSION_FILE) as f:
-        for line in f:
-            line = line.strip()
-            if not line: continue
-            try: sessions.append(json.loads(line))
-            except: continue
-    return sessions
+def save_accounts(data):
+    return r2_put_json(KEY_ACCOUNTS, data)
 
-# ── Queue TikTok ───────────────────────────────────────────────────────────
-def get_next_tiktok_number():
-    """Calcule le prochain numéro de TikTok dans la queue + scheduled"""
-    queue_keys = r2_list_keys(R2_QUEUE_PREFIX)
-    scheduled_keys = r2_list_keys(R2_SCHEDULED_PREFIX)
-    all_keys = queue_keys + scheduled_keys
-    if not all_keys:
-        return 1
-    numbers = []
-    for k in all_keys:
-        try:
-            # format: queue/tiktok_042.json
-            n = int(k.split("/")[-1].replace("tiktok_", "").replace(".json", ""))
-            numbers.append(n)
-        except:
-            continue
-    return max(numbers) + 1 if numbers else 1
+# ── Buffer persistant R2 ───────────────────────────────────────────────────
+def get_buffer():
+    data = r2_get_json(KEY_BUFFER)
+    return data if data else {"image_keys": [], "flockages": [], "user": None}
 
-def save_tiktok_to_queue(tiktok_num, images_b64, user, flockages):
-    """Sauvegarde un TikTok (7 images) dans la queue R2"""
+def _save_buffer(buf):
+    return r2_put_json(KEY_BUFFER, buf)
+
+def add_to_buffer_and_create_tiktoks(new_images_b64, new_flockages, user):
+    """
+    Stocke les nouvelles images sur R2 puis les ajoute au buffer.
+    Quand buffer >= 7 → crée un TikTok complet.
+    Retourne (liste des numéros créés, nombre d'images restantes dans le buffer).
+    """
+    with _r2_lock:
+        buf = get_buffer()
+        if not buf.get("user"):
+            buf["user"] = user
+
+        # Stocker chaque image sur R2 et garder la clé
+        ts = int(time.time() * 1000)
+        for i, img_b64 in enumerate(new_images_b64):
+            img_key = f"buffer/imgs/{ts}_{i:03d}.png"
+            r2_put_image(img_key, base64.b64decode(img_b64))
+            buf["image_keys"].append(img_key)
+            buf["flockages"].append(new_flockages[i] if i < len(new_flockages) else "")
+
+        created = []
+        while len(buf["image_keys"]) >= TIKTOK_SIZE:
+            batch_keys  = buf["image_keys"][:TIKTOK_SIZE]
+            batch_floc  = buf["flockages"][:TIKTOK_SIZE]
+
+            # Charger les images depuis R2 pour les sauvegarder dans le TikTok
+            batch_b64 = []
+            for k in batch_keys:
+                r2c = get_r2()
+                try:
+                    obj = r2c.get_object(Bucket=R2_BUCKET, Key=k)
+                    batch_b64.append(base64.b64encode(obj["Body"].read()).decode())
+                    r2_delete(k)  # nettoyer le buffer img
+                except Exception:
+                    batch_b64.append("")
+
+            tiktok_num = get_next_tiktok_number()
+            _save_tiktok(tiktok_num, batch_b64, buf["user"], batch_floc)
+            created.append(tiktok_num)
+
+            buf["image_keys"] = buf["image_keys"][TIKTOK_SIZE:]
+            buf["flockages"]  = buf["flockages"][TIKTOK_SIZE:]
+
+        _save_buffer(buf)
+        return created, len(buf["image_keys"])
+
+# ── TikTok queue ───────────────────────────────────────────────────────────
+def _save_tiktok(num, images_b64, user, flockages):
     r2 = get_r2()
     if not r2: return False
-
-    # Sauvegarder les images
     image_keys = []
-    for i, img_b64 in enumerate(images_b64):
-        img_key = f"queue/images/tiktok_{tiktok_num:03d}_img_{i+1:02d}.png"
-        img_bytes = base64.b64decode(img_b64)
-        r2_put_image(img_key, img_bytes)
-        image_keys.append(img_key)
+    for i, b64 in enumerate(images_b64):
+        if not b64: continue
+        k = f"queue/imgs/tiktok_{num:04d}_{i+1:02d}.png"
+        r2_put_image(k, base64.b64decode(b64))
+        image_keys.append(k)
 
-    # Sauvegarder les métadonnées
     meta = {
-        "id": f"tiktok_{tiktok_num:03d}",
-        "number": tiktok_num,
+        "id": f"tiktok_{num:04d}",
+        "number": num,
         "created_at": datetime.now(timezone.utc).isoformat(),
         "user": user,
         "image_keys": image_keys,
@@ -184,80 +252,92 @@ def save_tiktok_to_queue(tiktok_num, images_b64, user, flockages):
         "account": None,
         "scheduled_at": None,
     }
-    key = f"{R2_QUEUE_PREFIX}tiktok_{tiktok_num:03d}.json"
-    return r2_put_json(key, meta)
+    return r2_put_json(f"{PFX_QUEUE}tiktok_{num:04d}.json", meta)
+
+def _enrich_tiktok(data, key):
+    """Ajoute les URLs signées et la clé R2"""
+    data["image_urls"] = [r2_presigned(k) for k in data.get("image_keys", [])]
+    data["r2_key"] = key
+    return data
 
 def get_queue():
-    """Récupère tous les TikToks en attente"""
-    keys = r2_list_keys(R2_QUEUE_PREFIX)
-    tiktoks = []
-    for key in sorted(keys):
-        data = r2_get_json(key)
-        if data:
-            # Générer URLs signées pour les images
-            data["image_urls"] = [r2_get_presigned(k) for k in data.get("image_keys", [])]
-            data["r2_key"] = key
-            tiktoks.append(data)
-    return sorted(tiktoks, key=lambda x: x.get("number", 0))
+    keys = sorted(r2_list_keys(PFX_QUEUE))
+    result = []
+    for k in keys:
+        # Ignorer les images dans queue/imgs/
+        if "/imgs/" in k: continue
+        d = r2_get_json(k)
+        if d: result.append(_enrich_tiktok(d, k))
+    return result
 
 def get_scheduled():
-    """Récupère tous les TikToks programmés"""
-    keys = r2_list_keys(R2_SCHEDULED_PREFIX)
-    tiktoks = []
-    for key in sorted(keys):
-        data = r2_get_json(key)
-        if data:
-            data["image_urls"] = [r2_get_presigned(k) for k in data.get("image_keys", [])]
-            data["r2_key"] = key
-            tiktoks.append(data)
-    return sorted(tiktoks, key=lambda x: x.get("scheduled_at", ""), reverse=True)
+    keys = sorted(r2_list_keys(PFX_SCHEDULED), reverse=True)
+    result = []
+    for k in keys[:200]:  # limiter à 200 derniers
+        if "/imgs/" in k: continue
+        d = r2_get_json(k)
+        if d: result.append(_enrich_tiktok(d, k))
+    return result
 
-def move_to_scheduled(queue_key, account, scheduled_datetime):
-    """Déplace un TikTok de queue vers scheduled"""
+def move_to_scheduled(queue_key, account, dt_str):
     data = r2_get_json(queue_key)
     if not data: return False
     data["status"] = "scheduled"
     data["account"] = account
-    data["scheduled_at"] = scheduled_datetime
-    new_key = queue_key.replace(R2_QUEUE_PREFIX, R2_SCHEDULED_PREFIX)
+    data["scheduled_at"] = dt_str
+    # Déplacer les images vers scheduled/imgs/
+    new_img_keys = []
+    for old_k in data.get("image_keys", []):
+        new_k = old_k.replace("queue/imgs/", "scheduled/imgs/")
+        r2 = get_r2()
+        if r2:
+            try:
+                r2.copy_object(Bucket=R2_BUCKET,
+                    CopySource={"Bucket": R2_BUCKET, "Key": old_k},
+                    Key=new_k)
+                r2_delete(old_k)
+                new_img_keys.append(new_k)
+            except Exception:
+                new_img_keys.append(old_k)
+    data["image_keys"] = new_img_keys
+    new_key = queue_key.replace(PFX_QUEUE, PFX_SCHEDULED)
     r2_put_json(new_key, data)
     r2_delete(queue_key)
     return True
 
-# ── Prompt ─────────────────────────────────────────────────────────────────
+# ── Prompt Gemini ──────────────────────────────────────────────────────────
 def build_prompt(name, number, name_below=None):
     name = name.strip().upper()
     number = number.strip()
     name_below = (name_below or name).strip().upper()
-    parts = ["Edit this image of a sports jersey (back view). This is a precise text-replacement task, not a redesign."]
+    parts = ["Edit this image of a sports jersey (back view). Precise text-replacement only, not a redesign."]
     if name:
-        parts.append(f'Replace the main back name text (large curved/straight text near the top) with "{name}". Keep the exact same font, font weight, outline style, color, letter size, and curvature/position as the original text.')
+        parts.append(f'Replace the main back name text with "{name}". Keep exact font, weight, outline, color, size and position.')
     if number:
-        digits_spelled = ", ".join(f'"{d}"' for d in number)
-        parts.append(f'Replace the large back number with the {len(number)}-digit number "{number}". This number is made of exactly {len(number)} characters, in this exact order: {digits_spelled}. Render EVERY one of these {len(number)} digits, none missing, none merged, none dropped. Keep the exact same font, color, outline style and centered position as the original number. If "{number}" has a different number of digits than the original, adjust font size proportionally. Do not add any logos, icons or marks inside or around the number.')
+        digits = ", ".join(f'"{d}"' for d in number)
+        parts.append(f'Replace the large back number with "{number}" ({len(number)} digit(s): {digits}). Render ALL digits, none missing. Keep font, color, outline and center position. Scale digit width (not height/stroke) if digit count differs. No added logos or marks.')
     if name_below:
-        parts.append(f'There is also a smaller name text printed below the number/badge — replace that text with "{name_below}". Place it directly below the badge with the SAME small vertical gap as in the original image. Keep the same font, size, color and outline style as the original smaller text.')
-    parts.append("Keep absolutely everything else identical to the original image: jersey color, fabric texture, pattern, font style, text outline, text color, exact position, exact size, exact spacing between text elements, lighting, shadows, background, tags, and overall composition. Do not regenerate, redesign, resize or reposition anything — only swap the text content itself.")
+        parts.append(f'Replace the smaller text below the badge with "{name_below}". Keep same position gap, font, size, color and outline.')
+    parts.append("Keep ALL else identical: colors, texture, pattern, outlines, lighting, shadows, background, tags. Only swap text content.")
     return " ".join(parts)
 
-def call_gemini(img_bytes, mime_type, name, number, name_below=None, max_retries=2):
+def call_gemini(img_bytes, mime, name, number, name_below=None, max_retries=2):
     img_b64 = base64.b64encode(img_bytes).decode()
     prompt = build_prompt(name, number, name_below)
-    payload = {"contents": [{"parts": [{"text": prompt}, {"inline_data": {"mime_type": mime_type, "data": img_b64}}]}]}
+    payload = {"contents": [{"parts": [{"text": prompt}, {"inline_data": {"mime_type": mime, "data": img_b64}}]}]}
     last_error = None
-    for attempt in range(max_retries + 1):
+    for _ in range(max_retries + 1):
         try:
-            resp = requests.post(MODEL_URL, headers={"x-goog-api-key": API_KEY, "Content-Type": "application/json"}, json=payload, timeout=120)
+            resp = requests.post(MODEL_URL,
+                headers={"x-goog-api-key": API_KEY, "Content-Type": "application/json"},
+                json=payload, timeout=120)
         except requests.RequestException as e:
             last_error = f"Erreur réseau: {e}"; time.sleep(1); continue
         if resp.status_code != 200:
-            last_error = f"Erreur API ({resp.status_code}): {resp.text[:300]}"; time.sleep(1); continue
+            last_error = f"API {resp.status_code}: {resp.text[:200]}"; time.sleep(1); continue
         data = resp.json()
         try:
-            candidates = data.get("candidates", [])
-            if not candidates:
-                last_error = "Aucune réponse générée."; continue
-            for part in candidates[0]["content"]["parts"]:
+            for part in data["candidates"][0]["content"]["parts"]:
                 if "inlineData" in part:
                     return {"success": True, "image": part["inlineData"]["data"]}
             last_error = "Pas d'image dans la réponse."
@@ -265,369 +345,332 @@ def call_gemini(img_bytes, mime_type, name, number, name_below=None, max_retries
             last_error = f"Réponse inattendue: {e}"
     return {"success": False, "error": last_error}
 
-# ── Routes ─────────────────────────────────────────────────────────────────
+# ── Pages ──────────────────────────────────────────────────────────────────
 @app.route("/")
-def index():
-    return render_template("index.html")
+def index(): return render_template("index.html")
 
 @app.route("/queue")
-def queue_page():
-    return render_template("queue.html")
+def queue_page(): return render_template("queue.html")
 
 @app.route("/scheduled")
-def scheduled_page():
-    return render_template("scheduled.html")
+def scheduled_page(): return render_template("scheduled.html")
 
-@app.route("/stats")
-def stats():
-    entries = read_logs()
-    by_day_user = {}
-    total_count = 0; total_success = 0
-    for e in entries:
-        day = e["timestamp"][:10]; user = e.get("user") or "Inconnu"; key = (day, user)
-        by_day_user.setdefault(key, {"total": 0, "success": 0})
-        by_day_user[key]["total"] += 1; total_count += 1
-        if e.get("success"): by_day_user[key]["success"] += 1; total_success += 1
-    rows = [{"day": day, "user": user, "total": counts["total"], "success": counts["success"], "cost": round(counts["total"] * COST_PER_IMAGE, 3)} for (day, user), counts in sorted(by_day_user.items(), reverse=True)]
-    return render_template("stats.html", rows=rows, total_count=total_count, total_success=total_success, total_cost=round(total_count * COST_PER_IMAGE, 2), cost_per_image=COST_PER_IMAGE)
+@app.route("/templates")
+def templates_page(): return render_template("templates.html")
 
 @app.route("/dashboard")
 def dashboard():
-    entries = read_logs()
+    entries = read_logs(7)
     today = datetime.now(timezone.utc).date().isoformat()
-    today_entries = [e for e in entries if e["timestamp"][:10] == today]
-    today_count = len(today_entries); today_success = sum(1 for e in today_entries if e.get("success"))
-    tiktoks_done = today_count // 7
+    today_e = [e for e in entries if e.get("ts","")[:10] == today]
     by_user = {}
-    for e in today_entries:
-        u = e.get("user") or "Inconnu"; by_user.setdefault(u, 0); by_user[u] += 1
-    queue = get_queue(); scheduled = get_scheduled()
-    return render_template("dashboard.html", today_count=today_count, today_success=today_success,
-        today_cost=round(today_count * COST_PER_IMAGE, 2), tiktoks_done=tiktoks_done,
-        tiktoks_goal=20, by_user=by_user, recent_sessions=read_sessions()[-10:],
-        queue_count=len(queue), scheduled_count=len(scheduled))
+    for e in today_e:
+        u = e.get("user","?"); by_user[u] = by_user.get(u,0)+1
+    queue_count = len([k for k in r2_list_keys(PFX_QUEUE) if "/imgs/" not in k])
+    sched_count = len([k for k in r2_list_keys(PFX_SCHEDULED) if "/imgs/" not in k])
+    today_count = len(today_e)
+    return render_template("dashboard.html",
+        today_count=today_count,
+        today_success=sum(1 for e in today_e if e.get("success")),
+        today_cost=round(today_count*COST_PER_IMAGE,2),
+        tiktoks_done=today_count//7, tiktoks_goal=20,
+        by_user=by_user, recent_sessions=[],
+        queue_count=queue_count, scheduled_count=sched_count)
 
-@app.route("/templates")
-def templates_page():
-    return render_template("templates.html")
+@app.route("/stats")
+def stats():
+    entries = read_logs(30)
+    by_day_user = {}
+    total_count = 0; total_success = 0
+    for e in entries:
+        day = e.get("ts","")[:10]; user = e.get("user","?"); key = (day,user)
+        by_day_user.setdefault(key,{"total":0,"success":0})
+        by_day_user[key]["total"] += 1; total_count += 1
+        if e.get("success"): by_day_user[key]["success"]+=1; total_success+=1
+    rows = [{"day":d,"user":u,"total":c["total"],"success":c["success"],"cost":round(c["total"]*COST_PER_IMAGE,3)}
+            for (d,u),c in sorted(by_day_user.items(),reverse=True)]
+    return render_template("stats.html", rows=rows, total_count=total_count,
+        total_success=total_success, total_cost=round(total_count*COST_PER_IMAGE,2),
+        cost_per_image=COST_PER_IMAGE)
 
-# ── API Queue ──────────────────────────────────────────────────────────────
-@app.route("/api/queue", methods=["GET"])
-def api_get_queue():
+# ── API Buffer ──────────────────────────────────────────────────────────────
+@app.route("/api/buffer")
+def api_buffer():
+    buf = get_buffer()
+    pending = len(buf.get("image_keys",[]))
+    return jsonify({"pending": pending, "needed": max(0, TIKTOK_SIZE-pending)})
+
+@app.route("/api/buffer/clear", methods=["POST"])
+def api_buffer_clear():
+    buf = get_buffer()
+    for k in buf.get("image_keys",[]): r2_delete(k)
+    _save_buffer({"image_keys":[],"flockages":[],"user":None})
+    return jsonify({"success": True})
+
+# ── API Comptes ─────────────────────────────────────────────────────────────
+@app.route("/api/accounts")
+def api_get_accounts():
+    return jsonify(get_accounts())
+
+@app.route("/api/accounts", methods=["POST"])
+def api_save_accounts():
+    data = request.json
+    save_accounts({"main": data.get("main",""), "others": data.get("others",[])})
+    return jsonify({"success": True})
+
+# ── API Queue ───────────────────────────────────────────────────────────────
+@app.route("/api/queue")
+def api_queue():
     return jsonify({"tiktoks": get_queue()})
 
-@app.route("/api/scheduled", methods=["GET"])
-def api_get_scheduled():
+@app.route("/api/scheduled")
+def api_scheduled():
     return jsonify({"tiktoks": get_scheduled()})
 
 @app.route("/api/queue/assign", methods=["POST"])
-def api_assign_account():
-    """Assigner un compte TikTok à un TikTok en attente"""
-    data = request.json
-    key = data.get("key")
-    account = data.get("account")
-    if not key or not account:
-        return jsonify({"error": "key et account requis"}), 400
-    tiktok = r2_get_json(key)
-    if not tiktok:
-        return jsonify({"error": "TikTok introuvable"}), 404
-    tiktok["account"] = account
-    r2_put_json(key, tiktok)
+def api_assign():
+    data = request.json; key = data.get("key"); account = data.get("account")
+    if not key: return jsonify({"error":"key requis"}),400
+    t = r2_get_json(key)
+    if not t: return jsonify({"error":"introuvable"}),404
+    t["account"] = account
+    r2_put_json(key, t)
     return jsonify({"success": True})
 
 @app.route("/api/queue/dispatch", methods=["POST"])
-def api_dispatch_auto():
-    """Dispatcher automatiquement les TikToks sans compte aux autres comptes"""
-    data = request.json
-    accounts = data.get("accounts", [])  # liste des comptes (sans le principal)
-    if not accounts:
-        return jsonify({"error": "Aucun compte fourni"}), 400
+def api_dispatch():
+    data = request.json; accounts = data.get("accounts",[])
+    if not accounts: return jsonify({"error":"Aucun compte"}),400
     queue = get_queue()
     unassigned = [t for t in queue if not t.get("account")]
-    if not unassigned:
-        return jsonify({"message": "Aucun TikTok sans compte", "count": 0})
-    # Round-robin sur les autres comptes
-    for i, tiktok in enumerate(unassigned):
-        account = accounts[i % len(accounts)]
-        tiktok["account"] = account
-        r2_put_json(tiktok["r2_key"], tiktok)
-    return jsonify({"success": True, "count": len(unassigned)})
+    for i,t in enumerate(unassigned):
+        acc = accounts[i % len(accounts)]
+        t["account"] = acc
+        r2_put_json(t["r2_key"], {**t, "image_urls": None, "r2_key": None, "account": acc})
+    return jsonify({"success":True,"count":len(unassigned)})
 
 @app.route("/api/queue/schedule", methods=["POST"])
-def api_schedule_all():
-    """Programmer tous les TikToks avec un compte assigné sur RobinReach"""
-    robinreach_api_key = os.environ.get("ROBINREACH_API_KEY")
-    robinreach_brand_id = os.environ.get("ROBINREACH_BRAND_ID")
-
+def api_schedule():
     queue = get_queue()
     assigned = [t for t in queue if t.get("account")]
-    if not assigned:
-        return jsonify({"error": "Aucun TikTok avec compte assigné"}), 400
+    if not assigned: return jsonify({"error":"Aucun TikTok avec compte"}),400
 
-    # Calculer les créneaux disponibles à partir de maintenant
     now = datetime.now(timezone.utc)
-    scheduled_count = 0
-    errors = []
+    scheduled_count = 0; errors = []
 
     # Grouper par compte
     by_account = {}
     for t in assigned:
-        acc = t["account"]
-        by_account.setdefault(acc, []).append(t)
+        by_account.setdefault(t["account"],[]).append(t)
 
-    # Pour chaque compte, programmer aux créneaux disponibles
     for account, tiktoks in by_account.items():
         slot_date = now.date()
         slot_index = 0
-
         for tiktok in tiktoks:
             # Trouver le prochain créneau disponible
             while True:
-                slot_time_str = SCHEDULE_TIMES[slot_index % len(SCHEDULE_TIMES)]
-                h, m = map(int, slot_time_str.split(":"))
-                slot_dt = datetime(slot_date.year, slot_date.month, slot_date.day, h, m, tzinfo=timezone.utc)
-                if slot_dt > now + timedelta(minutes=30):
-                    break
+                h,m = map(int, SCHEDULE_TIMES[slot_index % len(SCHEDULE_TIMES)].split(":"))
+                slot_dt = datetime(slot_date.year,slot_date.month,slot_date.day,h,m,tzinfo=timezone.utc)
+                if slot_dt > now + timedelta(minutes=30): break
                 slot_index += 1
                 if slot_index % len(SCHEDULE_TIMES) == 0:
                     slot_date += timedelta(days=1)
 
-            scheduled_dt_str = slot_dt.isoformat()
+            dt_str = slot_dt.isoformat()
 
-            # Appel API RobinReach (si configuré)
-            if robinreach_api_key and robinreach_brand_id:
+            # Appel RobinReach si configuré
+            if ROBINREACH_API_KEY and ROBINREACH_BRAND_ID:
                 try:
-                    image_urls = tiktok.get("image_urls", [])
-                    payload = {
-                        "content": FIXED_CAPTION,
-                        "media_urls": [url for url in image_urls if url],
-                        "publish_time": scheduled_dt_str,
-                        "social_profile_ids": [account],
-                        "title": FIXED_CAPTION[:50],
-                    }
+                    image_urls = [u for u in tiktok.get("image_urls",[]) if u]
                     resp = requests.post(
-                        f"https://robinreach.com/api/v1/posts?api_key={robinreach_api_key}&brand_id={robinreach_brand_id}",
-                        headers={"Accept": "application/json", "Content-Type": "application/json"},
-                        json=payload,
-                        timeout=30,
-                    )
-                    if resp.status_code not in (200, 201):
-                        errors.append(f"{tiktok['id']}: {resp.text[:100]}")
-                        continue
+                        f"https://robinreach.com/api/v1/posts?api_key={ROBINREACH_API_KEY}&brand_id={ROBINREACH_BRAND_ID}",
+                        headers={"Accept":"application/json","Content-Type":"application/json"},
+                        json={"content":FIXED_CAPTION,"media_urls":image_urls,"publish_time":dt_str,
+                              "social_profile_ids":[account],"title":FIXED_CAPTION[:50]},
+                        timeout=30)
+                    if resp.status_code not in (200,201):
+                        errors.append(f"{tiktok['id']}: {resp.text[:100]}"); continue
                 except Exception as e:
-                    errors.append(f"{tiktok['id']}: {e}")
-                    continue
+                    errors.append(f"{tiktok['id']}: {e}"); continue
 
-            # Déplacer vers scheduled
-            move_to_scheduled(tiktok["r2_key"], account, scheduled_dt_str)
+            move_to_scheduled(tiktok["r2_key"], account, dt_str)
             scheduled_count += 1
-
-            # Passer au créneau suivant
             slot_index += 1
             if slot_index % len(SCHEDULE_TIMES) == 0:
                 slot_date += timedelta(days=1)
 
-    return jsonify({"success": True, "scheduled": scheduled_count, "errors": errors})
+    return jsonify({"success":True,"scheduled":scheduled_count,"errors":errors})
 
 @app.route("/api/queue/delete", methods=["POST"])
-def api_delete_tiktok():
-    data = request.json
-    key = data.get("key")
-    if not key: return jsonify({"error": "key requis"}), 400
-    tiktok = r2_get_json(key)
-    if tiktok:
-        for img_key in tiktok.get("image_keys", []):
-            r2_delete(img_key)
+def api_delete():
+    data = request.json; key = data.get("key")
+    if not key: return jsonify({"error":"key requis"}),400
+    t = r2_get_json(key)
+    if t:
+        for k in t.get("image_keys",[]): r2_delete(k)
     r2_delete(key)
-    return jsonify({"success": True})
+    return jsonify({"success":True})
 
-# ── Generate single ────────────────────────────────────────────────────────
+# ── Generate single ─────────────────────────────────────────────────────────
 @app.route("/generate_single", methods=["POST"])
 def generate_single():
-    if not API_KEY: return jsonify({"error": "Clé API manquante"}), 500
+    if not API_KEY: return jsonify({"error":"Clé API manquante"}),500
     f = request.files.get("image")
-    user = request.form.get("user", "").strip()
-    name = request.form.get("name", "").strip()
-    number = request.form.get("number", "").strip()
-    name_below = request.form.get("name_below", "").strip() or None
-    if not f: return jsonify({"error": "Aucune image"}), 400
+    user = request.form.get("user","").strip()
+    name = request.form.get("name","").strip()
+    number = request.form.get("number","").strip()
+    name_below = request.form.get("name_below","").strip() or None
+    if not f: return jsonify({"error":"Aucune image"}),400
     result = call_gemini(f.read(), f.mimetype or "image/png", name, number, name_below)
     log_generation(user, result["success"])
-    if result["success"]: return jsonify({"image": result["image"]})
+    if result["success"]:
+        # Ajouter au buffer
+        floc = f"{name}/{number}/{name_below or ''}"
+        add_to_buffer_and_create_tiktoks([result["image"]], [floc], user)
+        return jsonify({"image": result["image"]})
     return jsonify({"error": result["error"]}), 500
 
-# ── Generate bulk ──────────────────────────────────────────────────────────
+# ── Generate bulk ───────────────────────────────────────────────────────────
 @app.route("/generate_bulk", methods=["POST"])
 def generate_bulk():
-    if not API_KEY: return jsonify({"error": "Clé API manquante"}), 500
+    if not API_KEY: return jsonify({"error":"Clé API manquante"}),500
 
     files = request.files.getlist("images")
-    flockages_raw = request.form.get("flockages", "")
-    user = request.form.get("user", "").strip()
+    flockages_raw = request.form.get("flockages","")
+    user = request.form.get("user","").strip()
     session_id = request.form.get("session_id", str(uuid.uuid4()))
-    parallel = int(request.form.get("parallel", 5))
-    auto_queue = request.form.get("auto_queue", "true").lower() == "true"
+    parallel = min(int(request.form.get("parallel",5)), 10)
+    auto_queue = request.form.get("auto_queue","true").lower() == "true"
 
     lines = [l.strip() for l in flockages_raw.splitlines() if l.strip()]
-    if not files: return jsonify({"error": "Aucune image"}), 400
-    if not lines: return jsonify({"error": "Aucun flocage"}), 400
-    if len(files) != len(lines): return jsonify({"error": f"{len(files)} images mais {len(lines)} flocages"}), 400
+    if not files: return jsonify({"error":"Aucune image"}),400
+    if not lines: return jsonify({"error":"Aucun flocage"}),400
+    if len(files) != len(lines): return jsonify({"error":f"{len(files)} images / {len(lines)} flocages"}),400
 
     items = []
-    for f, line in zip(files, lines):
-        parts = line.split("/") if "/" in line else line.split(",") if "," in line else [line]
+    for f,line in zip(files, lines):
+        p = line.split("/") if "/" in line else (line.split(",") if "," in line else [line])
         items.append({
-            "filename": f.filename,
-            "bytes": f.read(),
-            "mime": f.mimetype or "image/png",
-            "name": parts[0].strip() if len(parts) > 0 else "",
-            "number": parts[1].strip() if len(parts) > 1 else "",
-            "name_below": parts[2].strip() if len(parts) > 2 else None,
+            "bytes": f.read(), "mime": f.mimetype or "image/png",
+            "name": p[0].strip() if p else "",
+            "number": p[1].strip() if len(p)>1 else "",
+            "name_below": p[2].strip() if len(p)>2 else None,
         })
 
     session_start = datetime.now(timezone.utc).isoformat()
     results_map = {}
 
-    def process_item(idx, item):
-        result = call_gemini(item["bytes"], item["mime"], item["name"], item["number"], item["name_below"])
-        log_generation(user, result["success"])
-        payload = {"index": idx, "total": len(items), "filename": item["filename"], "name": item["name"], "number": item["number"]}
-        if result["success"]: payload["image"] = result["image"]
-        else: payload["error"] = result["error"]
+    def process(idx, item):
+        res = call_gemini(item["bytes"], item["mime"], item["name"], item["number"], item["name_below"])
+        log_generation(user, res["success"])
+        payload = {"index":idx,"total":len(items),"name":item["name"],"number":item["number"]}
+        if res["success"]: payload["image"] = res["image"]
+        else: payload["error"] = res["error"]
         results_map[idx] = payload
-        return idx, payload
 
-    # Buffer pour grouper par TikTok
-    generated_images = {}  # idx -> base64
+    new_b64 = []; new_floc = []
 
     def stream():
-        sent = set()
-        next_to_send = 0
-        tiktok_buffer = []  # images accumulées pour le TikTok en cours
-        tiktok_flockages = []
-        next_tiktok_num = [get_next_tiktok_number()]
-
-        with ThreadPoolExecutor(max_workers=parallel) as executor:
-            futures = {executor.submit(process_item, idx, item): idx for idx, item in enumerate(items)}
-
+        sent = set(); nts = 0
+        with ThreadPoolExecutor(max_workers=parallel) as ex:
+            futures = {ex.submit(process,i,it): i for i,it in enumerate(items)}
             while len(sent) < len(items):
-                for future in list(futures.keys()):
-                    if future.done() and futures[future] not in sent:
-                        idx = futures[future]
-                        sent.add(idx)
+                for fut in list(futures):
+                    if fut.done() and futures[fut] not in sent:
+                        sent.add(futures[fut])
+                while nts in results_map:
+                    d = results_map[nts]
+                    yield json.dumps(d)+"\n"
+                    if auto_queue and d.get("image"):
+                        it = items[nts]
+                        new_b64.append(d["image"])
+                        new_floc.append(f"{it['name']}/{it['number']}/{it.get('name_below','') or ''}")
+                    nts += 1
+                if len(sent) < len(items): time.sleep(0.05)
 
-                while next_to_send in results_map:
-                    data = results_map[next_to_send]
-                    yield json.dumps(data) + "\n"
+        while nts < len(items):
+            if nts in results_map:
+                d = results_map[nts]
+                yield json.dumps(d)+"\n"
+                if auto_queue and d.get("image"):
+                    it = items[nts]
+                    new_b64.append(d["image"])
+                    new_floc.append(f"{it['name']}/{it['number']}/{it.get('name_below','') or ''}")
+                nts += 1
+            else: time.sleep(0.05)
 
-                    # Accumuler pour la queue TikTok
-                    if auto_queue and data.get("image"):
-                        generated_images[next_to_send] = data["image"]
-                        tiktok_buffer.append(data["image"])
-                        item = items[next_to_send]
-                        tiktok_flockages.append(f"{item['name']}/{item['number']}/{item.get('name_below','')}")
+        # Ajouter au buffer et créer TikToks
+        if auto_queue and new_b64:
+            created, remaining = add_to_buffer_and_create_tiktoks(new_b64, new_floc, user)
+            for n in created:
+                yield json.dumps({"tiktok_created":n,"images_count":TIKTOK_SIZE})+"\n"
+            if remaining > 0:
+                yield json.dumps({"buffer_update":True,"pending":remaining,"needed":TIKTOK_SIZE-remaining})+"\n"
 
-                        # Quand on a 7 images → créer un TikTok dans la queue
-                        if len(tiktok_buffer) == TIKTOK_SIZE:
-                            save_tiktok_to_queue(next_tiktok_num[0], tiktok_buffer.copy(), user, tiktok_flockages.copy())
-                            tiktok_num = next_tiktok_num[0]
-                            next_tiktok_num[0] += 1
-                            yield json.dumps({"tiktok_created": tiktok_num, "images_count": TIKTOK_SIZE}) + "\n"
-                            tiktok_buffer.clear()
-                            tiktok_flockages.clear()
-
-                    next_to_send += 1
-
-                if len(sent) < len(items):
-                    time.sleep(0.1)
-
-            while next_to_send < len(items):
-                if next_to_send in results_map:
-                    data = results_map[next_to_send]
-                    yield json.dumps(data) + "\n"
-                    if auto_queue and data.get("image"):
-                        tiktok_buffer.append(data["image"])
-                        item = items[next_to_send]
-                        tiktok_flockages.append(f"{item['name']}/{item['number']}/{item.get('name_below','')}")
-                        if len(tiktok_buffer) == TIKTOK_SIZE:
-                            save_tiktok_to_queue(next_tiktok_num[0], tiktok_buffer.copy(), user, tiktok_flockages.copy())
-                            tiktok_num = next_tiktok_num[0]
-                            next_tiktok_num[0] += 1
-                            yield json.dumps({"tiktok_created": tiktok_num, "images_count": TIKTOK_SIZE}) + "\n"
-                            tiktok_buffer.clear()
-                            tiktok_flockages.clear()
-                    next_to_send += 1
-                else:
-                    time.sleep(0.1)
-
-        # S'il reste des images (moins de 7), les sauvegarder quand même
-        if auto_queue and tiktok_buffer:
-            save_tiktok_to_queue(next_tiktok_num[0], tiktok_buffer.copy(), user, tiktok_flockages.copy())
-            yield json.dumps({"tiktok_created": next_tiktok_num[0], "images_count": len(tiktok_buffer), "partial": True}) + "\n"
-
-        session_end = datetime.now(timezone.utc).isoformat()
         success_count = sum(1 for r in results_map.values() if "image" in r)
-        save_session({"id": session_id, "user": user, "start_time": session_start, "end_time": session_end, "total": len(items), "success": success_count, "flockages": flockages_raw})
+        r2_put_json(f"sessions/{session_id}.json", {
+            "id":session_id,"user":user,
+            "start":session_start,"end":datetime.now(timezone.utc).isoformat(),
+            "total":len(items),"success":success_count
+        })
 
     return Response(stream(), mimetype="application/x-ndjson")
 
-# ── R2 Templates ───────────────────────────────────────────────────────────
-@app.route("/api/templates", methods=["GET"])
-def list_templates():
+# ── API Templates ───────────────────────────────────────────────────────────
+@app.route("/api/templates")
+def api_templates():
     r2 = get_r2()
-    if not r2: return jsonify({"templates": [], "error": "R2 non configuré"})
+    if not r2: return jsonify({"templates":[],"error":"R2 non configuré"})
+    keys = r2_list_keys(PFX_TEMPLATES, suffix=(".png",".jpg",".jpeg",".webp"))
+    # r2_list_keys filtre .json, on refait manuellement
+    r2 = get_r2()
     try:
-        resp = r2.list_objects_v2(Bucket=R2_BUCKET, Prefix=R2_TEMPLATES_PREFIX)
-        templates = []
-        for obj in resp.get("Contents", []):
-            key = obj["Key"]
-            if key.lower().endswith((".png", ".jpg", ".jpeg", ".webp")):
-                url = r2.generate_presigned_url("get_object", Params={"Bucket": R2_BUCKET, "Key": key}, ExpiresIn=3600)
-                templates.append({"key": key, "name": key.replace(R2_TEMPLATES_PREFIX, "").rsplit(".", 1)[0], "url": url, "size": obj["Size"]})
-        return jsonify({"templates": templates})
+        all_keys = []
+        kwargs = {"Bucket":R2_BUCKET,"Prefix":PFX_TEMPLATES}
+        while True:
+            resp = r2.list_objects_v2(**kwargs)
+            for obj in resp.get("Contents",[]):
+                k = obj["Key"]
+                if k.lower().endswith((".png",".jpg",".jpeg",".webp")):
+                    all_keys.append({"key":k,"name":k.replace(PFX_TEMPLATES,"").rsplit(".",1)[0],
+                        "url":r2_presigned(k),"size":obj["Size"]})
+            if not resp.get("IsTruncated"): break
+            kwargs["ContinuationToken"] = resp["NextContinuationToken"]
+        return jsonify({"templates":all_keys})
     except Exception as e:
-        return jsonify({"templates": [], "error": str(e)})
+        return jsonify({"templates":[],"error":str(e)})
 
 @app.route("/api/templates/upload", methods=["POST"])
-def upload_template():
+def api_templates_upload():
     r2 = get_r2()
-    if not r2: return jsonify({"error": "R2 non configuré"}), 500
+    if not r2: return jsonify({"error":"R2 non configuré"}),500
     files = request.files.getlist("files")
-    if not files: return jsonify({"error": "Aucun fichier"}), 400
     uploaded = []
     for f in files:
-        key = f"{R2_TEMPLATES_PREFIX}{f.filename}"
-        r2.upload_fileobj(f, R2_BUCKET, key, ExtraArgs={"ContentType": f.mimetype or "image/png"})
+        key = f"{PFX_TEMPLATES}{f.filename}"
+        r2.upload_fileobj(f, R2_BUCKET, key, ExtraArgs={"ContentType":f.mimetype or "image/png"})
         uploaded.append(key)
-    return jsonify({"uploaded": uploaded})
+    return jsonify({"uploaded":uploaded})
 
 @app.route("/api/templates/delete", methods=["POST"])
-def delete_template():
-    r2 = get_r2()
-    if not r2: return jsonify({"error": "R2 non configuré"}), 500
-    data = request.json; key = data.get("key")
-    if not key: return jsonify({"error": "Clé manquante"}), 400
-    r2.delete_object(Bucket=R2_BUCKET, Key=key)
-    return jsonify({"deleted": key})
+def api_templates_delete():
+    key = (request.json or {}).get("key")
+    if not key: return jsonify({"error":"key requis"}),400
+    r2_delete(key)
+    return jsonify({"deleted":key})
 
-@app.route("/api/template_image", methods=["GET"])
-def get_template_image():
-    r2 = get_r2()
-    if not r2: return jsonify({"error": "R2 non configuré"}), 500
+@app.route("/api/template_image")
+def api_template_image():
     key = request.args.get("key")
-    if not key: return jsonify({"error": "Clé manquante"}), 400
+    if not key: return jsonify({"error":"key requis"}),400
+    r2 = get_r2()
+    if not r2: return jsonify({"error":"R2 non configuré"}),500
     try:
         obj = r2.get_object(Bucket=R2_BUCKET, Key=key)
-        img_bytes = obj["Body"].read()
-        b64 = base64.b64encode(img_bytes).decode()
-        return jsonify({"image": b64, "mime": obj.get("ContentType", "image/png")})
+        return jsonify({"image":base64.b64encode(obj["Body"].read()).decode(),"mime":obj.get("ContentType","image/png")})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-@app.route("/api/sessions")
-def api_sessions():
-    return jsonify({"sessions": sorted(read_sessions(), key=lambda s: s.get("start_time", ""), reverse=True)})
+        return jsonify({"error":str(e)}),500
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port, debug=True, threaded=True)
+    port = int(os.environ.get("PORT",5000))
+    app.run(host="0.0.0.0", port=port, debug=False, threaded=True)
