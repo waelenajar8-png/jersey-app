@@ -41,20 +41,17 @@ KEY_ACCOUNTS  = "meta/accounts.json"
 # Lock pour éviter race conditions sur le compteur/buffer
 _r2_lock = threading.Lock()
 
-# ── R2 client singleton ────────────────────────────────────────────────────
-_r2_client = None
 def get_r2():
-    global _r2_client
-    if _r2_client is None and R2_ENDPOINT:
-        _r2_client = boto3.client(
-            "s3",
-            endpoint_url=R2_ENDPOINT,
-            aws_access_key_id=R2_ACCESS_KEY,
-            aws_secret_access_key=R2_SECRET_KEY,
-            config=Config(signature_version="s3v4"),
-            region_name="auto",
-        )
-    return _r2_client
+    if not R2_ENDPOINT:
+        return None
+    return boto3.client(
+        "s3",
+        endpoint_url=R2_ENDPOINT,
+        aws_access_key_id=R2_ACCESS_KEY,
+        aws_secret_access_key=R2_SECRET_KEY,
+        config=Config(signature_version="s3v4"),
+        region_name="auto",
+    )
 
 def r2_put_json(key, data):
     r2 = get_r2()
