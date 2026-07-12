@@ -339,8 +339,6 @@ async function launch(testMode=false){
                 if(done<total)statusEl.textContent=`${done}/${total} traité(s)`;
             }
         }
-        }
-        }
         notifyDone(total,testMode);
         if(Object.keys(generatedImages).length>0)zipBtn.style.display='inline-block';
     }catch(err){statusEl.textContent='Erreur: '+err.message}
