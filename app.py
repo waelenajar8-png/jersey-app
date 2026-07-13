@@ -166,9 +166,24 @@ def read_logs(days=30):
     return entries
 
 # ── Comptes TikTok (stockés sur R2) ───────────────────────────────────────
+# ── Comptes TikTok RobinReach (IDs réels) ──────────────────────────────────
+ROBINREACH_ACCOUNTS = {
+    "Volakits Principal": 11739,   # compte principal, wael
+    "Volakits2": 11848,
+    "Volakits (wassim)": 11846,
+    "Volakits (seik)": 11847,
+}
+DEFAULT_MAIN_ACCOUNT = "Volakits Principal"
+
 def get_accounts():
     data = r2_get_json(KEY_ACCOUNTS)
-    return data if data else {"main": "", "others": []}
+    if data and data.get("main"):
+        return data
+    # Valeur par défaut si rien configuré
+    return {
+        "main": DEFAULT_MAIN_ACCOUNT,
+        "others": [k for k in ROBINREACH_ACCOUNTS if k != DEFAULT_MAIN_ACCOUNT]
+    }
 
 def save_accounts(data):
     return r2_put_json(KEY_ACCOUNTS, data)
@@ -398,7 +413,9 @@ def api_buffer_clear():
 # ── API Comptes ─────────────────────────────────────────────────────────────
 @app.route("/api/accounts")
 def api_get_accounts():
-    return jsonify(get_accounts())
+    data = get_accounts()
+    data["available"] = list(ROBINREACH_ACCOUNTS.keys())
+    return jsonify(data)
 
 @app.route("/api/accounts", methods=["POST"])
 def api_save_accounts():
@@ -466,20 +483,25 @@ def api_schedule():
 
             dt_str = slot_dt.isoformat()
 
+            # Convertir le nom de compte en ID numérique RobinReach
+            robinreach_id = ROBINREACH_ACCOUNTS.get(account)
+
             # Appel RobinReach si configuré
-            if ROBINREACH_API_KEY and ROBINREACH_BRAND_ID:
+            if ROBINREACH_API_KEY and ROBINREACH_BRAND_ID and robinreach_id:
                 try:
                     image_urls = [u for u in tiktok.get("image_urls",[]) if u]
                     resp = requests.post(
                         f"https://robinreach.com/api/v1/posts?api_key={ROBINREACH_API_KEY}&brand_id={ROBINREACH_BRAND_ID}",
                         headers={"Accept":"application/json","Content-Type":"application/json"},
                         json={"content":FIXED_CAPTION,"media_urls":image_urls,"publish_time":dt_str,
-                              "social_profile_ids":[account],"title":FIXED_CAPTION[:50]},
+                              "social_profile_ids":[robinreach_id],"title":FIXED_CAPTION[:50]},
                         timeout=30)
                     if resp.status_code not in (200,201):
-                        errors.append(f"{tiktok['id']}: {resp.text[:100]}"); continue
+                        errors.append(f"{tiktok['id']}: {resp.text[:150]}"); continue
                 except Exception as e:
                     errors.append(f"{tiktok['id']}: {e}"); continue
+            elif not robinreach_id:
+                errors.append(f"{tiktok['id']}: compte '{account}' non reconnu"); continue
 
             move_to_scheduled(tiktok["r2_key"], account, dt_str)
             scheduled_count += 1
