@@ -273,7 +273,7 @@ async function scheduleAll(){
     showStatus(`🚀 Programmation de ${assigned.length} TikTok(s) en cours...`);
     const res=await fetch('/api/queue/schedule',{method:'POST',headers:{'Content-Type':'application/json'}});
     const d=await res.json();
-    if(d.errors?.length) showStatus(`✅ ${d.scheduled} programmés — ⚠️ ${d.errors.length} erreur(s)`);
+    if(d.errors?.length) showStatus(`✅ ${d.scheduled} programmés — ⚠️ ${d.errors.length} erreur(s) : ${d.errors.slice(0,3).join(' | ')}`);
     else showStatus(`✅ ${d.scheduled} TikTok(s) programmés sur RobinReach !`);
     setTimeout(loadQueue,1500);
 }
