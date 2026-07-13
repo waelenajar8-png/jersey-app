@@ -489,6 +489,21 @@ def api_schedule():
 
     return jsonify({"success":True,"scheduled":scheduled_count,"errors":errors})
 
+@app.route("/api/robinreach/profiles")
+def api_robinreach_profiles():
+    """Diagnostic : liste les profils sociaux connectés sur RobinReach avec leurs IDs"""
+    if not ROBINREACH_API_KEY or not ROBINREACH_BRAND_ID:
+        return jsonify({"error": "ROBINREACH_API_KEY ou ROBINREACH_BRAND_ID manquant dans les variables Railway"}), 400
+    try:
+        resp = requests.get(
+            f"https://robinreach.com/api/v1/social_profiles?api_key={ROBINREACH_API_KEY}&brand_id={ROBINREACH_BRAND_ID}",
+            headers={"Accept": "application/json"},
+            timeout=30
+        )
+        return jsonify({"status_code": resp.status_code, "raw_response": resp.text[:2000]})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 @app.route("/api/queue/delete", methods=["POST"])
 def api_delete():
     data = request.json; key = data.get("key")
