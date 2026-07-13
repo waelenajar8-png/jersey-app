@@ -115,10 +115,10 @@ h1{font-size:22px;margin:0}
     <div class="modal">
         <h2>⚙️ Configuration des comptes TikTok</h2>
         <label>Compte principal (celui qui performe le mieux)</label>
-        <input id="mainAccount" placeholder="ex: @volakits">
+        <select id="mainAccount" class="account-select" style="padding:9px 11px"></select>
         <div class="modal-hint">Les TikToks que tu sélectionnes manuellement iront sur ce compte</div>
-        <label>Autres comptes (séparés par virgule)</label>
-        <input id="otherAccounts" placeholder="ex: @volakits2, @volakits3, @volakits4, @volakits5">
+        <label>Autres comptes (dispatch automatique)</label>
+        <div id="otherAccountsChecks" style="display:flex;flex-direction:column;gap:6px;margin-top:6px"></div>
         <div class="modal-hint">Le reste sera dispatché automatiquement sur ces comptes</div>
         <div class="modal-actions">
             <button class="btn-sec" onclick="closeConfig()">Annuler</button>
@@ -296,16 +296,26 @@ async function deleteSelected(){
 
 // ── Config comptes ─────────────────────────────────────────────────────────
 function openConfig(){
-    document.getElementById('mainAccount').value=accounts.main||'';
-    document.getElementById('otherAccounts').value=(accounts.others||[]).join(', ');
+    const available = accounts.available || [];
+    const mainSel = document.getElementById('mainAccount');
+    mainSel.innerHTML = available.map(a => `<option value="${a}" ${a===accounts.main?'selected':''}>${a}</option>`).join('');
+
+    const checksDiv = document.getElementById('otherAccountsChecks');
+    checksDiv.innerHTML = available.map(a => `
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:500;cursor:pointer">
+            <input type="checkbox" value="${a}" ${(accounts.others||[]).includes(a)?'checked':''} class="other-account-check">
+            ${a}
+        </label>
+    `).join('');
+
     document.getElementById('configModal').classList.add('open');
 }
 function closeConfig(){document.getElementById('configModal').classList.remove('open')}
 async function saveConfig(){
-    const main=document.getElementById('mainAccount').value.trim();
-    const others=document.getElementById('otherAccounts').value.split(',').map(s=>s.trim()).filter(Boolean);
+    const main=document.getElementById('mainAccount').value;
+    const others=Array.from(document.querySelectorAll('.other-account-check:checked')).map(el=>el.value);
     await fetch('/api/accounts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({main,others})});
-    accounts={main,others};
+    accounts={...accounts,main,others};
     closeConfig();
     showStatus('✅ Comptes sauvegardés');
     render();
