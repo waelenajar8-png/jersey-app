@@ -45,9 +45,13 @@ h1{font-size:22px;margin:0}
 .imgs-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:2px;padding:6px}
 .img-item{position:relative;cursor:grab}
 .img-item.dragging{opacity:.4;cursor:grabbing}
-.img-item img{width:100%;aspect-ratio:3/4;object-fit:cover;border-radius:3px;background:var(--bg)}
-.img-del{position:absolute;top:2px;right:2px;background:rgba(248,113,113,.85);color:#fff;border:none;border-radius:3px;padding:1px 4px;font-size:9px;cursor:pointer;display:none}
-.img-item:hover .img-del{display:block}
+.img-item img{width:100%;aspect-ratio:3/4;object-fit:cover;border-radius:3px;background:var(--bg);display:block}
+.img-overlay{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;gap:2px;background:rgba(0,0,0,.5);border-radius:3px}
+.img-item:hover .img-overlay{display:flex}
+.img-arrow{background:rgba(255,255,255,.2);border:none;color:#fff;padding:2px 6px;border-radius:3px;font-size:11px;cursor:pointer;font-weight:700}
+.img-arrow:hover{background:rgba(255,255,255,.4)}
+.img-del{background:rgba(248,113,113,.85);border:none;color:#fff;padding:2px 6px;border-radius:3px;font-size:10px;cursor:pointer;font-weight:700}
+.img-num{position:absolute;bottom:2px;left:3px;background:rgba(0,0,0,.6);color:#fff;font-size:9px;padding:1px 4px;border-radius:2px;font-weight:700}
 .more-imgs{display:flex;align-items:center;justify-content:center;background:var(--bg);border-radius:3px;aspect-ratio:3/4;font-size:10px;color:var(--text-dim);font-weight:700}
 .card-footer{padding:8px 10px;display:flex;flex-direction:column;gap:6px;border-top:1px solid var(--border)}
 .account-select{width:100%;padding:6px 9px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;font-weight:600}
@@ -233,7 +237,12 @@ function render(){
                      ondragover="event.preventDefault()" 
                      ondrop="imgDrop(event,'${t.id}','${t.r2_key}')">
                     <img src="${u||''}" loading="lazy" onerror="this.style.opacity='.2'">
-                    <button class="img-del" onclick="deleteImage(event,'${t.r2_key}',${i},'${t.id}')">✕</button>
+                    <div class="img-overlay">
+                        ${i>0?`<button class="img-arrow" onclick="moveImg(event,'${t.r2_key}',${i},${i-1})">←</button>`:''}
+                        <button class="img-del" onclick="deleteImage(event,'${t.r2_key}',${i},'${t.id}')">✕</button>
+                        ${i<imgs.length-1?`<button class="img-arrow" onclick="moveImg(event,'${t.r2_key}',${i},${i+1})">→</button>`:''}
+                    </div>
+                    <div class="img-num">${i+1}</div>
                 </div>`).join('')}
                 ${rem>0?`<div class="more-imgs">+${rem}</div>`:''}
             </div>
@@ -327,6 +336,22 @@ async function deleteSelected(){
         await fetch('/api/queue/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key})});
     }
     selectedForMain.clear();
+    await loadQueue();
+}
+
+async function moveImg(e, r2Key, fromIndex, toIndex){
+    e.stopPropagation();
+    const t = tiktoks.find(t=>t.r2_key===r2Key);
+    if(!t) return;
+    const imgs = t.image_urls||[];
+    const newOrder = Array.from({length:imgs.length},(_,i)=>i);
+    // Swap les deux positions
+    [newOrder[fromIndex], newOrder[toIndex]] = [newOrder[toIndex], newOrder[fromIndex]];
+    await fetch('/api/queue/reorder',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({key:r2Key, order:newOrder})
+    });
     await loadQueue();
 }
 
