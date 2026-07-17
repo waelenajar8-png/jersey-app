@@ -5,39 +5,53 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>TikToks Programmés</title>
 <style>
-:root[data-theme="dark"]{--bg:#0f1115;--panel:#1a1d24;--border:#2a2e37;--accent:#4ade80;--text:#e5e7eb;--text-dim:#9ca3af;--danger:#f87171}
-:root[data-theme="light"]{--bg:#f3f4f6;--panel:#fff;--border:#d1d5db;--accent:#16a34a;--text:#111827;--text-dim:#6b7280;--danger:#ef4444}
+:root[data-theme="dark"]{--bg:#0f1115;--panel:#1a1d24;--border:#2a2e37;--accent:#4ade80;--text:#e5e7eb;--text-dim:#9ca3af;--danger:#f87171;--warn:#fbbf24}
+:root[data-theme="light"]{--bg:#f3f4f6;--panel:#fff;--border:#d1d5db;--accent:#16a34a;--text:#111827;--text-dim:#6b7280;--danger:#ef4444;--warn:#d97706}
 *{box-sizing:border-box}
 body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;padding:24px}
 .wrap{max-width:1400px;margin:0 auto}
-.topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;flex-wrap:wrap;gap:12px}
+.topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px}
 h1{font-size:22px;margin:0}
-.nav{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.nav{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 .nav a{color:var(--accent);text-decoration:none;font-size:13px;font-weight:600}
 .theme-btn{background:var(--panel);border:1px solid var(--border);color:var(--text);padding:6px 12px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600}
-.filters{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;align-items:center}
-.filter-btn{padding:6px 14px;background:var(--panel);border:1px solid var(--border);color:var(--text-dim);border-radius:100px;font-size:12px;font-weight:600;cursor:pointer}
-.filter-btn.active{background:var(--accent);color:#0f1115;border-color:var(--accent)}
-.count-badge{background:var(--panel);border:1px solid var(--border);padding:6px 12px;border-radius:8px;font-size:13px;font-weight:600}
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:14px}
-.card{background:var(--panel);border:1px solid var(--border);border-radius:12px;overflow:hidden}
-.card-header{padding:10px 14px;border-bottom:1px solid var(--border)}
-.card-num{font-size:13px;font-weight:700}
-.card-meta{font-size:10px;color:var(--text-dim);margin-top:2px}
-.images-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:2px;padding:6px}
-.images-grid img{width:100%;aspect-ratio:3/4;object-fit:cover;border-radius:3px}
-.more{display:flex;align-items:center;justify-content:center;background:var(--bg);border-radius:3px;aspect-ratio:3/4;font-size:10px;color:var(--text-dim);font-weight:700}
-.card-footer{padding:8px 14px;display:flex;align-items:center;justify-content:space-between;border-top:1px solid var(--border)}
-.account-tag{background:rgba(74,222,128,.1);color:var(--accent);padding:3px 8px;border-radius:100px;font-size:10px;font-weight:700}
-.time-tag{font-size:11px;color:var(--text-dim)}
-.empty{text-align:center;color:var(--text-dim);padding:60px;font-size:14px}
-.loading{text-align:center;color:var(--text-dim);padding:60px}
-.spinner{width:32px;height:32px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 12px}
-@keyframes spin{to{transform:rotate(360deg)}}
-.stats-bar{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px}
+.stats-bar{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px}
+@media(max-width:700px){.stats-bar{grid-template-columns:1fr 1fr}}
 .stat-card{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:14px}
 .stat-label{font-size:11px;color:var(--text-dim);margin-bottom:4px}
 .stat-value{font-size:20px;font-weight:700}
+.toolbar{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;align-items:center}
+.btn{padding:10px 18px;background:var(--accent);color:#0f1115;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn-danger{background:rgba(248,113,113,.15);border:1px solid rgba(248,113,113,.4);color:var(--danger);padding:8px 14px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer}
+.btn-sec{padding:8px 14px;background:var(--panel);border:1px solid var(--border);color:var(--text);border-radius:8px;font-size:12px;font-weight:600;cursor:pointer}
+.filters{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;align-items:center}
+.filter-btn{padding:5px 12px;background:var(--panel);border:1px solid var(--border);color:var(--text-dim);border-radius:100px;font-size:12px;font-weight:600;cursor:pointer}
+.filter-btn.active{background:var(--accent);color:#0f1115;border-color:var(--accent)}
+.count-badge{background:var(--panel);border:1px solid var(--border);padding:6px 12px;border-radius:8px;font-size:13px;font-weight:600}
+.status-bar{background:rgba(74,222,128,.08);border:1px solid rgba(74,222,128,.25);border-radius:10px;padding:12px 16px;margin-bottom:16px;font-size:13px;display:none}
+.status-bar.show{display:block}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:12px;overflow:hidden;transition:border-color .15s}
+.card.selected{border-color:var(--warn);box-shadow:0 0 0 2px var(--warn)}
+.card-header{padding:10px 12px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.card-num{font-size:13px;font-weight:700}
+.card-meta{font-size:10px;color:var(--text-dim);margin-top:1px}
+.images-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:2px;padding:6px}
+.images-grid img{width:100%;aspect-ratio:3/4;object-fit:cover;border-radius:3px;background:var(--bg)}
+.more{display:flex;align-items:center;justify-content:center;background:var(--bg);border-radius:3px;aspect-ratio:3/4;font-size:10px;color:var(--text-dim);font-weight:700}
+.card-footer{padding:8px 12px;display:flex;align-items:center;justify-content:space-between;border-top:1px solid var(--border);flex-wrap:wrap;gap:6px}
+.account-tag{background:rgba(74,222,128,.1);color:var(--accent);padding:3px 8px;border-radius:100px;font-size:10px;font-weight:700}
+.time-tag{font-size:11px;color:var(--text-dim)}
+.unschedule-btn{padding:4px 8px;background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.3);color:var(--warn);border-radius:5px;font-size:10px;font-weight:600;cursor:pointer}
+.empty{text-align:center;color:var(--text-dim);padding:60px;font-size:14px}
+.spinner{width:28px;height:28px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 12px}
+@keyframes spin{to{transform:rotate(360deg)}}
+.checkbox{width:16px;height:16px;cursor:pointer;accent-color:var(--warn)}
+.week-progress{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;gap:16px}
+.week-track{flex:1;height:8px;background:var(--border);border-radius:4px;overflow:hidden}
+.week-fill{height:100%;background:var(--accent);border-radius:4px;transition:width .5s}
+.week-text{font-size:12px;color:var(--text-dim);white-space:nowrap}
 </style>
 </head>
 <body>
@@ -45,7 +59,7 @@ h1{font-size:22px;margin:0}
     <div class="topbar">
         <div>
             <h1>✅ TikToks programmés</h1>
-            <div style="color:var(--text-dim);font-size:12px;margin-top:4px">Tous les TikToks envoyés sur RobinReach</div>
+            <div style="color:var(--text-dim);font-size:12px;margin-top:2px">Tous les TikToks envoyés sur RobinReach</div>
         </div>
         <div class="nav">
             <a href="/">🎨 Générateur</a>
@@ -55,14 +69,30 @@ h1{font-size:22px;margin:0}
         </div>
     </div>
 
-    <div class="stats-bar" id="statsBar">
+    <div class="stats-bar">
         <div class="stat-card"><div class="stat-label">Total programmés</div><div class="stat-value" id="totalCount">—</div></div>
         <div class="stat-card"><div class="stat-label">Cette semaine</div><div class="stat-value" id="weekCount">—</div></div>
         <div class="stat-card"><div class="stat-label">Comptes actifs</div><div class="stat-value" id="accountCount">—</div></div>
+        <div class="stat-card"><div class="stat-label">Sélectionnés</div><div class="stat-value" id="selCount">0</div></div>
+    </div>
+
+    <div class="week-progress" id="weekProgress">
+        <span style="font-size:12px;font-weight:600">📅 Semaine :</span>
+        <div class="week-track"><div class="week-fill" id="weekFill"></div></div>
+        <span class="week-text" id="weekText">—/28 TikToks</span>
+    </div>
+
+    <div class="status-bar" id="statusBar"></div>
+
+    <div class="toolbar">
+        <span class="count-badge" id="countBadge">⏳ Chargement...</span>
+        <button class="btn-sec" id="selectAllBtn" onclick="selectAll()">☑️ Tout sélectionner</button>
+        <button class="btn-sec" id="deselectAllBtn" onclick="deselectAll()" style="display:none">✖️ Désélectionner</button>
+        <button class="btn-danger" id="unscheduleSelBtn" onclick="unscheduleSelected()" style="display:none">↩️ Remettre en file d'attente</button>
+        <button class="btn-danger" onclick="unscheduleAll()" style="margin-left:auto">↩️ Tout déprogrammer</button>
     </div>
 
     <div class="filters" id="filters">
-        <span class="count-badge" id="countBadge">⏳ Chargement...</span>
         <button class="filter-btn active" data-filter="all" onclick="setFilter('all',this)">Tous</button>
     </div>
 
@@ -72,94 +102,186 @@ h1{font-size:22px;margin:0}
 </div>
 
 <script>
-const html = document.documentElement;
-const themeBtn = document.getElementById('themeBtn');
-let theme = localStorage.getItem('theme') || 'dark';
+const html=document.documentElement;
+const themeBtn=document.getElementById('themeBtn');
+let theme=localStorage.getItem('theme')||'dark';
 applyTheme(theme);
 function applyTheme(t){theme=t;html.setAttribute('data-theme',t);themeBtn.textContent=t==='dark'?'☀️':'🌙';localStorage.setItem('theme',t)}
 themeBtn.addEventListener('click',()=>applyTheme(theme==='dark'?'light':'dark'));
 
-let tiktoks = [];
-let currentFilter = 'all';
+let tiktoks=[];
+let currentFilter='all';
+let selected=new Set();
 
-async function load() {
-    const res = await fetch('/api/scheduled');
-    const data = await res.json();
-    tiktoks = data.tiktoks || [];
+async function load(){
+    const res=await fetch('/api/scheduled');
+    const data=await res.json();
+    tiktoks=data.tiktoks||[];
     updateStats();
     updateFilters();
     render();
 }
 
-function updateStats() {
-    document.getElementById('totalCount').textContent = tiktoks.length;
-    const now = new Date();
-    const weekAgo = new Date(now - 7*24*60*60*1000);
-    const weekCount = tiktoks.filter(t => new Date(t.scheduled_at) > weekAgo).length;
-    document.getElementById('weekCount').textContent = weekCount;
-    const accounts = new Set(tiktoks.map(t => t.account).filter(Boolean));
-    document.getElementById('accountCount').textContent = accounts.size;
+function updateStats(){
+    document.getElementById('totalCount').textContent=tiktoks.length;
+    const now=new Date();
+    const weekStart=new Date(now);
+    weekStart.setDate(now.getDate()-now.getDay());
+    weekStart.setHours(0,0,0,0);
+    const weekEnd=new Date(weekStart);
+    weekEnd.setDate(weekStart.getDate()+7);
+    const weekItems=tiktoks.filter(t=>{
+        const d=new Date(t.scheduled_at);
+        return d>=weekStart&&d<weekEnd;
+    });
+    document.getElementById('weekCount').textContent=weekItems.length;
+    document.getElementById('weekFill').style.width=`${Math.min(weekItems.length/28*100,100)}%`;
+    document.getElementById('weekText').textContent=`${weekItems.length}/28 TikToks cette semaine`;
+    const accounts=new Set(tiktoks.map(t=>t.account).filter(Boolean));
+    document.getElementById('accountCount').textContent=accounts.size;
 }
 
-function updateFilters() {
-    const accounts = [...new Set(tiktoks.map(t => t.account).filter(Boolean))];
-    const filtersEl = document.getElementById('filters');
-    const existingBtns = filtersEl.querySelectorAll('.filter-btn');
-    existingBtns.forEach((btn, i) => { if (i > 0) btn.remove(); });
-    accounts.forEach(acc => {
-        const btn = document.createElement('button');
-        btn.className = 'filter-btn' + (currentFilter === acc ? ' active' : '');
-        btn.textContent = acc;
-        btn.onclick = () => setFilter(acc, btn);
+function updateFilters(){
+    const accounts=[...new Set(tiktoks.map(t=>t.account).filter(Boolean))];
+    const filtersEl=document.getElementById('filters');
+    const existingBtns=filtersEl.querySelectorAll('.filter-btn');
+    existingBtns.forEach((btn,i)=>{if(i>0)btn.remove()});
+    accounts.forEach(acc=>{
+        const btn=document.createElement('button');
+        btn.className='filter-btn'+(currentFilter===acc?' active':'');
+        btn.textContent=acc;
+        btn.onclick=()=>setFilter(acc,btn);
         filtersEl.appendChild(btn);
     });
 }
 
-function setFilter(filter, el) {
-    currentFilter = filter;
-    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+function setFilter(filter,el){
+    currentFilter=filter;
+    document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));
     el.classList.add('active');
     render();
 }
 
-function render() {
-    const grid = document.getElementById('grid');
-    const countBadge = document.getElementById('countBadge');
-    let filtered = currentFilter === 'all' ? tiktoks : tiktoks.filter(t => t.account === currentFilter);
-    countBadge.textContent = `${filtered.length} TikTok(s)`;
+function render(){
+    const grid=document.getElementById('grid');
+    const countBadge=document.getElementById('countBadge');
+    const unscheduleSelBtn=document.getElementById('unscheduleSelBtn');
+    const deselectAllBtn=document.getElementById('deselectAllBtn');
+    const selCountEl=document.getElementById('selCount');
 
-    if (!filtered.length) {
-        grid.innerHTML = '<div class="empty">📭 Aucun TikTok programmé<br><br><a href="/queue" style="color:var(--accent)">← File d\'attente</a></div>';
+    let filtered=currentFilter==='all'?tiktoks:tiktoks.filter(t=>t.account===currentFilter);
+    countBadge.textContent=`${filtered.length} TikTok(s)`;
+    selCountEl.textContent=selected.size;
+    unscheduleSelBtn.style.display=selected.size>0?'inline-block':'none';
+    deselectAllBtn.style.display=selected.size>0?'inline-block':'none';
+
+    if(!filtered.length){
+        grid.innerHTML='<div class="empty">📭 Aucun TikTok programmé<br><br><a href="/queue" style="color:var(--accent)">← File d\'attente</a></div>';
         return;
     }
 
-    grid.innerHTML = filtered.map(t => {
-        const imgs = t.image_urls || [];
-        const displayImgs = imgs.slice(0, 4);
-        const remaining = imgs.length - 4;
-        const scheduledDate = new Date(t.scheduled_at);
-        const dateStr = scheduledDate.toLocaleDateString('fr-FR', {weekday:'short', day:'2-digit', month:'short'});
-        const timeStr = scheduledDate.toLocaleTimeString('fr-FR', {hour:'2-digit', minute:'2-digit'});
+    grid.innerHTML=filtered.map(t=>{
+        const imgs=t.image_urls||[];
+        const show=imgs.slice(0,4);
+        const rem=imgs.length-4;
+        const scheduledDate=new Date(t.scheduled_at);
+        const dateStr=scheduledDate.toLocaleDateString('fr-FR',{weekday:'short',day:'2-digit',month:'short'});
+        const timeStr=scheduledDate.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
+        const isSel=selected.has(t.r2_key);
 
-        return `<div class="card">
+        return `<div class="card ${isSel?'selected':''}" id="scard-${t.id}">
             <div class="card-header">
-                <div class="card-num">TikTok ${t.number}</div>
-                <div class="card-meta">Par ${t.user} · ${t.image_keys?.length || 0} images</div>
+                <div>
+                    <div class="card-num">TikTok ${t.number} <span style="font-size:10px;color:var(--text-dim)">${t.image_keys?.length||0} img</span></div>
+                    <div class="card-meta">${t.user}</div>
+                </div>
+                <input type="checkbox" class="checkbox" ${isSel?'checked':''} onchange="toggleSelect('${t.r2_key}')">
             </div>
             <div class="images-grid">
-                ${displayImgs.map(url => `<img src="${url}" loading="lazy">`).join('')}
-                ${remaining > 0 ? `<div class="more">+${remaining}</div>` : ''}
+                ${show.map(u=>`<img src="${u||''}" loading="lazy" onerror="this.style.opacity='.2'">`).join('')}
+                ${rem>0?`<div class="more">+${rem}</div>`:''}
             </div>
             <div class="card-footer">
-                <span class="account-tag">${t.account || '—'}</span>
+                <span class="account-tag">${t.account||'—'}</span>
                 <span class="time-tag">${dateStr} ${timeStr}</span>
+                <button class="unschedule-btn" onclick="unscheduleSingle('${t.r2_key}')">↩️ Déprogrammer</button>
             </div>
         </div>`;
     }).join('');
 }
 
+function toggleSelect(key){
+    if(selected.has(key)) selected.delete(key);
+    else selected.add(key);
+    render();
+}
+
+function selectAll(){
+    let filtered=currentFilter==='all'?tiktoks:tiktoks.filter(t=>t.account===currentFilter);
+    filtered.forEach(t=>selected.add(t.r2_key));
+    render();
+}
+
+function deselectAll(){
+    selected.clear();
+    render();
+}
+
+// Déprogrammer un seul TikTok
+async function unscheduleSingle(key){
+    if(!confirm('Remettre ce TikTok en file d\'attente ?')) return;
+    showStatus('⏳ Déprogrammation en cours...');
+    const res=await fetch('/api/scheduled/unschedule',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({keys:[key]})
+    });
+    const d=await res.json();
+    showStatus(`✅ ${d.count} TikTok(s) remis en file d'attente`);
+    selected.delete(key);
+    await load();
+}
+
+// Déprogrammer la sélection
+async function unscheduleSelected(){
+    if(!selected.size){alert('Aucun TikTok sélectionné');return}
+    if(!confirm(`Remettre ${selected.size} TikTok(s) en file d'attente ?`)) return;
+    showStatus('⏳ Déprogrammation en cours...');
+    const res=await fetch('/api/scheduled/unschedule',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({keys:[...selected]})
+    });
+    const d=await res.json();
+    showStatus(`✅ ${d.count} TikTok(s) remis en file d'attente`);
+    selected.clear();
+    await load();
+}
+
+// Tout déprogrammer
+async function unscheduleAll(){
+    if(!confirm(`Déprogrammer TOUS les ${tiktoks.length} TikToks et les remettre en file d'attente ?`)) return;
+    showStatus('⏳ Déprogrammation de tous les TikToks...');
+    const allKeys=tiktoks.map(t=>t.r2_key);
+    const res=await fetch('/api/scheduled/unschedule',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({keys:allKeys})
+    });
+    const d=await res.json();
+    showStatus(`✅ ${d.count} TikTok(s) remis en file d'attente`);
+    selected.clear();
+    await load();
+}
+
+function showStatus(msg){
+    const bar=document.getElementById('statusBar');
+    bar.textContent=msg;bar.classList.add('show');
+    setTimeout(()=>bar.classList.remove('show'),4000);
+}
+
 load();
-setInterval(load, 60000);
+setInterval(load,60000);
 </script>
 </body>
 </html>
