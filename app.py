@@ -625,6 +625,42 @@ def api_delete_image():
     r2_put_json(key, tiktok)
     return jsonify({"success": True, "remaining": len(tiktok["image_keys"])})
 
+@app.route("/api/scheduled/unschedule", methods=["POST"])
+def api_unschedule():
+    """Remet des TikToks programmés dans la file d'attente"""
+    data = request.json
+    keys = data.get("keys", [])
+    if not keys: return jsonify({"error": "keys requis"}), 400
+    count = 0
+    for sched_key in keys:
+        tiktok = r2_get_json(sched_key)
+        if not tiktok: continue
+        # Déplacer les images vers queue/imgs/
+        new_img_keys = []
+        r2 = get_r2()
+        for old_k in tiktok.get("image_keys", []):
+            new_k = old_k.replace("scheduled/imgs/", "queue/imgs/")
+            if r2 and old_k != new_k:
+                try:
+                    r2.copy_object(Bucket=R2_BUCKET,
+                        CopySource={"Bucket": R2_BUCKET, "Key": old_k}, Key=new_k)
+                    r2_delete(old_k)
+                    new_img_keys.append(new_k)
+                except Exception:
+                    new_img_keys.append(old_k)
+            else:
+                new_img_keys.append(old_k)
+        tiktok["image_keys"] = new_img_keys
+        tiktok["status"] = "pending"
+        tiktok["account"] = None
+        tiktok["scheduled_at"] = None
+        # Remettre dans queue
+        queue_key = sched_key.replace(PFX_SCHEDULED, PFX_QUEUE)
+        r2_put_json(queue_key, tiktok)
+        r2_delete(sched_key)
+        count += 1
+    return jsonify({"success": True, "count": count})
+
 @app.route("/api/robinreach/profiles")
 def api_robinreach_profiles():
     """Diagnostic : liste les profils sociaux connectés sur RobinReach avec leurs IDs"""
