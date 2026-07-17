@@ -43,7 +43,11 @@ h1{font-size:22px;margin:0}
 .card-meta{font-size:10px;color:var(--text-dim);margin-top:1px}
 .account-tag{background:rgba(74,222,128,.1);color:var(--accent);padding:2px 8px;border-radius:100px;font-size:10px;font-weight:700}
 .imgs-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:2px;padding:6px}
-.imgs-grid img{width:100%;aspect-ratio:3/4;object-fit:cover;border-radius:3px;background:var(--bg)}
+.img-item{position:relative;cursor:grab}
+.img-item.dragging{opacity:.4;cursor:grabbing}
+.img-item img{width:100%;aspect-ratio:3/4;object-fit:cover;border-radius:3px;background:var(--bg)}
+.img-del{position:absolute;top:2px;right:2px;background:rgba(248,113,113,.85);color:#fff;border:none;border-radius:3px;padding:1px 4px;font-size:9px;cursor:pointer;display:none}
+.img-item:hover .img-del{display:block}
 .more-imgs{display:flex;align-items:center;justify-content:center;background:var(--bg);border-radius:3px;aspect-ratio:3/4;font-size:10px;color:var(--text-dim);font-weight:700}
 .card-footer{padding:8px 10px;display:flex;flex-direction:column;gap:6px;border-top:1px solid var(--border)}
 .account-select{width:100%;padding:6px 9px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;font-weight:600}
@@ -95,7 +99,11 @@ h1{font-size:22px;margin:0}
     <div class="toolbar">
         <span class="count-badge" id="countBadge">⏳ Chargement...</span>
         <button class="btn btn-purple" id="dispatchBtn" disabled onclick="dispatchAuto()">🔀 Dispatcher le reste auto</button>
-        <button class="btn" id="scheduleBtn" disabled onclick="scheduleAll()">🚀 Programmer sur RobinReach</button>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <label style="font-size:12px;color:var(--text-dim);font-weight:600">📅 Début :</label>
+            <input type="date" id="startDate" style="padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px">
+            <button class="btn" id="scheduleBtn" disabled onclick="scheduleAll()">🚀 Programmer sur RobinReach</button>
+        </div>
         <button class="btn-sec btn-danger" id="deleteSelBtn" style="display:none" onclick="deleteSelected()">🗑️ Supprimer sélection</button>
     </div>
 
@@ -218,8 +226,15 @@ function render(){
                 </div>
                 ${t.account?`<span class="account-tag">${t.account}</span>`:''}
             </div>
-            <div class="imgs-grid">
-                ${show.map(u=>`<img src="${u||''}" loading="lazy" onerror="this.style.opacity='.2'">`).join('')}
+            <div class="imgs-grid" id="imgs-${t.id}" data-key="${t.r2_key}">
+                ${imgs.map((u,i)=>`
+                <div class="img-item" draggable="true" data-index="${i}" 
+                     ondragstart="imgDragStart(event,'${t.id}')" 
+                     ondragover="event.preventDefault()" 
+                     ondrop="imgDrop(event,'${t.id}','${t.r2_key}')">
+                    <img src="${u||''}" loading="lazy" onerror="this.style.opacity='.2'">
+                    <button class="img-del" onclick="deleteImage(event,'${t.r2_key}',${i},'${t.id}')">✕</button>
+                </div>`).join('')}
                 ${rem>0?`<div class="more-imgs">+${rem}</div>`:''}
             </div>
             <div class="card-footer">
@@ -270,11 +285,32 @@ async function dispatchAuto(){
 async function scheduleAll(){
     const assigned=tiktoks.filter(t=>t.account);
     if(!assigned.length){alert('Assigne d\'abord un compte à chaque TikTok');return}
+    const startDate = document.getElementById('startDate').value;
+    const msg = startDate
+        ? `Programmer ${assigned.length} TikTok(s) à partir du ${startDate} ?`
+        : `Programmer ${assigned.length} TikTok(s) à partir d'aujourd'hui ?`;
+    if(!confirm(msg)) return;
     showStatus(`🚀 Programmation de ${assigned.length} TikTok(s) en cours...`);
-    const res=await fetch('/api/queue/schedule',{method:'POST',headers:{'Content-Type':'application/json'}});
+    document.getElementById('scheduleBtn').disabled=true;
+    const res=await fetch('/api/queue/schedule',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({start_date: startDate || null})
+    });
     const d=await res.json();
-    if(d.errors?.length) showStatus(`✅ ${d.scheduled} programmés — ⚠️ ${d.errors.length} erreur(s) : ${d.errors.slice(0,3).join(' | ')}`);
-    else showStatus(`✅ ${d.scheduled} TikTok(s) programmés sur RobinReach !`);
+    document.getElementById('scheduleBtn').disabled=false;
+    if(d.errors?.length){
+        showStatus(`✅ ${d.scheduled} programmés — ⚠️ ${d.errors.length} erreur(s) : ${d.errors[0]}`);
+    } else {
+        // Afficher le récapitulatif détaillé
+        let recap = `✅ ${d.scheduled} TikTok(s) programmés !\n\n`;
+        if(d.details?.length){
+            recap += d.details.slice(0,10).map(x=>`• TikTok ${x.tiktok} → ${x.account} le ${x.time}`).join('\n');
+            if(d.details.length>10) recap += `\n... et ${d.details.length-10} autres`;
+        }
+        alert(recap);
+        showStatus(`✅ ${d.scheduled} TikTok(s) programmés avec succès !`);
+    }
     setTimeout(loadQueue,1500);
 }
 
@@ -292,6 +328,54 @@ async function deleteSelected(){
     }
     selectedForMain.clear();
     await loadQueue();
+}
+
+// ── Drag & drop images ─────────────────────────────────────────────────────
+let dragSrcIndex = null;
+let dragTiktokId = null;
+
+function imgDragStart(e, tiktokId){
+    dragSrcIndex = parseInt(e.currentTarget.dataset.index);
+    dragTiktokId = tiktokId;
+    e.currentTarget.classList.add('dragging');
+    setTimeout(()=>e.currentTarget.classList.remove('dragging'),0);
+}
+
+async function imgDrop(e, tiktokId, r2Key){
+    e.preventDefault();
+    if(dragTiktokId !== tiktokId) return;
+    const destIndex = parseInt(e.currentTarget.dataset.index);
+    if(dragSrcIndex === null || dragSrcIndex === destIndex) return;
+
+    const t = tiktoks.find(t=>t.id===tiktokId);
+    if(!t) return;
+    const imgs = t.image_urls || [];
+    const newOrder = Array.from({length:imgs.length},(_,i)=>i);
+    // Swap
+    newOrder.splice(destIndex, 0, newOrder.splice(dragSrcIndex, 1)[0]);
+
+    await fetch('/api/queue/reorder',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({key:r2Key, order:newOrder})
+    });
+    dragSrcIndex = null;
+    await loadQueue();
+}
+
+async function deleteImage(e, r2Key, imgIndex, tiktokId){
+    e.stopPropagation();
+    if(!confirm('Supprimer cette image du TikTok ?')) return;
+    const res = await fetch('/api/queue/delete_image',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({key:r2Key, index:imgIndex})
+    });
+    const d = await res.json();
+    if(d.success){
+        showStatus(`🗑️ Image supprimée — ${d.remaining} image(s) restante(s) dans ce TikTok`);
+        await loadQueue();
+    }
 }
 
 // ── Config comptes ─────────────────────────────────────────────────────────
@@ -329,6 +413,8 @@ function showStatus(msg){
 }
 
 // ── Init ───────────────────────────────────────────────────────────────────
+// Mettre la date d'aujourd'hui par défaut
+document.getElementById('startDate').value = new Date().toISOString().slice(0,10);
 init();
 setInterval(async()=>{
     const res=await fetch('/api/buffer');
