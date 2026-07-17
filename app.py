@@ -456,60 +456,174 @@ def api_dispatch():
 
 @app.route("/api/queue/schedule", methods=["POST"])
 def api_schedule():
+    data = request.json or {}
+    start_date_str = data.get("start_date")  # format "YYYY-MM-DD", optionnel
+
     queue = get_queue()
     assigned = [t for t in queue if t.get("account")]
-    if not assigned: return jsonify({"error":"Aucun TikTok avec compte"}),400
+    if not assigned: return jsonify({"error":"Aucun TikTok avec compte assigné"}),400
 
     now = datetime.now(timezone.utc)
-    scheduled_count = 0; errors = []
 
-    # Grouper par compte
+    # Date de début : soit celle choisie, soit aujourd'hui
+    if start_date_str:
+        try:
+            from datetime import date
+            y,mo,d = map(int, start_date_str.split("-"))
+            start_date = date(y,mo,d)
+        except Exception:
+            start_date = now.date()
+    else:
+        start_date = now.date()
+
+    scheduled_count = 0
+    errors = []
+    scheduled_details = []  # pour le feedback
+
+    # Grouper par compte et trier par numéro de TikTok
     by_account = {}
     for t in assigned:
         by_account.setdefault(t["account"],[]).append(t)
+    for acc in by_account:
+        by_account[acc].sort(key=lambda x: x.get("number",0))
 
     for account, tiktoks in by_account.items():
-        slot_date = now.date()
+        robinreach_id = ROBINREACH_ACCOUNTS.get(account)
+        if not robinreach_id:
+            for t in tiktoks:
+                errors.append(f"Compte '{account}' non reconnu (TikTok {t.get('number','')})")
+            continue
+
+        slot_date = start_date
         slot_index = 0
+
         for tiktok in tiktoks:
+            # Anti-doublon : vérifier que ce TikTok n'est pas déjà programmé
+            tiktok_data = r2_get_json(tiktok["r2_key"])
+            if not tiktok_data:
+                errors.append(f"TikTok {tiktok.get('number','')} introuvable")
+                continue
+            if tiktok_data.get("status") == "scheduled":
+                errors.append(f"TikTok {tiktok.get('number','')} déjà programmé, ignoré")
+                continue
+
+            # Marquer comme "en cours" immédiatement pour éviter double envoi
+            tiktok_data["status"] = "sending"
+            r2_put_json(tiktok["r2_key"], tiktok_data)
+
             # Trouver le prochain créneau disponible
             while True:
                 h,m = map(int, SCHEDULE_TIMES[slot_index % len(SCHEDULE_TIMES)].split(":"))
                 slot_dt = datetime(slot_date.year,slot_date.month,slot_date.day,h,m,tzinfo=timezone.utc)
-                if slot_dt > now + timedelta(minutes=30): break
+                # Si date de début = aujourd'hui, skip les créneaux passés
+                if start_date == now.date():
+                    if slot_dt > now + timedelta(minutes=30): break
+                else:
+                    break
                 slot_index += 1
                 if slot_index % len(SCHEDULE_TIMES) == 0:
                     slot_date += timedelta(days=1)
 
             dt_str = slot_dt.isoformat()
+            # Heure en Europe/Paris pour l'affichage (UTC+2 en été)
+            paris_dt = slot_dt + timedelta(hours=2)
+            display_time = paris_dt.strftime("%d/%m/%Y à %Hh%M")
 
-            # Convertir le nom de compte en ID numérique RobinReach
-            robinreach_id = ROBINREACH_ACCOUNTS.get(account)
-
-            # Appel RobinReach si configuré
-            if ROBINREACH_API_KEY and ROBINREACH_BRAND_ID and robinreach_id:
+            # Appel RobinReach avec musique activée
+            if ROBINREACH_API_KEY and ROBINREACH_BRAND_ID:
                 try:
                     image_urls = [u for u in tiktok.get("image_urls",[]) if u]
                     resp = requests.post(
                         f"https://robinreach.com/api/v1/posts?api_key={ROBINREACH_API_KEY}&brand_id={ROBINREACH_BRAND_ID}",
                         headers={"Accept":"application/json","Content-Type":"application/json"},
-                        json={"content":FIXED_CAPTION,"media_urls":image_urls,"publish_time":dt_str,
-                              "social_profile_ids":[robinreach_id],"title":FIXED_CAPTION[:50]},
-                        timeout=30)
+                        json={
+                            "content": FIXED_CAPTION,
+                            "media_urls": image_urls,
+                            "publish_time": dt_str,
+                            "social_profile_ids": [robinreach_id],
+                            "title": FIXED_CAPTION[:50],
+                            "allow_tiktok_to_add_music": True,
+                            "tiktok_options": {
+                                "allow_music": True,
+                                "privacy_level": "PUBLIC_TO_EVERYONE",
+                                "allow_comment": True,
+                                "allow_duet": True,
+                                "allow_stitch": True
+                            }
+                        },
+                        timeout=30
+                    )
                     if resp.status_code not in (200,201):
-                        errors.append(f"{tiktok['id']}: {resp.text[:150]}"); continue
+                        # Remettre en pending si échec
+                        tiktok_data["status"] = "pending"
+                        r2_put_json(tiktok["r2_key"], tiktok_data)
+                        errors.append(f"TikTok {tiktok.get('number','')}: {resp.text[:200]}")
+                        continue
                 except Exception as e:
-                    errors.append(f"{tiktok['id']}: {e}"); continue
-            elif not robinreach_id:
-                errors.append(f"{tiktok['id']}: compte '{account}' non reconnu"); continue
+                    tiktok_data["status"] = "pending"
+                    r2_put_json(tiktok["r2_key"], tiktok_data)
+                    errors.append(f"TikTok {tiktok.get('number','')}: {str(e)}")
+                    continue
 
             move_to_scheduled(tiktok["r2_key"], account, dt_str)
             scheduled_count += 1
+            scheduled_details.append({
+                "tiktok": tiktok.get("number",""),
+                "account": account,
+                "time": display_time
+            })
+
             slot_index += 1
             if slot_index % len(SCHEDULE_TIMES) == 0:
                 slot_date += timedelta(days=1)
 
-    return jsonify({"success":True,"scheduled":scheduled_count,"errors":errors})
+    return jsonify({
+        "success": True,
+        "scheduled": scheduled_count,
+        "details": scheduled_details,
+        "errors": errors
+    })
+
+@app.route("/api/queue/reorder", methods=["POST"])
+def api_reorder_images():
+    """Réordonne les images d'un TikTok"""
+    data = request.json
+    key = data.get("key")
+    new_order = data.get("order", [])  # liste d'indices dans le nouvel ordre
+    if not key: return jsonify({"error": "key requis"}), 400
+    tiktok = r2_get_json(key)
+    if not tiktok: return jsonify({"error": "TikTok introuvable"}), 404
+    img_keys = tiktok.get("image_keys", [])
+    flockages = tiktok.get("flockages", [])
+    if len(new_order) != len(img_keys):
+        return jsonify({"error": "Ordre invalide"}), 400
+    try:
+        tiktok["image_keys"] = [img_keys[i] for i in new_order]
+        tiktok["flockages"] = [flockages[i] if i < len(flockages) else "" for i in new_order]
+        r2_put_json(key, tiktok)
+        return jsonify({"success": True})
+    except (IndexError, TypeError) as e:
+        return jsonify({"error": str(e)}), 400
+
+@app.route("/api/queue/delete_image", methods=["POST"])
+def api_delete_image():
+    """Supprime une image d'un TikTok"""
+    data = request.json
+    key = data.get("key")
+    img_index = data.get("index")
+    if not key or img_index is None: return jsonify({"error": "key et index requis"}), 400
+    tiktok = r2_get_json(key)
+    if not tiktok: return jsonify({"error": "TikTok introuvable"}), 404
+    img_keys = tiktok.get("image_keys", [])
+    flockages = tiktok.get("flockages", [])
+    if img_index < 0 or img_index >= len(img_keys):
+        return jsonify({"error": "Index invalide"}), 400
+    # Supprimer l'image de R2
+    r2_delete(img_keys[img_index])
+    tiktok["image_keys"] = [k for i,k in enumerate(img_keys) if i != img_index]
+    tiktok["flockages"] = [f for i,f in enumerate(flockages) if i != img_index]
+    r2_put_json(key, tiktok)
+    return jsonify({"success": True, "remaining": len(tiktok["image_keys"])})
 
 @app.route("/api/robinreach/profiles")
 def api_robinreach_profiles():
