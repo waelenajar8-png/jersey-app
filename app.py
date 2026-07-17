@@ -525,8 +525,9 @@ def api_schedule():
                     slot_date += timedelta(days=1)
 
             dt_str = slot_dt.isoformat()
-            # Heure en Europe/Paris pour l'affichage (UTC+2 en été)
-            paris_dt = slot_dt + timedelta(hours=2)
+            from zoneinfo import ZoneInfo
+            paris_tz = ZoneInfo("Europe/Paris")
+            paris_dt = slot_dt.astimezone(paris_tz)
             display_time = paris_dt.strftime("%d/%m/%Y à %Hh%M")
 
             # Appel RobinReach avec musique activée
