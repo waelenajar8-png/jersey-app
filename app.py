@@ -550,28 +550,26 @@ def api_schedule():
                     image_urls = [u for u in tiktok.get("image_urls",[]) if u]
                     # Format correct de l'API RobinReach
                     paris_local = slot_dt.astimezone(paris_tz)
-                    payload = {
-                        "content": FIXED_CAPTION,
-                        "media_urls": image_urls,
-                        "social_profile_ids": [robinreach_id],
-                        "title": FIXED_CAPTION[:50],
-                        "publish_time": dt_str,
-                        "publishType": "schedule",
-                        "scheduledDate": paris_local.strftime("%Y-%m-%d"),
-                        "scheduledTime": paris_local.strftime("%H:%M"),
-                        "timezone": "Europe/Paris",
-                        "tiktok_options": {
-                            "add_music": True,
-                            "privacy_level": "PUBLIC_TO_EVERYONE",
-                            "allow_comment": True,
-                            "allow_duet": True,
-                            "allow_stitch": True
-                        }
-                    }
+                    # RobinReach utilise form-data avec les vrais noms de paramètres
+                    image_urls = [u for u in tiktok.get("image_urls",[]) if u]
+                    form_data = [
+                        ("post[content]", FIXED_CAPTION),
+                        ("social_profiles_ids", str(robinreach_id)),
+                        ("post[publish_time]", dt_str),
+                        ("post[status]", "scheduled"),
+                        ("post[timezone]", "UTC"),
+                        ("post[platform_attributes[tiktok][privacy]]", "PUBLIC_TO_EVERYONE"),
+                        ("post[platform_attributes[tiktok][add_music]]", "0"),
+                        ("post[platform_attributes[tiktok][add_music]]", "1"),
+                        ("post[platform_attributes[tiktok][commercial_content_toggle]]", "0"),
+                    ]
+                    for url in image_urls:
+                        form_data.append(("media_urls[]", url))
+
                     resp = requests.post(
                         f"https://robinreach.com/api/v1/posts?api_key={ROBINREACH_API_KEY}&brand_id={ROBINREACH_BRAND_ID}",
-                        headers={"Accept":"application/json","Content-Type":"application/json"},
-                        json=payload,
+                        headers={"Accept": "application/json"},
+                        data=form_data,
                         timeout=30
                     )
                     if resp.status_code not in (200,201):
