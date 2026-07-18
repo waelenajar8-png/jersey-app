@@ -457,20 +457,22 @@ def api_dispatch():
 @app.route("/api/queue/schedule", methods=["POST"])
 def api_schedule():
     data = request.json or {}
-    start_date_str = data.get("start_date")  # format "YYYY-MM-DD", optionnel
+    start_date_str = data.get("start_date")
+    custom_slots = data.get("custom_slots", {})
 
     queue = get_queue()
     assigned = [t for t in queue if t.get("account")]
     if not assigned: return jsonify({"error":"Aucun TikTok avec compte assigné"}),400
 
     now = datetime.now(timezone.utc)
+    from zoneinfo import ZoneInfo
+    paris_tz = ZoneInfo("Europe/Paris")
 
-    # Date de début : soit celle choisie, soit aujourd'hui
     if start_date_str:
         try:
-            from datetime import date
             y,mo,d = map(int, start_date_str.split("-"))
-            start_date = date(y,mo,d)
+            from datetime import date as date_cls
+            start_date = date_cls(y,mo,d)
         except Exception:
             start_date = now.date()
     else:
@@ -478,9 +480,8 @@ def api_schedule():
 
     scheduled_count = 0
     errors = []
-    scheduled_details = []  # pour le feedback
+    scheduled_details = []
 
-    # Grouper par compte et trier par numéro de TikTok
     by_account = {}
     for t in assigned:
         by_account.setdefault(t["account"],[]).append(t)
@@ -498,7 +499,6 @@ def api_schedule():
         slot_index = 0
 
         for tiktok in tiktoks:
-            # Anti-doublon : vérifier que ce TikTok n'est pas déjà programmé
             tiktok_data = r2_get_json(tiktok["r2_key"])
             if not tiktok_data:
                 errors.append(f"TikTok {tiktok.get('number','')} introuvable")
@@ -507,30 +507,40 @@ def api_schedule():
                 errors.append(f"TikTok {tiktok.get('number','')} déjà programmé, ignoré")
                 continue
 
-            # Marquer comme "en cours" immédiatement pour éviter double envoi
             tiktok_data["status"] = "sending"
             r2_put_json(tiktok["r2_key"], tiktok_data)
 
-            # Trouver le prochain créneau disponible
-            while True:
-                h,m = map(int, SCHEDULE_TIMES[slot_index % len(SCHEDULE_TIMES)].split(":"))
-                slot_dt = datetime(slot_date.year,slot_date.month,slot_date.day,h,m,tzinfo=timezone.utc)
-                # Si date de début = aujourd'hui, skip les créneaux passés
-                if start_date == now.date():
-                    if slot_dt > now + timedelta(minutes=30): break
-                else:
-                    break
-                slot_index += 1
-                if slot_index % len(SCHEDULE_TIMES) == 0:
-                    slot_date += timedelta(days=1)
+            # Créneau personnalisé ?
+            custom = custom_slots.get(tiktok["r2_key"])
+            use_custom = False
+            if custom:
+                try:
+                    if "T" in custom:
+                        naive = datetime.fromisoformat(custom)
+                        slot_dt = naive.replace(tzinfo=paris_tz).astimezone(timezone.utc)
+                    else:
+                        h, m = map(int, custom.split(":"))
+                        slot_dt = datetime(slot_date.year,slot_date.month,slot_date.day,h,m,tzinfo=paris_tz).astimezone(timezone.utc)
+                    use_custom = True
+                except Exception:
+                    use_custom = False
+
+            if not use_custom:
+                while True:
+                    h,m = map(int, SCHEDULE_TIMES[slot_index % len(SCHEDULE_TIMES)].split(":"))
+                    slot_dt = datetime(slot_date.year,slot_date.month,slot_date.day,h,m,tzinfo=timezone.utc)
+                    if start_date == now.date():
+                        if slot_dt > now + timedelta(minutes=30): break
+                    else:
+                        break
+                    slot_index += 1
+                    if slot_index % len(SCHEDULE_TIMES) == 0:
+                        slot_date += timedelta(days=1)
 
             dt_str = slot_dt.isoformat()
-            from zoneinfo import ZoneInfo
-            paris_tz = ZoneInfo("Europe/Paris")
             paris_dt = slot_dt.astimezone(paris_tz)
             display_time = paris_dt.strftime("%d/%m/%Y à %Hh%M")
 
-            # Appel RobinReach avec musique activée
             if ROBINREACH_API_KEY and ROBINREACH_BRAND_ID:
                 try:
                     image_urls = [u for u in tiktok.get("image_urls",[]) if u]
@@ -555,7 +565,6 @@ def api_schedule():
                         timeout=30
                     )
                     if resp.status_code not in (200,201):
-                        # Remettre en pending si échec
                         tiktok_data["status"] = "pending"
                         r2_put_json(tiktok["r2_key"], tiktok_data)
                         errors.append(f"TikTok {tiktok.get('number','')}: {resp.text[:200]}")
@@ -574,9 +583,10 @@ def api_schedule():
                 "time": display_time
             })
 
-            slot_index += 1
-            if slot_index % len(SCHEDULE_TIMES) == 0:
-                slot_date += timedelta(days=1)
+            if not use_custom:
+                slot_index += 1
+                if slot_index % len(SCHEDULE_TIMES) == 0:
+                    slot_date += timedelta(days=1)
 
     return jsonify({
         "success": True,
