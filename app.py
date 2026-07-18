@@ -459,9 +459,13 @@ def api_schedule():
     data = request.json or {}
     start_date_str = data.get("start_date")
     custom_slots = data.get("custom_slots", {})
+    single_key = data.get("single_key")  # programmer un seul TikTok
 
     queue = get_queue()
-    assigned = [t for t in queue if t.get("account")]
+    if single_key:
+        assigned = [t for t in queue if t.get("account") and t["r2_key"] == single_key]
+    else:
+        assigned = [t for t in queue if t.get("account")]
     if not assigned: return jsonify({"error":"Aucun TikTok avec compte assigné"}),400
 
     now = datetime.now(timezone.utc)
