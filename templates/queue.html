@@ -59,6 +59,12 @@ h1{font-size:22px;margin:0}
 .mark-btn{flex:1;padding:6px;background:var(--bg);border:1px solid var(--border);color:var(--text-dim);border-radius:5px;font-size:11px;font-weight:600;cursor:pointer;text-align:center;transition:all .15s}
 .mark-btn.on{background:var(--accent);color:#0f1115;border-color:var(--accent)}
 .del-btn{padding:6px 9px;background:rgba(248,113,113,.1);border:1px solid rgba(248,113,113,.3);color:var(--danger);border-radius:5px;font-size:11px;cursor:pointer}
+.schedule-one-btn{width:100%;padding:7px;background:var(--accent);color:#0f1115;border:none;border-radius:5px;font-size:12px;font-weight:700;cursor:pointer}
+.schedule-one-btn:disabled{opacity:.5;cursor:not-allowed}
+.card-status{font-size:10px;padding:4px 8px;border-radius:4px;text-align:center;display:none}
+.card-status.ok{background:rgba(74,222,128,.15);color:var(--accent);display:block}
+.card-status.err{background:rgba(248,113,113,.15);color:var(--danger);display:block}
+.card-status.loading{background:rgba(255,255,255,.05);color:var(--text-dim);display:block}
 .empty{text-align:center;color:var(--text-dim);padding:60px;font-size:14px}
 .spinner{width:28px;height:28px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 12px}
 @keyframes spin{to{transform:rotate(360deg)}}
@@ -267,6 +273,10 @@ function render(){
                     </div>
                     <div class="del-btn" onclick="deleteTiktok('${t.r2_key}')">🗑️</div>
                 </div>
+                <button class="schedule-one-btn" onclick="scheduleOne('${t.r2_key}')" ${!t.account?'disabled':''}>
+                    🚀 Programmer ce TikTok
+                </button>
+                <div class="card-status" id="status-${t.id}"></div>
             </div>
         </div>`;
     }).join('');
@@ -332,8 +342,14 @@ async function scheduleAll(){
         alert(recap);
         showStatus(`✅ ${d.scheduled} TikTok(s) programmés avec succès !`);
         customSlots={};
+        // Retirer les TikToks programmés de la liste sans recharger toute la page
+        if(d.details?.length){
+            const scheduledNums = new Set(d.details.map(x=>String(x.tiktok)));
+            tiktoks = tiktoks.filter(t=>!scheduledNums.has(String(t.number)));
+            selectedForMain.clear();
+            render();
+        }
     }
-    setTimeout(loadQueue,1500);
 }
 
 async function deleteTiktok(key){
@@ -386,6 +402,59 @@ function setSlot(key, value){
 function setCustomTime(key, value){
     // value est en format "2026-07-18T02:00" (heure locale navigateur = heure française)
     if(value) customSlots[key] = value;  // ISO datetime local
+}
+
+// ── Programmer un seul TikTok ──────────────────────────────────────────────
+async function scheduleOne(key){
+    const t = tiktoks.find(t=>t.r2_key===key);
+    if(!t||!t.account){alert('Assigne d\'abord un compte.');return}
+
+    const btn = document.querySelector(`#c-${t.id} .schedule-one-btn`);
+    const statusEl = document.getElementById(`status-${t.id}`);
+    if(btn) btn.disabled=true;
+    if(statusEl){statusEl.className='card-status loading';statusEl.textContent='⏳ Programmation en cours...'}
+
+    const customSlot = customSlots[key] || null;
+    const startDate = document.getElementById('startDate').value || null;
+
+    try{
+        const res = await fetch('/api/queue/schedule',{
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({
+                start_date: startDate,
+                custom_slots: customSlot ? {[key]: customSlot} : {},
+                single_key: key
+            })
+        });
+        const d = await res.json();
+        if(d.scheduled>0&&d.details?.length){
+            const detail = d.details[0];
+            if(statusEl){statusEl.className='card-status ok';statusEl.textContent=`✅ Programmé le ${detail.time}`}
+            // Retirer de la liste sans recharger toute la page
+            tiktoks = tiktoks.filter(t=>t.r2_key!==key);
+            selectedForMain.delete(key);
+            delete customSlots[key];
+            // Mettre à jour juste le compteur et le bouton "Programmer tout"
+            updateCounters();
+        } else {
+            const err = d.errors?.[0] || 'Erreur inconnue';
+            if(statusEl){statusEl.className='card-status err';statusEl.textContent=`❌ ${err}`}
+            if(btn) btn.disabled=false;
+        }
+    }catch(e){
+        if(statusEl){statusEl.className='card-status err';statusEl.textContent=`❌ ${e.message}`}
+        if(btn) btn.disabled=false;
+    }
+}
+
+function updateCounters(){
+    const countBadge=document.getElementById('countBadge');
+    const scheduleBtn=document.getElementById('scheduleBtn');
+    const dispatchBtn=document.getElementById('dispatchBtn');
+    countBadge.textContent=`${tiktoks.length} TikTok(s) en attente`;
+    scheduleBtn.disabled=!tiktoks.some(t=>t.account);
+    dispatchBtn.disabled=tiktoks.length===0||!accounts.others?.length;
 }
 
 // ── Drag & drop images ─────────────────────────────────────────────────────
