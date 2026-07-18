@@ -560,38 +560,12 @@ def api_schedule():
                         "scheduledDate": paris_local.strftime("%Y-%m-%d"),
                         "scheduledTime": paris_local.strftime("%H:%M"),
                         "timezone": "Europe/Paris",
-                        # Variantes à la racine (snake_case et camelCase)
-                        "allow_tiktok_to_add_music": True,
-                        "allowTikTokToAddMusicToImages": True,
-                        "auto_add_music": True,
-                        "autoAddMusic": True,
-                        "tiktok_auto_add_music": True,
-                        "add_music_to_images": True,
-                        "music_enabled": True,
-                        "disable_music": False,
-                        # Variantes imbriquées sous platformSettings.tiktok
-                        "platformSettings": {
-                            "tiktok": {
-                                "allow_tiktok_to_add_music": True,
-                                "allowTikTokToAddMusicToImages": True,
-                                "auto_add_music": True,
-                                "autoAddMusic": True,
-                                "add_music": True,
-                                "music": True,
-                                "privacyLevel": "PUBLIC_TO_EVERYONE",
-                                "privacy_level": "PUBLIC_TO_EVERYONE",
-                                "allowComment": True,
-                                "allow_comment": True,
-                                "allowDuet": True,
-                                "allow_duet": True,
-                                "allowStitch": True,
-                                "allow_stitch": True
-                            }
-                        },
-                        # Variante imbriquée sous tiktok_options (ancien nom testé)
                         "tiktok_options": {
-                            "allow_music": True,
-                            "auto_add_music": True
+                            "add_music": True,
+                            "privacy_level": "PUBLIC_TO_EVERYONE",
+                            "allow_comment": True,
+                            "allow_duet": True,
+                            "allow_stitch": True
                         }
                     }
                     resp = requests.post(
