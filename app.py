@@ -548,24 +548,32 @@ def api_schedule():
             if ROBINREACH_API_KEY and ROBINREACH_BRAND_ID:
                 try:
                     image_urls = [u for u in tiktok.get("image_urls",[]) if u]
+                    # Format correct de l'API RobinReach
+                    paris_local = slot_dt.astimezone(paris_tz)
+                    payload = {
+                        "content": FIXED_CAPTION,
+                        "media_urls": image_urls,
+                        "social_profile_ids": [robinreach_id],
+                        "title": FIXED_CAPTION[:50],
+                        "publish_time": dt_str,
+                        "publishType": "schedule",
+                        "scheduledDate": paris_local.strftime("%Y-%m-%d"),
+                        "scheduledTime": paris_local.strftime("%H:%M"),
+                        "timezone": "Europe/Paris",
+                        "platformSettings": {
+                            "tiktok": {
+                                "allowTikTokToAddMusicToImages": True,
+                                "privacyLevel": "PUBLIC_TO_EVERYONE",
+                                "allowComment": True,
+                                "allowDuet": True,
+                                "allowStitch": True
+                            }
+                        }
+                    }
                     resp = requests.post(
                         f"https://robinreach.com/api/v1/posts?api_key={ROBINREACH_API_KEY}&brand_id={ROBINREACH_BRAND_ID}",
                         headers={"Accept":"application/json","Content-Type":"application/json"},
-                        json={
-                            "content": FIXED_CAPTION,
-                            "media_urls": image_urls,
-                            "publish_time": dt_str,
-                            "social_profile_ids": [robinreach_id],
-                            "title": FIXED_CAPTION[:50],
-                            "allow_tiktok_to_add_music": True,
-                            "tiktok_options": {
-                                "allow_music": True,
-                                "privacy_level": "PUBLIC_TO_EVERYONE",
-                                "allow_comment": True,
-                                "allow_duet": True,
-                                "allow_stitch": True
-                            }
-                        },
+                        json=payload,
                         timeout=30
                     )
                     if resp.status_code not in (200,201):
