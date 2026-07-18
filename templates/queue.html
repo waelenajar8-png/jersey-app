@@ -152,6 +152,7 @@ themeBtn.addEventListener('click',()=>applyTheme(theme==='dark'?'light':'dark'))
 let tiktoks=[];
 let selectedForMain=new Set();
 let accounts={main:'',others:[]};
+let customSlots={};  // r2_key → heure choisie (format "HH:MM" ou ISO datetime pour custom)
 
 // ── Chargement initial ─────────────────────────────────────────────────────
 async function init(){
@@ -251,6 +252,15 @@ function render(){
                     <option value="">— Choisir un compte —</option>
                     ${allAccounts.map(a=>`<option value="${a}" ${t.account===a?'selected':''}>${a}${a===accounts.main?' ⭐':''}</option>`).join('')}
                 </select>
+                <select class="account-select" style="margin-top:4px" onchange="setSlot('${t.r2_key}',this.value)">
+                    <option value="">⏰ Créneau auto</option>
+                    <option value="12:30">12h30</option>
+                    <option value="16:00">16h00</option>
+                    <option value="19:30">19h30</option>
+                    <option value="21:00">21h00</option>
+                    <option value="custom">🕐 Heure personnalisée...</option>
+                </select>
+                <input type="datetime-local" class="account-select custom-time" id="custom-${t.r2_key.replace(/[^a-z0-9]/gi,'_')}" style="margin-top:4px;display:none" onchange="setCustomTime('${t.r2_key}',this.value)">
                 <div class="card-actions">
                     <div class="mark-btn ${sel?'on':''}" onclick="toggleMain('${t.r2_key}')">
                         ${sel?'⭐ Compte principal':'☆ Marquer principal'}
@@ -304,14 +314,16 @@ async function scheduleAll(){
     const res=await fetch('/api/queue/schedule',{
         method:'POST',
         headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({start_date: startDate || null})
+        body:JSON.stringify({
+            start_date: startDate || null,
+            custom_slots: customSlots
+        })
     });
     const d=await res.json();
     document.getElementById('scheduleBtn').disabled=false;
     if(d.errors?.length){
         showStatus(`✅ ${d.scheduled} programmés — ⚠️ ${d.errors.length} erreur(s) : ${d.errors[0]}`);
     } else {
-        // Afficher le récapitulatif détaillé
         let recap = `✅ ${d.scheduled} TikTok(s) programmés !\n\n`;
         if(d.details?.length){
             recap += d.details.slice(0,10).map(x=>`• TikTok ${x.tiktok} → ${x.account} le ${x.time}`).join('\n');
@@ -319,6 +331,7 @@ async function scheduleAll(){
         }
         alert(recap);
         showStatus(`✅ ${d.scheduled} TikTok(s) programmés avec succès !`);
+        customSlots={};
     }
     setTimeout(loadQueue,1500);
 }
@@ -353,6 +366,26 @@ async function moveImg(e, r2Key, fromIndex, toIndex){
         body:JSON.stringify({key:r2Key, order:newOrder})
     });
     await loadQueue();
+}
+
+function setSlot(key, value){
+    const safeId = key.replace(/[^a-z0-9]/gi,'_');
+    const customInput = document.getElementById(`custom-${safeId}`);
+    if(value === 'custom'){
+        if(customInput) customInput.style.display='block';
+        delete customSlots[key];
+    } else if(value === ''){
+        if(customInput) customInput.style.display='none';
+        delete customSlots[key];
+    } else {
+        if(customInput) customInput.style.display='none';
+        customSlots[key] = value;  // "HH:MM" en heure française
+    }
+}
+
+function setCustomTime(key, value){
+    // value est en format "2026-07-18T02:00" (heure locale navigateur = heure française)
+    if(value) customSlots[key] = value;  // ISO datetime local
 }
 
 // ── Drag & drop images ─────────────────────────────────────────────────────
