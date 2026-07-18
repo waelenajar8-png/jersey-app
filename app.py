@@ -19,7 +19,7 @@ MODEL_URL      = "https://generativelanguage.googleapis.com/v1beta/models/gemini
 COST_PER_IMAGE = 0.067
 TIKTOK_SIZE    = 7
 FIXED_CAPTION  = "3 Maillot Acheté 1 Offert 🎁 #volakits #ete #foot"
-SCHEDULE_TIMES = ["12:30", "16:00", "19:30", "21:00"]
+SCHEDULE_TIMES = ["10:30", "14:00", "17:30", "19:00"]
 
 R2_ENDPOINT   = os.environ.get("R2_ENDPOINT")
 R2_ACCESS_KEY = os.environ.get("R2_ACCESS_KEY_ID")
