@@ -550,26 +550,24 @@ def api_schedule():
                     image_urls = [u for u in tiktok.get("image_urls",[]) if u]
                     # Format correct de l'API RobinReach
                     paris_local = slot_dt.astimezone(paris_tz)
-                    # RobinReach utilise form-data avec les vrais noms de paramètres
                     image_urls = [u for u in tiktok.get("image_urls",[]) if u]
-                    form_data = [
-                        ("post[content]", FIXED_CAPTION),
-                        ("social_profiles_ids", str(robinreach_id)),
-                        ("post[publish_time]", dt_str),
-                        ("post[status]", "scheduled"),
-                        ("post[timezone]", "UTC"),
-                        ("post[platform_attributes[tiktok][privacy]]", "PUBLIC_TO_EVERYONE"),
-                        ("post[platform_attributes[tiktok][add_music]]", "0"),
-                        ("post[platform_attributes[tiktok][add_music]]", "1"),
-                        ("post[platform_attributes[tiktok][commercial_content_toggle]]", "0"),
-                    ]
-                    for url in image_urls:
-                        form_data.append(("media_urls[]", url))
-
+                    payload = {
+                        "content": FIXED_CAPTION,
+                        "media_urls": image_urls,
+                        "social_profile_ids": [robinreach_id],
+                        "publish_time": dt_str,
+                        "status": "scheduled",
+                        "timezone": "UTC",
+                        "platform_options": {
+                            "tiktok": {
+                                "add_music": True
+                            }
+                        }
+                    }
                     resp = requests.post(
                         f"https://robinreach.com/api/v1/posts?api_key={ROBINREACH_API_KEY}&brand_id={ROBINREACH_BRAND_ID}",
-                        headers={"Accept": "application/json"},
-                        data=form_data,
+                        headers={"Accept": "application/json", "Content-Type": "application/json"},
+                        json=payload,
                         timeout=30
                     )
                     if resp.status_code not in (200,201):
