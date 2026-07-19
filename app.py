@@ -327,7 +327,65 @@ def move_to_scheduled(queue_key, account, dt_str, robinreach_post_id=None):
     return True
 
 # ── Prompt Gemini ──────────────────────────────────────────────────────────
-def build_prompt(name, number, name_below=None):
+REPLICATE_API_KEY = os.environ.get("REPLICATE_API_KEY")
+
+def upscale_image(img_b64, scale=2):
+    """Upscale une image via Replicate Real-ESRGAN"""
+    if not REPLICATE_API_KEY:
+        print("[UPSCALE] Pas de clé Replicate, image originale conservée")
+        return img_b64
+    try:
+        import time
+        # Créer la prédiction
+        resp = requests.post(
+            "https://api.replicate.com/v1/predictions",
+            headers={
+                "Authorization": f"Bearer {REPLICATE_API_KEY}",
+                "Content-Type": "application/json"
+            },
+            json={
+                "version": "f121d640bd286e1fdc67f9799164c1d5be36ff74576ee11c803ae5b665dd46aa",
+                "input": {
+                    "image": f"data:image/png;base64,{img_b64}",
+                    "scale": scale,
+                    "face_enhance": False
+                }
+            },
+            timeout=30
+        )
+        if resp.status_code != 201:
+            print(f"[UPSCALE] Erreur création: {resp.text[:200]}")
+            return img_b64
+
+        prediction = resp.json()
+        prediction_id = prediction["id"]
+
+        # Attendre le résultat (polling)
+        for _ in range(30):  # max 60 secondes
+            time.sleep(2)
+            poll = requests.get(
+                f"https://api.replicate.com/v1/predictions/{prediction_id}",
+                headers={"Authorization": f"Bearer {REPLICATE_API_KEY}"},
+                timeout=15
+            )
+            data = poll.json()
+            status = data.get("status")
+            if status == "succeeded":
+                output_url = data.get("output")
+                if output_url:
+                    img_resp = requests.get(output_url, timeout=30)
+                    upscaled_b64 = base64.b64encode(img_resp.content).decode()
+                    print(f"[UPSCALE] ✅ Image upscalée en {scale}x")
+                    return upscaled_b64
+            elif status in ("failed", "canceled"):
+                print(f"[UPSCALE] Échec: {data.get('error')}")
+                return img_b64
+
+        print("[UPSCALE] Timeout")
+        return img_b64
+    except Exception as e:
+        print(f"[UPSCALE] Erreur: {e}")
+        return img_b64
     name = name.strip().upper()
     number = number.strip()
     name_below = (name_below or name).strip().upper()
@@ -345,18 +403,10 @@ def build_prompt(name, number, name_below=None):
 def call_gemini(img_bytes, mime, name, number, name_below=None, max_retries=2, resolution="1k"):
     img_b64 = base64.b64encode(img_bytes).decode()
     prompt = build_prompt(name, number, name_below)
-    payload = {
-        "contents": [{"parts": [
-            {"text": prompt},
-            {"inline_data": {"mime_type": mime, "data": img_b64}}
-        ]}],
-        "generationConfig": {
-            "imageConfig": {
-                "imageSize": "2K",
-                "imageOutputOptions": {"mimeType": "image/png"}
-            }
-        }
-    }
+    payload = {"contents": [{"parts": [
+        {"text": prompt},
+        {"inline_data": {"mime_type": mime, "data": img_b64}}
+    ]}]}
     last_error = None
     for _ in range(max_retries + 1):
         try:
@@ -371,8 +421,10 @@ def call_gemini(img_bytes, mime, name, number, name_below=None, max_retries=2, r
         try:
             for part in data["candidates"][0]["content"]["parts"]:
                 if "inlineData" in part:
-                    clean = strip_ai_metadata(part["inlineData"]["data"])
-                    return {"success": True, "image": clean}
+                    img = part["inlineData"]["data"]
+                    clean = strip_ai_metadata(img)
+                    upscaled = upscale_image(clean, scale=2)
+                    return {"success": True, "image": upscaled}
             last_error = "Pas d'image dans la réponse."
         except (KeyError, IndexError) as e:
             last_error = f"Réponse inattendue: {e}"
