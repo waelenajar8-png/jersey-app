@@ -8,6 +8,7 @@ import requests
 import boto3
 
 REPLICATE_API_KEY = os.environ.get("REPLICATE_API_KEY")
+print(f"[DEBUG] REPLICATE_API_KEY: {'OK' if REPLICATE_API_KEY else 'MANQUANTE'}")
 from datetime import datetime, timezone, timedelta
 from concurrent.futures import ThreadPoolExecutor
 from flask import Flask, render_template, request, Response, jsonify
