@@ -351,8 +351,10 @@ def call_gemini(img_bytes, mime, name, number, name_below=None, max_retries=2, r
             {"inline_data": {"mime_type": mime, "data": img_b64}}
         ]}],
         "generationConfig": {
-            "responseModalities": ["IMAGE", "TEXT"],
-            "outputImageConfig": {"mimeType": "image/png", "aspectRatio": "9:16"}
+            "imageConfig": {
+                "imageSize": "2K",
+                "imageOutputOptions": {"mimeType": "image/png"}
+            }
         }
     }
     last_error = None
