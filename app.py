@@ -327,10 +327,24 @@ def build_prompt(name, number, name_below=None):
     parts.append("Keep ALL else identical: colors, texture, pattern, outlines, lighting, shadows, background, tags. Only swap text content.")
     return " ".join(parts)
 
-def call_gemini(img_bytes, mime, name, number, name_below=None, max_retries=2):
+def call_gemini(img_bytes, mime, name, number, name_below=None, max_retries=2, resolution="1k"):
     img_b64 = base64.b64encode(img_bytes).decode()
     prompt = build_prompt(name, number, name_below)
-    payload = {"contents": [{"parts": [{"text": prompt}, {"inline_data": {"mime_type": mime, "data": img_b64}}]}]}
+
+    # Map résolution vers les dimensions Gemini
+    res_map = {"1k": "IMAGE_SIZE_1024", "2k": "IMAGE_SIZE_2048", "4k": "IMAGE_SIZE_4096"}
+    image_size = res_map.get(resolution, "IMAGE_SIZE_1024")
+
+    payload = {
+        "contents": [{"parts": [
+            {"text": prompt},
+            {"inline_data": {"mime_type": mime, "data": img_b64}}
+        ]}],
+        "generationConfig": {
+            "responseModalities": ["IMAGE", "TEXT"],
+            "imageConfig": {"imageSize": image_size}
+        }
+    }
     last_error = None
     for _ in range(max_retries + 1):
         try:
@@ -791,8 +805,9 @@ def generate_single():
     name = request.form.get("name","").strip()
     number = request.form.get("number","").strip()
     name_below = request.form.get("name_below","").strip() or None
+    resolution = request.form.get("resolution", "1k").strip()
     if not f: return jsonify({"error":"Aucune image"}),400
-    result = call_gemini(f.read(), f.mimetype or "image/png", name, number, name_below)
+    result = call_gemini(f.read(), f.mimetype or "image/png", name, number, name_below, resolution=resolution)
     log_generation(user, result["success"])
     if result["success"]:
         # Ajouter au buffer
@@ -812,6 +827,7 @@ def generate_bulk():
     session_id = request.form.get("session_id", str(uuid.uuid4()))
     parallel = min(int(request.form.get("parallel",5)), 10)
     auto_queue = request.form.get("auto_queue","true").lower() == "true"
+    resolution = request.form.get("resolution", "1k").strip()
 
     lines = [l.strip() for l in flockages_raw.splitlines() if l.strip()]
     if not files: return jsonify({"error":"Aucune image"}),400
@@ -832,7 +848,7 @@ def generate_bulk():
     results_map = {}
 
     def process(idx, item):
-        res = call_gemini(item["bytes"], item["mime"], item["name"], item["number"], item["name_below"])
+        res = call_gemini(item["bytes"], item["mime"], item["name"], item["number"], item["name_below"], resolution=resolution)
         log_generation(user, res["success"])
         payload = {"index":idx,"total":len(items),"name":item["name"],"number":item["number"]}
         if res["success"]: payload["image"] = res["image"]
