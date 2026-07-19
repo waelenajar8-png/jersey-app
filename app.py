@@ -6,6 +6,8 @@ import uuid
 import threading
 import requests
 import boto3
+from PIL import Image
+from io import BytesIO
 from datetime import datetime, timezone, timedelta
 from concurrent.futures import ThreadPoolExecutor
 from flask import Flask, render_template, request, Response, jsonify
@@ -312,7 +314,20 @@ def move_to_scheduled(queue_key, account, dt_str, robinreach_post_id=None):
     return True
 
 # ── Prompt Gemini ──────────────────────────────────────────────────────────
-def build_prompt(name, number, name_below=None):
+def strip_metadata(img_b64):
+    """Supprime toutes les métadonnées EXIF/IA d'une image base64"""
+    try:
+        img_bytes = base64.b64decode(img_b64)
+        img = Image.open(BytesIO(img_bytes))
+        # Recréer l'image sans aucune métadonnée
+        clean = Image.new(img.mode, img.size)
+        clean.putdata(list(img.getdata()))
+        buf = BytesIO()
+        clean.save(buf, format="PNG")
+        return base64.b64encode(buf.getvalue()).decode()
+    except Exception as e:
+        print(f"[STRIP META] Erreur: {e}")
+        return img_b64  # retourner l'original si erreur
     name = name.strip().upper()
     number = number.strip()
     name_below = (name_below or name).strip().upper()
@@ -348,7 +363,8 @@ def call_gemini(img_bytes, mime, name, number, name_below=None, max_retries=2, r
         try:
             for part in data["candidates"][0]["content"]["parts"]:
                 if "inlineData" in part:
-                    return {"success": True, "image": part["inlineData"]["data"]}
+                    clean_img = strip_metadata(part["inlineData"]["data"])
+                    return {"success": True, "image": clean_img}
             last_error = "Pas d'image dans la réponse."
         except (KeyError, IndexError) as e:
             last_error = f"Réponse inattendue: {e}"
