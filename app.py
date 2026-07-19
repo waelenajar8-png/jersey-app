@@ -733,6 +733,56 @@ def api_delete():
     return jsonify({"success":True})
 
 # ── Generate single ─────────────────────────────────────────────────────────
+@app.route("/remove_box")
+def remove_box_page():
+    return render_template("remove_box.html")
+
+@app.route("/api/remove_box", methods=["POST"])
+def api_remove_box():
+    if not API_KEY:
+        return jsonify({"error": "Clé API manquante"}), 500
+    f = request.files.get("image")
+    if not f:
+        return jsonify({"error": "Aucune image"}), 400
+
+    img_bytes = f.read()
+    img_b64 = base64.b64encode(img_bytes).decode()
+    mime = f.mimetype or "image/png"
+
+    prompt = (
+        "Edit this image of a sports jersey. "
+        "There is a gift box / packaging box visible in the image (it may have a logo, ribbon, or brand name on it). "
+        "Remove the gift box completely from the image. "
+        "Replace the area where the box was with the background that would naturally be there — "
+        "match the floor, wall, or surface texture and color from the surrounding area. "
+        "Keep everything else exactly the same: the jersey, the hanger/hook, the background, lighting, shadows. "
+        "The result should look like the jersey was always photographed without any box."
+    )
+
+    payload = {
+        "contents": [{"parts": [
+            {"text": prompt},
+            {"inline_data": {"mime_type": mime, "data": img_b64}}
+        ]}]
+    }
+
+    try:
+        resp = requests.post(
+            MODEL_URL,
+            headers={"x-goog-api-key": API_KEY, "Content-Type": "application/json"},
+            json=payload,
+            timeout=120
+        )
+        if resp.status_code != 200:
+            return jsonify({"error": f"API {resp.status_code}: {resp.text[:200]}"}), 500
+        data = resp.json()
+        for part in data["candidates"][0]["content"]["parts"]:
+            if "inlineData" in part:
+                return jsonify({"image": part["inlineData"]["data"]})
+        return jsonify({"error": "Pas d'image dans la réponse"}), 500
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 @app.route("/generate_single", methods=["POST"])
 def generate_single():
     if not API_KEY: return jsonify({"error":"Clé API manquante"}),500
