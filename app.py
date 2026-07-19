@@ -564,12 +564,14 @@ def api_schedule():
                             }
                         }
                     }
+                    print(f"[ROBINREACH] Sending payload: {json.dumps(payload)[:500]}")
                     resp = requests.post(
                         f"https://robinreach.com/api/v1/posts?api_key={ROBINREACH_API_KEY}&brand_id={ROBINREACH_BRAND_ID}",
                         headers={"Accept": "application/json", "Content-Type": "application/json"},
                         json=payload,
                         timeout=30
                     )
+                    print(f"[ROBINREACH] Response {resp.status_code}: {resp.text[:500]}")
                     if resp.status_code not in (200,201):
                         tiktok_data["status"] = "pending"
                         r2_put_json(tiktok["r2_key"], tiktok_data)
