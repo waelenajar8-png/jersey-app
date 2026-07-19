@@ -135,6 +135,14 @@ input[type=file]{display:none}
         <div class="parallel-row">
             ⚡ Parallèle : <input type="number" id="parallelInput" value="5" min="1" max="10"> images simultanées
         </div>
+        <div class="parallel-row">
+            🖼️ Résolution :
+            <select id="resolutionSelect" style="padding:4px 8px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px">
+                <option value="1k">1K — 0.067$/img</option>
+                <option value="2k">2K — 0.101$/img</option>
+                <option value="4k">4K — 0.151$/img</option>
+            </select>
+        </div>
     </div>
     <div class="status" id="status"></div>
     <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
@@ -296,6 +304,7 @@ async function launch(testMode=false){
     }
 
     const parallel=parseInt(document.getElementById('parallelInput').value)||5;
+    const resolution=document.getElementById('resolutionSelect').value||'1k';
     generateBtn.disabled=true;testBtn.disabled=true;
     generateBtn.textContent='En cours...';
     zipBtn.style.display='none';
@@ -320,6 +329,7 @@ async function launch(testMode=false){
     formData.append('user',userName);
     formData.append('session_id',sessionId);
     formData.append('parallel',parallel);
+    formData.append('resolution',resolution);
 
     try{
         const res=await fetch('/generate_bulk',{method:'POST',body:formData});
