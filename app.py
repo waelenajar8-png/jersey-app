@@ -315,19 +315,17 @@ def move_to_scheduled(queue_key, account, dt_str, robinreach_post_id=None):
 
 # ── Prompt Gemini ──────────────────────────────────────────────────────────
 def strip_metadata(img_b64):
-    """Supprime toutes les métadonnées EXIF/IA d'une image base64"""
+    """Réécrit l'image en PNG sans aucune métadonnée IA — zéro perte de qualité"""
     try:
         img_bytes = base64.b64decode(img_b64)
         img = Image.open(BytesIO(img_bytes))
-        # Recréer l'image sans aucune métadonnée
-        clean = Image.new(img.mode, img.size)
-        clean.putdata(list(img.getdata()))
+        # Recréer pixel par pixel en PNG sans métadonnées
         buf = BytesIO()
-        clean.save(buf, format="PNG")
+        img.save(buf, format="PNG", optimize=False, pnginfo=None)
         return base64.b64encode(buf.getvalue()).decode()
     except Exception as e:
         print(f"[STRIP META] Erreur: {e}")
-        return img_b64  # retourner l'original si erreur
+        return img_b64
     name = name.strip().upper()
     number = number.strip()
     name_below = (name_below or name).strip().upper()
