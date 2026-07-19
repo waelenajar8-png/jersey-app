@@ -284,12 +284,13 @@ def get_scheduled():
         if d: result.append(_enrich_tiktok(d, k))
     return result
 
-def move_to_scheduled(queue_key, account, dt_str):
+def move_to_scheduled(queue_key, account, dt_str, robinreach_post_id=None):
     data = r2_get_json(queue_key)
     if not data: return False
     data["status"] = "scheduled"
     data["account"] = account
     data["scheduled_at"] = dt_str
+    data["robinreach_post_id"] = robinreach_post_id
     # Déplacer les images vers scheduled/imgs/
     new_img_keys = []
     for old_k in data.get("image_keys", []):
@@ -577,13 +578,21 @@ def api_schedule():
                         r2_put_json(tiktok["r2_key"], tiktok_data)
                         errors.append(f"TikTok {tiktok.get('number','')}: {resp.text[:200]}")
                         continue
+                    # Sauvegarder l'ID du post RobinReach pour pouvoir le supprimer plus tard
+                    try:
+                        resp_data = resp.json()
+                        robinreach_post_id = resp_data.get("id") or resp_data.get("post_id") or resp_data.get("data",{}).get("id")
+                        tiktok_data["robinreach_post_id"] = robinreach_post_id
+                        print(f"[ROBINREACH] Post ID: {robinreach_post_id}")
+                    except Exception:
+                        pass
                 except Exception as e:
                     tiktok_data["status"] = "pending"
                     r2_put_json(tiktok["r2_key"], tiktok_data)
                     errors.append(f"TikTok {tiktok.get('number','')}: {str(e)}")
                     continue
 
-            move_to_scheduled(tiktok["r2_key"], account, dt_str)
+            move_to_scheduled(tiktok["r2_key"], account, dt_str, tiktok_data.get("robinreach_post_id"))
             scheduled_count += 1
             scheduled_details.append({
                 "tiktok": tiktok.get("number",""),
@@ -646,14 +655,31 @@ def api_delete_image():
 
 @app.route("/api/scheduled/unschedule", methods=["POST"])
 def api_unschedule():
-    """Remet des TikToks programmés dans la file d'attente"""
+    """Remet des TikToks programmés dans la file d'attente ET supprime de RobinReach"""
     data = request.json
     keys = data.get("keys", [])
     if not keys: return jsonify({"error": "keys requis"}), 400
     count = 0
+    robinreach_errors = []
     for sched_key in keys:
         tiktok = r2_get_json(sched_key)
         if not tiktok: continue
+
+        # Supprimer le post sur RobinReach si on a son ID
+        robinreach_post_id = tiktok.get("robinreach_post_id")
+        if robinreach_post_id and ROBINREACH_API_KEY and ROBINREACH_BRAND_ID:
+            try:
+                del_resp = requests.delete(
+                    f"https://robinreach.com/api/v1/posts/{robinreach_post_id}?api_key={ROBINREACH_API_KEY}&brand_id={ROBINREACH_BRAND_ID}",
+                    headers={"Accept": "application/json"},
+                    timeout=30
+                )
+                print(f"[ROBINREACH DELETE] Post {robinreach_post_id}: {del_resp.status_code}")
+                if del_resp.status_code not in (200, 204):
+                    robinreach_errors.append(f"Post {robinreach_post_id}: {del_resp.text[:100]}")
+            except Exception as e:
+                robinreach_errors.append(f"Post {robinreach_post_id}: {str(e)}")
+
         # Déplacer les images vers queue/imgs/
         new_img_keys = []
         r2 = get_r2()
@@ -669,16 +695,17 @@ def api_unschedule():
                     new_img_keys.append(old_k)
             else:
                 new_img_keys.append(old_k)
+
         tiktok["image_keys"] = new_img_keys
         tiktok["status"] = "pending"
         tiktok["account"] = None
         tiktok["scheduled_at"] = None
-        # Remettre dans queue
+        tiktok["robinreach_post_id"] = None
         queue_key = sched_key.replace(PFX_SCHEDULED, PFX_QUEUE)
         r2_put_json(queue_key, tiktok)
         r2_delete(sched_key)
         count += 1
-    return jsonify({"success": True, "count": count})
+    return jsonify({"success": True, "count": count, "robinreach_errors": robinreach_errors})
 
 @app.route("/api/robinreach/profiles")
 def api_robinreach_profiles():
