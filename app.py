@@ -6,21 +6,6 @@ import uuid
 import threading
 import requests
 import boto3
-import piexif
-
-def strip_ai_metadata(img_b64):
-    """Supprime les métadonnées IA via piexif — léger, sans retraiter l'image"""
-    try:
-        img_bytes = base64.b64decode(img_b64)
-        # Effacer les métadonnées EXIF si présentes
-        try:
-            cleaned = piexif.remove(img_bytes)
-        except Exception:
-            cleaned = img_bytes  # pas d'EXIF = déjà propre
-        return base64.b64encode(cleaned).decode()
-    except Exception as e:
-        print(f"[STRIP META] Erreur: {e}")
-        return img_b64
 from datetime import datetime, timezone, timedelta
 from concurrent.futures import ThreadPoolExecutor
 from flask import Flask, render_template, request, Response, jsonify
@@ -421,10 +406,7 @@ def call_gemini(img_bytes, mime, name, number, name_below=None, max_retries=2, r
         try:
             for part in data["candidates"][0]["content"]["parts"]:
                 if "inlineData" in part:
-                    img = part["inlineData"]["data"]
-                    clean = strip_ai_metadata(img)
-                    upscaled = upscale_image(clean, scale=2)
-                    return {"success": True, "image": upscaled}
+                    return {"success": True, "image": part["inlineData"]["data"]}
             last_error = "Pas d'image dans la réponse."
         except (KeyError, IndexError) as e:
             last_error = f"Réponse inattendue: {e}"
