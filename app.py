@@ -6,6 +6,8 @@ import uuid
 import threading
 import requests
 import boto3
+
+REPLICATE_API_KEY = os.environ.get("REPLICATE_API_KEY")
 from datetime import datetime, timezone, timedelta
 from concurrent.futures import ThreadPoolExecutor
 from flask import Flask, render_template, request, Response, jsonify
@@ -348,7 +350,29 @@ def call_gemini(img_bytes, mime, name, number, name_below=None, max_retries=2, r
         try:
             for part in data["candidates"][0]["content"]["parts"]:
                 if "inlineData" in part:
-                    return {"success": True, "image": part["inlineData"]["data"]}
+                    img = part["inlineData"]["data"]
+                    if REPLICATE_API_KEY:
+                        try:
+                            r = requests.post(
+                                "https://api.replicate.com/v1/predictions",
+                                headers={"Authorization": f"Bearer {REPLICATE_API_KEY}", "Content-Type": "application/json"},
+                                json={"version": "f121d640bd286e1fdc67f9799164c1d5be36ff74576ee11c803ae5b665dd46aa", "input": {"image": f"data:image/png;base64,{img}", "scale": 2, "face_enhance": False}},
+                                timeout=30
+                            )
+                            if r.status_code == 201:
+                                pid = r.json()["id"]
+                                for _ in range(30):
+                                    time.sleep(2)
+                                    p = requests.get(f"https://api.replicate.com/v1/predictions/{pid}", headers={"Authorization": f"Bearer {REPLICATE_API_KEY}"}, timeout=15).json()
+                                    if p.get("status") == "succeeded" and p.get("output"):
+                                        img = base64.b64encode(requests.get(p["output"], timeout=30).content).decode()
+                                        print("[UPSCALE] ✅ 2K")
+                                        break
+                                    elif p.get("status") in ("failed", "canceled"):
+                                        break
+                        except Exception as e:
+                            print(f"[UPSCALE] Erreur: {e}")
+                    return {"success": True, "image": img}
             last_error = "Pas d'image dans la réponse."
         except (KeyError, IndexError) as e:
             last_error = f"Réponse inattendue: {e}"
