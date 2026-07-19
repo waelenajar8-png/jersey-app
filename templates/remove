@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Suppression boîte — Vola Kits</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+:root[data-theme="dark"]{--bg:#0f1115;--panel:#1a1d24;--border:#2a2e37;--accent:#4ade80;--text:#e5e7eb;--text-dim:#9ca3af;--danger:#f87171}
+:root[data-theme="light"]{--bg:#f3f4f6;--panel:#fff;--border:#d1d5db;--accent:#16a34a;--text:#111827;--text-dim:#6b7280;--danger:#ef4444}
+*{box-sizing:border-box}
+body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;padding:24px}
+.wrap{max-width:1200px;margin:0 auto}
+.topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;flex-wrap:wrap;gap:12px}
+h1{font-size:22px;margin:0}
+.nav a{color:var(--accent);text-decoration:none;font-size:13px;font-weight:600}
+.panel{background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:24px;margin-bottom:20px}
+.dropzone{border:2px dashed var(--border);border-radius:12px;padding:40px;text-align:center;cursor:pointer;color:var(--text-dim);font-size:14px;transition:border-color .2s}
+.dropzone:hover,.dropzone.drag{border-color:var(--accent);color:var(--text)}
+input[type=file]{display:none}
+.file-count{font-weight:700;color:var(--accent);font-size:13px;margin-top:8px}
+.btn{padding:14px 28px;background:var(--accent);color:#0f1115;border:none;border-radius:8px;font-size:15px;font-weight:700;cursor:pointer;margin-top:16px}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn-zip{padding:12px 24px;background:var(--panel);border:1px solid var(--border);color:var(--text);border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;margin-top:12px;display:none}
+.status{font-size:13px;color:var(--text-dim);margin-top:12px}
+.progress-bar{height:6px;background:var(--border);border-radius:3px;overflow:hidden;margin-top:10px}
+.progress-fill{height:100%;background:var(--accent);width:0%;transition:width .3s}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;margin-top:20px}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:10px;overflow:hidden}
+.card-imgs{display:grid;grid-template-columns:1fr 1fr;gap:2px}
+.card-imgs img{width:100%;aspect-ratio:3/4;object-fit:cover;display:block}
+.card-label{font-size:10px;color:var(--text-dim);padding:4px 8px;text-align:center}
+.card-status{font-size:11px;padding:6px 8px;text-align:center;font-weight:600}
+.card-status.ok{color:var(--accent)}
+.card-status.err{color:var(--danger)}
+.card-status.loading{color:var(--text-dim)}
+.card-ph{display:flex;align-items:center;justify-content:center;aspect-ratio:3/4;background:var(--bg)}
+.spinner{width:20px;height:20px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.dl-btn{display:block;text-align:center;padding:6px;background:var(--bg);border-top:1px solid var(--border);color:var(--text);font-size:11px;text-decoration:none;cursor:pointer}
+</style>
+</head>
+<body>
+<div class="wrap">
+    <div class="topbar">
+        <h1>🗑️ Suppression de la boîte</h1>
+        <div class="nav">
+            <a href="/">← Retour au générateur</a>
+        </div>
+    </div>
+
+    <div class="panel">
+        <div class="dropzone" id="dropzone">
+            📁 Clique ou dépose tes images ici (50-100 images max)
+            <input type="file" id="fileInput" accept="image/*" multiple>
+            <div class="file-count" id="fileCount"></div>
+        </div>
+        <button class="btn" id="startBtn" disabled>🚀 Supprimer la boîte sur toutes les images</button>
+        <button class="btn-zip" id="zipBtn">📦 Télécharger toutes les images en ZIP</button>
+        <div class="status" id="status"></div>
+        <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+    </div>
+
+    <div class="grid" id="grid"></div>
+</div>
+
+<script>
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('fileInput');
+const fileCount = document.getElementById('fileCount');
+const startBtn = document.getElementById('startBtn');
+const zipBtn = document.getElementById('zipBtn');
+const statusEl = document.getElementById('status');
+const progressFill = document.getElementById('progressFill');
+const grid = document.getElementById('grid');
+
+let files = [];
+let results = {};
+
+dropzone.addEventListener('click', () => fileInput.click());
+dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('drag'); });
+dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag'));
+dropzone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropzone.classList.remove('drag');
+    setFiles(Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/')));
+});
+fileInput.addEventListener('change', e => { setFiles(Array.from(e.target.files)); e.target.value = ''; });
+
+function setFiles(f) {
+    files = f.slice(0, 100);
+    fileCount.textContent = `${files.length} image(s) sélectionnée(s)`;
+    startBtn.disabled = files.length === 0;
+    grid.innerHTML = '';
+    results = {};
+    zipBtn.style.display = 'none';
+}
+
+startBtn.addEventListener('click', async () => {
+    if (!files.length) return;
+    startBtn.disabled = true;
+    startBtn.textContent = 'En cours...';
+    zipBtn.style.display = 'none';
+    results = {};
+    progressFill.style.width = '0%';
+
+    // Créer les cartes placeholder
+    grid.innerHTML = '';
+    const origPreviews = await Promise.all(files.map(f => new Promise(res => {
+        const r = new FileReader();
+        r.onload = e => res(e.target.result);
+        r.readAsDataURL(f);
+    })));
+
+    files.forEach((f, i) => {
+        const card = document.createElement('div');
+        card.className = 'card';
+        card.id = `card-${i}`;
+        card.innerHTML = `
+            <div class="card-label">${f.name}</div>
+            <div class="card-imgs">
+                <img src="${origPreviews[i]}" alt="original">
+                <div class="card-ph"><div class="spinner"></div></div>
+            </div>
+            <div class="card-status loading" id="status-${i}">⏳ En attente...</div>
+        `;
+        grid.appendChild(card);
+    });
+
+    // Traiter les images une par une (pour éviter de saturer l'API)
+    let done = 0;
+    for (let i = 0; i < files.length; i++) {
+        statusEl.textContent = `Traitement de l'image ${i + 1} / ${files.length}...`;
+        
+        const formData = new FormData();
+        formData.append('image', files[i]);
+
+        const card = document.getElementById(`card-${i}`);
+        const statusCard = document.getElementById(`status-${i}`);
+
+        try {
+            const res = await fetch('/api/remove_box', { method: 'POST', body: formData });
+            const data = await res.json();
+
+            if (data.image) {
+                const imgSrc = `data:image/png;base64,${data.image}`;
+                results[i] = { src: imgSrc, name: files[i].name };
+                card.innerHTML = `
+                    <div class="card-label">${files[i].name}</div>
+                    <div class="card-imgs">
+                        <img src="${origPreviews[i]}" alt="original">
+                        <img src="${imgSrc}" alt="résultat">
+                    </div>
+                    <div class="card-status ok">✅ Boîte supprimée</div>
+                    <a class="dl-btn" href="${imgSrc}" download="${files[i].name}">⬇️ Télécharger</a>
+                `;
+            } else {
+                card.innerHTML = `
+                    <div class="card-label">${files[i].name}</div>
+                    <div class="card-imgs">
+                        <img src="${origPreviews[i]}" alt="original">
+                        <div class="card-ph">❌</div>
+                    </div>
+                    <div class="card-status err">❌ ${data.error || 'Erreur'}</div>
+                `;
+            }
+        } catch (e) {
+            card.innerHTML = `
+                <div class="card-label">${files[i].name}</div>
+                <div class="card-imgs">
+                    <img src="${origPreviews[i]}" alt="original">
+                    <div class="card-ph">❌</div>
+                </div>
+                <div class="card-status err">❌ Erreur réseau</div>
+            `;
+        }
+
+        done++;
+        progressFill.style.width = `${Math.round(done / files.length * 100)}%`;
+    }
+
+    statusEl.textContent = `✅ ${Object.keys(results).length} / ${files.length} images traitées`;
+    startBtn.disabled = false;
+    startBtn.textContent = '🚀 Supprimer la boîte sur toutes les images';
+    if (Object.keys(results).length > 0) zipBtn.style.display = 'inline-block';
+});
+
+zipBtn.addEventListener('click', async () => {
+    zipBtn.disabled = true;
+    zipBtn.textContent = '⏳ Préparation du ZIP...';
+    const zip = new JSZip();
+    for (const [idx, img] of Object.entries(results)) {
+        zip.file(img.name, img.src.split(',')[1], { base64: true });
+    }
+    const blob = await zip.generateAsync({ type: 'blob' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `templates_sans_boite_${new Date().toISOString().slice(0,10)}.zip`;
+    a.click();
+    URL.revokeObjectURL(url);
+    zipBtn.disabled = false;
+    zipBtn.textContent = '📦 Télécharger toutes les images en ZIP';
+});
+</script>
+</body>
+</html>
