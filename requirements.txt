@@ -2,4 +2,4 @@ flask
 requests
 gunicorn
 boto3
-Pillow
+piexif
