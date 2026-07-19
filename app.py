@@ -330,21 +330,10 @@ def build_prompt(name, number, name_below=None):
 def call_gemini(img_bytes, mime, name, number, name_below=None, max_retries=2, resolution="1k"):
     img_b64 = base64.b64encode(img_bytes).decode()
     prompt = build_prompt(name, number, name_below)
-
-    # Map résolution vers les dimensions Gemini
-    res_map = {"1k": "IMAGE_SIZE_1024", "2k": "IMAGE_SIZE_2048", "4k": "IMAGE_SIZE_4096"}
-    image_size = res_map.get(resolution, "IMAGE_SIZE_1024")
-
-    payload = {
-        "contents": [{"parts": [
-            {"text": prompt},
-            {"inline_data": {"mime_type": mime, "data": img_b64}}
-        ]}],
-        "generationConfig": {
-            "responseModalities": ["IMAGE", "TEXT"],
-            "imageConfig": {"imageSize": image_size}
-        }
-    }
+    payload = {"contents": [{"parts": [
+        {"text": prompt},
+        {"inline_data": {"mime_type": mime, "data": img_b64}}
+    ]}]}
     last_error = None
     for _ in range(max_retries + 1):
         try:
