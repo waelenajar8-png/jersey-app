@@ -353,34 +353,47 @@ def call_gemini(img_bytes, mime, name, number, name_below=None, max_retries=2, r
                 if "inlineData" in part:
                     img = part["inlineData"]["data"]
                     if REPLICATE_API_KEY:
-                        try:
-                            print(f"[UPSCALE] Démarrage upscaling...")
-                            r = requests.post(
-                                "https://api.replicate.com/v1/models/nightmareai/real-esrgan/predictions",
-                                headers={"Authorization": f"Bearer {REPLICATE_API_KEY}", "Content-Type": "application/json", "Prefer": "wait"},
-                                json={"input": {"image": f"data:image/png;base64,{img}", "scale": 4, "face_enhance": False}},
-                                timeout=120
-                            )
-                            print(f"[UPSCALE] Réponse: {r.status_code} — {r.text[:200]}")
-                            if r.status_code in (200, 201):
-                                data_r = r.json()
-                                output = data_r.get("output")
-                                if not output:
-                                    # polling si pas encore prêt
-                                    pid = data_r.get("id")
-                                    for _ in range(30):
-                                        time.sleep(2)
-                                        p = requests.get(f"https://api.replicate.com/v1/predictions/{pid}", headers={"Authorization": f"Bearer {REPLICATE_API_KEY}"}, timeout=15).json()
-                                        if p.get("status") == "succeeded" and p.get("output"):
-                                            output = p["output"]
-                                            break
-                                        elif p.get("status") in ("failed", "canceled"):
-                                            break
-                                if output:
-                                    img = base64.b64encode(requests.get(output, timeout=30).content).decode()
-                                    print("[UPSCALE] ✅ 2K")
-                        except Exception as e:
-                            print(f"[UPSCALE] Erreur: {e}")
+                        upscaled = False
+                        max_retries = 5
+                        attempt = 0
+                        while not upscaled and attempt < max_retries:
+                            attempt += 1
+                            try:
+                                print(f"[UPSCALE] Tentative {attempt}/{max_retries}...")
+                                r = requests.post(
+                                    "https://api.replicate.com/v1/models/nightmareai/real-esrgan/predictions",
+                                    headers={"Authorization": f"Bearer {REPLICATE_API_KEY}", "Content-Type": "application/json", "Prefer": "wait"},
+                                    json={"input": {"image": f"data:image/png;base64,{img}", "scale": 4, "face_enhance": False}},
+                                    timeout=300
+                                )
+                                if r.status_code in (200, 201):
+                                    data_r = r.json()
+                                    output = data_r.get("output")
+                                    if not output:
+                                        pid = data_r.get("id")
+                                        for _ in range(60):
+                                            time.sleep(2)
+                                            p = requests.get(f"https://api.replicate.com/v1/predictions/{pid}", headers={"Authorization": f"Bearer {REPLICATE_API_KEY}"}, timeout=30).json()
+                                            if p.get("status") == "succeeded" and p.get("output"):
+                                                output = p["output"]
+                                                break
+                                            elif p.get("status") in ("failed", "canceled"):
+                                                break
+                                    if output:
+                                        img = base64.b64encode(requests.get(output, timeout=60).content).decode()
+                                        print("[UPSCALE] ✅ 4K")
+                                        upscaled = True
+                                    else:
+                                        print(f"[UPSCALE] Pas d'output, retry {attempt}/{max_retries}...")
+                                        time.sleep(3)
+                                else:
+                                    print(f"[UPSCALE] Erreur {r.status_code}, retry {attempt}/{max_retries}...")
+                                    time.sleep(5)
+                            except Exception as e:
+                                print(f"[UPSCALE] Erreur: {e}, retry {attempt}/{max_retries}...")
+                                time.sleep(5)
+                        if not upscaled:
+                            print("[UPSCALE] ❌ Échec après 5 tentatives — image 1K conservée")
                     return {"success": True, "image": img}
             last_error = "Pas d'image dans la réponse."
         except (KeyError, IndexError) as e:
