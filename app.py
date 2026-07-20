@@ -354,12 +354,14 @@ def call_gemini(img_bytes, mime, name, number, name_below=None, max_retries=2, r
                     img = part["inlineData"]["data"]
                     if REPLICATE_API_KEY:
                         try:
+                            print(f"[UPSCALE] Démarrage upscaling...")
                             r = requests.post(
                                 "https://api.replicate.com/v1/models/nightmareai/real-esrgan/predictions",
                                 headers={"Authorization": f"Bearer {REPLICATE_API_KEY}", "Content-Type": "application/json", "Prefer": "wait"},
                                 json={"input": {"image": f"data:image/png;base64,{img}", "scale": 2, "face_enhance": False}},
                                 timeout=120
                             )
+                            print(f"[UPSCALE] Réponse: {r.status_code} — {r.text[:200]}")
                             if r.status_code in (200, 201):
                                 data_r = r.json()
                                 output = data_r.get("output")
