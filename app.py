@@ -1176,6 +1176,11 @@ def api_delete():
     return jsonify({"success":True})
 
 # ── Generate single ─────────────────────────────────────────────────────────
+@app.route("/api/flocages/reset", methods=["GET", "POST"])
+def api_reset_flocages():
+    r2_put_json("meta/flocages.json", {"flocages": DEFAULT_FLOCAGES})
+    return jsonify({"success": True, "count": len(DEFAULT_FLOCAGES)})
+
 @app.route("/api/flocages", methods=["GET"])
 def api_get_flocages():
     data = r2_get_json("meta/flocages.json")
