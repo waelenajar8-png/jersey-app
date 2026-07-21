@@ -118,6 +118,7 @@ input[type=file]{display:none}
                 <button class="btn-xs" id="shuffleFlocBtn">🔀 Mélanger les flocages</button>
                 <label for="csvInput" class="btn-xs" style="cursor:pointer">📄 Importer CSV</label>
                 <input type="file" id="csvInput" accept=".csv,.txt,.xlsx">
+                <button class="btn-xs" id="openLibBtn" onclick="openFlocLib()">📚 Bibliothèque</button>
             </div>
         </div>
     </div>
@@ -143,7 +144,97 @@ input[type=file]{display:none}
 <div class="results" id="results"></div>
 </div>
 
+<!-- Modal bibliothèque flocages -->
+<div id="flocModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:200;align-items:center;justify-content:center">
+    <div style="background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:24px;width:100%;max-width:600px;max-height:80vh;display:flex;flex-direction:column;gap:12px">
+        <div style="display:flex;align-items:center;justify-content:space-between">
+            <h2 style="margin:0;font-size:16px">📚 Bibliothèque de flocages</h2>
+            <button onclick="closeFlocLib()" style="background:none;border:none;color:var(--text);font-size:18px;cursor:pointer">✕</button>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn-xs" onclick="shuffleLib()">🔀 Mélanger</button>
+            <button class="btn-xs" onclick="selectAllLib()">☑️ Tout sélectionner</button>
+            <button class="btn-xs" onclick="deselectAllLib()">✖️ Désélectionner</button>
+            <span id="libSelCount" style="font-size:12px;color:var(--text-dim)"></span>
+        </div>
+        <input type="text" id="libSearch" placeholder="🔍 Rechercher..." oninput="renderLib()" style="padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px">
+        <div id="libList" style="overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:4px"></div>
+        <div style="display:flex;gap:8px;justify-content:flex-end">
+            <button onclick="closeFlocLib()" style="padding:8px 16px;background:var(--panel);border:1px solid var(--border);color:var(--text);border-radius:8px;font-size:13px;cursor:pointer">Annuler</button>
+            <button onclick="useFlocLib()" style="padding:8px 16px;background:var(--accent);color:#0f1115;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">✅ Utiliser la sélection</button>
+        </div>
+    </div>
+</div>
+
 <script>
+// ── Bibliothèque flocages ──────────────────────────────────────────────────
+let libFlocages = [];
+let libSelected = new Set();
+
+async function openFlocLib() {
+    if (!libFlocages.length) {
+        const res = await fetch('/api/flocages');
+        const data = await res.json();
+        libFlocages = data.flocages || [];
+    }
+    libSelected.clear();
+    document.getElementById('libSearch').value = '';
+    renderLib();
+    document.getElementById('flocModal').style.display = 'flex';
+}
+
+function closeFlocLib() {
+    document.getElementById('flocModal').style.display = 'none';
+}
+
+function renderLib() {
+    const search = document.getElementById('libSearch').value.toLowerCase();
+    const filtered = libFlocages.filter(f => f.toLowerCase().includes(search));
+    const list = document.getElementById('libList');
+    const selCount = document.getElementById('libSelCount');
+    selCount.textContent = libSelected.size > 0 ? `${libSelected.size} sélectionné(s)` : `${libFlocages.length} flocages`;
+    list.innerHTML = filtered.map((f, i) => {
+        const sel = libSelected.has(f);
+        return `<label style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;cursor:pointer;background:${sel?'rgba(74,222,128,.1)':'transparent'};font-size:12px">
+            <input type="checkbox" ${sel?'checked':''} onchange="toggleLibFloc('${f.replace(/'/g,"\\'")}',this.checked)" style="accent-color:var(--accent)">
+            ${f}
+        </label>`;
+    }).join('');
+}
+
+function toggleLibFloc(f, checked) {
+    if (checked) libSelected.add(f);
+    else libSelected.delete(f);
+    document.getElementById('libSelCount').textContent = libSelected.size > 0 ? `${libSelected.size} sélectionné(s)` : `${libFlocages.length} flocages`;
+}
+
+function shuffleLib() {
+    for (let i = libFlocages.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [libFlocages[i], libFlocages[j]] = [libFlocages[j], libFlocages[i]];
+    }
+    renderLib();
+}
+
+function selectAllLib() {
+    const search = document.getElementById('libSearch').value.toLowerCase();
+    libFlocages.filter(f => f.toLowerCase().includes(search)).forEach(f => libSelected.add(f));
+    renderLib();
+}
+
+function deselectAllLib() {
+    libSelected.clear();
+    renderLib();
+}
+
+function useFlocLib() {
+    if (!libSelected.size) { alert('Sélectionne au moins un flocage.'); return; }
+    const selected = libFlocages.filter(f => libSelected.has(f));
+    document.getElementById('flockages').value = selected.join('\n');
+    updatePreview();
+    closeFlocLib();
+}
+
 // ── Thème ──────────────────────────────────────────────────────────────────
 const html = document.documentElement;
 const themeBtn = document.getElementById('themeBtn');
