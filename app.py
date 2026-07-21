@@ -387,13 +387,16 @@ def call_gemini(img_bytes, mime, name, number, name_below=None, max_retries=2, r
                                         print(f"[UPSCALE] Pas d'output, retry {attempt}/{max_retries}...")
                                         time.sleep(3)
                                 else:
+                                    wait = 10 if r.status_code == 429 else 5
                                     print(f"[UPSCALE] Erreur {r.status_code}, retry {attempt}/{max_retries}...")
-                                    time.sleep(5)
+                                    time.sleep(wait)
                             except Exception as e:
                                 print(f"[UPSCALE] Erreur: {e}, retry {attempt}/{max_retries}...")
                                 time.sleep(5)
                         if not upscaled:
-                            print("[UPSCALE] ❌ Échec après 5 tentatives — image 1K conservée")
+                            print("[UPSCALE] ❌ Échec après 5 tentatives")
+                            last_error = "❌ Upscaling 4K échoué après 5 tentatives — image non disponible. Relance cette génération."
+                            continue
                     return {"success": True, "image": img}
             last_error = "Pas d'image dans la réponse."
         except (KeyError, IndexError) as e:
