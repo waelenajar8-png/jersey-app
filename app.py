@@ -354,9 +354,8 @@ def call_gemini(img_bytes, mime, name, number, name_below=None, max_retries=2, r
                     img = part["inlineData"]["data"]
                     if REPLICATE_API_KEY:
                         upscaled = False
-                        max_retries = 5
                         attempt = 0
-                        while not upscaled and attempt < max_retries:
+                        while not upscaled:
                             attempt += 1
                             try:
                                 print(f"[UPSCALE] Tentative {attempt}/{max_retries}...")
@@ -387,16 +386,13 @@ def call_gemini(img_bytes, mime, name, number, name_below=None, max_retries=2, r
                                         print(f"[UPSCALE] Pas d'output, retry {attempt}/{max_retries}...")
                                         time.sleep(3)
                                 else:
-                                    wait = 10 if r.status_code == 429 else 5
-                                    print(f"[UPSCALE] Erreur {r.status_code}, retry {attempt}/{max_retries}...")
+                                    wait = min(10 * attempt, 120) if r.status_code == 429 else min(5 * attempt, 60)
+                                    print(f"[UPSCALE] Erreur {r.status_code}, retry {attempt} dans {wait}s...")
                                     time.sleep(wait)
                             except Exception as e:
-                                print(f"[UPSCALE] Erreur: {e}, retry {attempt}/{max_retries}...")
-                                time.sleep(5)
-                        if not upscaled:
-                            print("[UPSCALE] ❌ Échec après 5 tentatives")
-                            last_error = "❌ Upscaling 4K échoué après 5 tentatives — image non disponible. Relance cette génération."
-                            continue
+                                wait = min(5 * attempt, 60)
+                                print(f"[UPSCALE] Erreur: {e}, retry {attempt} dans {wait}s...")
+                                time.sleep(wait)
                     return {"success": True, "image": img}
             last_error = "Pas d'image dans la réponse."
         except (KeyError, IndexError) as e:
