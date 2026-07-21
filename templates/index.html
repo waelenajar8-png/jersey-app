@@ -132,7 +132,9 @@ input[type=file]{display:none}
     <div class="btn-row">
         <button class="btn-main" id="generateBtn">Lancer la génération</button>
         <button class="btn-main" id="testBtn" style="background:#6366f1">🧪 Test (1 image)</button>
-        <button class="btn-sec" id="zipBtn">📦 Tout télécharger en ZIP</button>
+        <button class="btn-sec" id="selectAllImgBtn" style="display:none" onclick="selectAllImages()">☑️ Tout sélectionner</button>
+        <button class="btn-sec" id="dlSelBtn" style="display:none" onclick="dlSelected()">⬇️ Télécharger la sélection (<span id="selImgCount">0</span>)</button>
+        <button class="btn-sec" id="zipBtn">📦 ZIP</button>
         <div class="parallel-row">
             ⚡ Parallèle : <input type="number" id="parallelInput" value="1" min="1" max="10"> images simultanées
         </div>
@@ -445,7 +447,7 @@ async function launch(testMode=false){
             }
         }
         notifyDone(total,testMode);
-        if(Object.keys(generatedImages).length>0)zipBtn.style.display='inline-block';
+        if(Object.keys(generatedImages).length>0){zipBtn.style.display='inline-block';document.getElementById('selectAllImgBtn').style.display='inline-block';}
     }catch(err){statusEl.textContent='Erreur: '+err.message}
     finally{generateBtn.disabled=false;testBtn.disabled=false;generateBtn.textContent='Lancer la génération'}
 }
@@ -458,7 +460,7 @@ function renderResult(data){
         const src=`data:image/png;base64,${data.image}`;
         generatedImages[data.index]={src,name:item.name,number:item.number};
         const conf=getConfidence(data);
-        card.innerHTML=`<div class="card-title">IMAGE ${data.index+1}</div><div class="card-sub">${sub}</div><div class="card-imgs"><div class="img-wrap"><div class="img-label">Original</div><img src="${item.orig}"></div><div class="img-wrap"><div class="img-label">Généré</div><img src="${src}"></div></div><div>${conf}</div><a class="dl-btn" href="${src}" download="image_${data.index+1}_${item.name||'jersey'}.png">⬇️ Télécharger</a><div class="retry-btn" onclick="retryItem(${data.index})">🔄 Relancer</div>`;
+        card.innerHTML=`<div class="card-title" style="display:flex;align-items:center;gap:8px"><input type="checkbox" class="img-check" data-index="${data.index}" onchange="updateSelCount()" style="accent-color:var(--accent)">IMAGE ${data.index+1}</div><div class="card-sub">${sub}</div><div class="card-imgs"><div class="img-wrap"><div class="img-label">Original</div><img src="${item.orig}"></div><div class="img-wrap"><div class="img-label">Généré</div><img src="${src}"></div></div><div>${conf}</div><a class="dl-btn" href="${src}" download="image_${data.index+1}_${item.name||'jersey'}.png">⬇️ Télécharger</a><div class="retry-btn" onclick="retryItem(${data.index})">🔄 Relancer</div>`;
     }else{
         card.innerHTML=`<div class="card-title">IMAGE ${data.index+1}</div><div class="card-sub">${sub}</div><div class="card-imgs"><div class="img-wrap"><div class="img-label">Original</div><img src="${item.orig}"></div><div class="card-ph">❌ Échec</div></div><div class="card-err-box">${data.error||'Erreur inconnue'}</div><div class="retry-btn" onclick="retryItem(${data.index})">🔄 Relancer</div>`;
     }
@@ -482,8 +484,36 @@ async function retryItem(index){
         const d=await res.json();incrRPD();
         if(!res.ok||d.error){renderResult({index,error:d.error||'Erreur'});return}
         renderResult({index,image:d.image});
-        if(Object.keys(generatedImages).length>0)zipBtn.style.display='inline-block';
+        if(Object.keys(generatedImages).length>0){zipBtn.style.display='inline-block';document.getElementById('selectAllImgBtn').style.display='inline-block';}
     }catch(err){renderResult({index,error:err.message})}
+}
+
+// ── Sélection et téléchargement multiple ──────────────────────────────────
+function updateSelCount(){
+    const checks=document.querySelectorAll('.img-check:checked');
+    const count=checks.length;
+    document.getElementById('selImgCount').textContent=count;
+    document.getElementById('dlSelBtn').style.display=count>0?'inline-block':'none';
+    document.getElementById('selectAllImgBtn').style.display=Object.keys(generatedImages).length>0?'inline-block':'none';
+}
+
+function selectAllImages(){
+    document.querySelectorAll('.img-check').forEach(cb=>cb.checked=true);
+    updateSelCount();
+}
+
+async function dlSelected(){
+    const checks=document.querySelectorAll('.img-check:checked');
+    for(const cb of checks){
+        const idx=parseInt(cb.dataset.index);
+        const img=generatedImages[idx];
+        if(!img) continue;
+        const a=document.createElement('a');
+        a.href=img.src;
+        a.download=`image_${idx+1}_${img.name||'jersey'}.png`;
+        a.click();
+        await new Promise(r=>setTimeout(r,300)); // petit délai entre chaque DL
+    }
 }
 
 // ── ZIP ────────────────────────────────────────────────────────────────────
