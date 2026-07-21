@@ -18,8 +18,8 @@ app = Flask(__name__)
 
 # ── Config ─────────────────────────────────────────────────────────────────
 API_KEY        = os.environ.get("GEMINI_API_KEY")
-MODEL_URL      = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image-preview:generateContent"
-COST_PER_IMAGE = 0.134
+MODEL_URL      = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-image:generateContent"
+COST_PER_IMAGE = 0.069
 TIKTOK_SIZE    = 7
 FIXED_CAPTION  = "3 Maillot Acheté 1 Offert 🎁 #volakits #ete #foot"
 SCHEDULE_TIMES = ["10:30", "14:00", "17:30", "19:00"]
