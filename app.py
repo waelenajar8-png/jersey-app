@@ -781,6 +781,27 @@ def api_delete():
     return jsonify({"success":True})
 
 # ── Generate single ─────────────────────────────────────────────────────────
+@app.route("/api/flocages", methods=["GET"])
+def api_get_flocages():
+    data = r2_get_json("meta/flocages.json")
+    if not data:
+        # Charger les flocages par défaut
+        default_file = os.path.join(os.path.dirname(__file__), "flocages_default.txt")
+        if os.path.exists(default_file):
+            with open(default_file) as f:
+                lines = [l.strip() for l in f.readlines() if l.strip()]
+        else:
+            lines = []
+        data = {"flocages": lines}
+        r2_put_json("meta/flocages.json", data)
+    return jsonify(data)
+
+@app.route("/api/flocages", methods=["POST"])
+def api_save_flocages():
+    data = request.json
+    r2_put_json("meta/flocages.json", {"flocages": data.get("flocages", [])})
+    return jsonify({"success": True})
+
 @app.route("/remove_box")
 def remove_box_page():
     return render_template("remove_box.html")
