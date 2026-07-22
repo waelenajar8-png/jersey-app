@@ -1019,7 +1019,6 @@ def api_schedule():
                 try:
                     image_urls = [r2_presigned(k, expires=604800) for k in tiktok.get("image_keys", [])]
                     image_urls = [u for u in image_urls if u]
-                    # Format correct de l'API RobinReach
                     paris_local = slot_dt.astimezone(paris_tz)
                     payload = {
                         "content": FIXED_CAPTION,
@@ -1035,12 +1034,26 @@ def api_schedule():
                         }
                     }
                     print(f"[ROBINREACH] Sending payload: {json.dumps(payload)[:500]}")
-                    resp = requests.post(
-                        f"https://robinreach.com/api/v1/posts?api_key={ROBINREACH_API_KEY}&brand_id={ROBINREACH_BRAND_ID}",
-                        headers={"Accept": "application/json", "Content-Type": "application/json"},
-                        json=payload,
-                        timeout=30
-                    )
+                    resp = None
+                    last_robin_error = None
+                    for robin_attempt in range(3):
+                        try:
+                            resp = requests.post(
+                                f"https://robinreach.com/api/v1/posts?api_key={ROBINREACH_API_KEY}&brand_id={ROBINREACH_BRAND_ID}",
+                                headers={"Accept": "application/json", "Content-Type": "application/json"},
+                                json=payload,
+                                timeout=90
+                            )
+                            break
+                        except requests.exceptions.Timeout as te:
+                            last_robin_error = str(te)
+                            print(f"[ROBINREACH] Timeout tentative {robin_attempt+1}/3, retry...")
+                            continue
+                    if resp is None:
+                        tiktok_data["status"] = "pending"
+                        r2_put_json(tiktok["r2_key"], tiktok_data)
+                        errors.append(f"TikTok {tiktok.get('number','')}: Timeout après 3 tentatives ({last_robin_error})")
+                        continue
                     print(f"[ROBINREACH] Response {resp.status_code}: {resp.text[:500]}")
                     if resp.status_code not in (200,201):
                         tiktok_data["status"] = "pending"
