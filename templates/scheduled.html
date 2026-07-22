@@ -284,9 +284,12 @@ async function unscheduleSingle(key){
 async function unscheduleSelected(){
     if(!selected.size){alert('Aucun TikTok sélectionné');return}
     if(!confirm(`Remettre ${selected.size} TikTok(s) en file d'attente ? (déprogrammés aussi sur RobinReach)`)) return;
-    showStatus('⏳ Déprogrammation en cours...');
+    const btn=document.getElementById('unscheduleSelBtn');
+    btn.disabled=true;
+    showStatus(`⏳ Déprogrammation de ${selected.size} TikTok(s) en cours... (peut prendre du temps)`);
     const res=await fetch('/api/scheduled/unschedule',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({keys:[...selected]})});
     const d=await res.json();
+    btn.disabled=false;
     showStatus(`✅ ${d.count} TikTok(s) remis en file d'attente`);
     selected.clear();
     await loadPage(currentPage);
@@ -294,7 +297,7 @@ async function unscheduleSelected(){
 
 async function unscheduleAll(){
     if(!confirm(`Déprogrammer TOUS les TikToks de cette page (${tiktoks.length}) et les remettre en file d'attente ?`)) return;
-    showStatus('⏳ Déprogrammation en cours...');
+    showStatus(`⏳ Déprogrammation de ${tiktoks.length} TikTok(s) en cours... (peut prendre du temps)`);
     const allKeys=tiktoks.map(t=>t.r2_key);
     const res=await fetch('/api/scheduled/unschedule',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({keys:allKeys})});
     const d=await res.json();
@@ -319,10 +322,12 @@ function exportPlanning(){
     URL.revokeObjectURL(url);
 }
 
+let statusHideTimer=null;
 function showStatus(msg){
     const bar=document.getElementById('statusBar');
     bar.textContent=msg;bar.classList.add('show');
-    setTimeout(()=>bar.classList.remove('show'),4000);
+    if(statusHideTimer) clearTimeout(statusHideTimer);
+    statusHideTimer=setTimeout(()=>bar.classList.remove('show'),5000);
 }
 
 loadPage(0);
