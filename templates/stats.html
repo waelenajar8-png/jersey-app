@@ -38,6 +38,12 @@
     .topbar { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 26px; flex-wrap:wrap; gap:12px; }
     h1 { font-size: 24px; margin: 0; font-weight:800; letter-spacing:-0.02em; }
     .topbar-right { display: flex; gap: 6px; flex-wrap:wrap; align-items:center; }
+    @media(max-width:640px){
+        .topbar{flex-direction:column;align-items:stretch}
+        .topbar-right{flex-wrap:nowrap;overflow-x:auto;padding-bottom:4px;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+        .topbar-right::-webkit-scrollbar{display:none}
+        a.back,.theme-btn,.export-btn{flex-shrink:0}
+    }
     a.back { color: var(--text-dim); text-decoration: none; font-size: 13px; font-weight: 600; padding:6px 10px; border-radius:8px; transition:all .15s ease; }
     a.back:hover{ color:var(--text); background:var(--panel-hover); }
     .theme-btn, .export-btn {
