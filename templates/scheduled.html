@@ -116,6 +116,7 @@ h1{font-size:22px;margin:0}
         <button class="btn-sec" id="deselectAllBtn" onclick="deselectAll()" style="display:none">✖️ Désélectionner</button>
         <button class="btn-danger" id="unscheduleSelBtn" onclick="unscheduleSelected()" style="display:none">↩️ Remettre en file d'attente</button>
         <button class="btn-sec" onclick="checkAllStatus()">🔍 Vérifier statuts RobinReach</button>
+        <button class="btn-sec" style="background:rgba(251,191,36,.15);border-color:rgba(251,191,36,.4);color:var(--warn)" onclick="findDuplicates()">⚠️ Détecter doublons</button>
         <button class="btn-danger" onclick="unscheduleAll()" style="margin-left:auto">↩️ Tout déprogrammer</button>
     </div>
 
@@ -339,6 +340,28 @@ async function checkAllStatus(){
     });
     render();
     showStatus(`✅ Statuts vérifiés pour ${tiktoks.length} TikTok(s)`);
+}
+
+async function findDuplicates(){
+    showStatus('🔍 Recherche de doublons en cours...');
+    const res = await fetch('/api/scheduled/find_duplicates');
+    const d = await res.json();
+    if(!d.count){
+        alert('✅ Aucun doublon trouvé — tous les créneaux sont uniques.');
+        showStatus('✅ Aucun doublon');
+        return;
+    }
+    let msg = `⚠️ ${d.count} conflit(s) de créneau trouvé(s) :\n\n`;
+    d.duplicates.forEach(dup=>{
+        const date = new Date(dup.scheduled_at);
+        const timeStr = date.toLocaleDateString('fr-FR')+' '+date.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
+        msg += `Compte ${dup.account} — ${timeStr} :\n`;
+        dup.tiktoks.forEach(t=>{ msg += `  • TikTok ${t.number}\n`; });
+        msg += '\n';
+    });
+    msg += 'Va sur RobinReach pour vérifier et supprimer les doublons manuellement, ou utilise "Déprogrammer" sur les TikToks en trop ci-dessous.';
+    alert(msg);
+    showStatus(`⚠️ ${d.count} conflit(s) trouvé(s) — voir le détail`);
 }
 
 function exportPlanning(){
