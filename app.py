@@ -21,7 +21,16 @@ MODEL_URL      = "https://generativelanguage.googleapis.com/v1beta/models/gemini
 COST_PER_IMAGE = 0.069
 TIKTOK_SIZE    = 7
 FIXED_CAPTION  = "3 Maillot Acheté 1 Offert 🎁 #volakits #ete #foot"
-SCHEDULE_TIMES = ["10:30", "14:00", "17:30", "19:00"]
+# Créneaux de publication en UTC, PAR COMPTE (le principal poste plus souvent que les autres)
+# Conversion heure française (UTC+2 été) → UTC : soustraire 2h
+SCHEDULE_TIMES_BY_ACCOUNT = {
+    "Volakits Principal": ["07:00", "10:30", "14:00", "17:30", "19:30"],  # 9h/12h30/16h/19h30/21h30 Paris — 5x/jour
+}
+SCHEDULE_TIMES_DEFAULT = ["10:30", "17:30"]  # 12h30/19h30 Paris — 2x/jour pour les autres comptes
+
+def get_schedule_times_for_account(account):
+    """Retourne les créneaux horaires (UTC) pour un compte donné"""
+    return SCHEDULE_TIMES_BY_ACCOUNT.get(account, SCHEDULE_TIMES_DEFAULT)
 
 R2_ENDPOINT   = os.environ.get("R2_ENDPOINT")
 R2_ACCESS_KEY = os.environ.get("R2_ACCESS_KEY_ID")
@@ -1062,8 +1071,9 @@ def api_schedule():
                     use_custom = False
 
             if not use_custom:
+                account_times = get_schedule_times_for_account(account)
                 while True:
-                    h,m = map(int, SCHEDULE_TIMES[slot_index % len(SCHEDULE_TIMES)].split(":"))
+                    h,m = map(int, account_times[slot_index % len(account_times)].split(":"))
                     slot_dt = datetime(slot_date.year,slot_date.month,slot_date.day,h,m,tzinfo=timezone.utc)
                     slot_iso = slot_dt.isoformat()
                     is_future_enough = True
@@ -1072,7 +1082,7 @@ def api_schedule():
                     if is_future_enough and slot_iso not in used_slots:
                         break
                     slot_index += 1
-                    if slot_index % len(SCHEDULE_TIMES) == 0:
+                    if slot_index % len(account_times) == 0:
                         slot_date += timedelta(days=1)
 
             dt_str = slot_dt.isoformat()
@@ -1150,7 +1160,7 @@ def api_schedule():
 
             if not use_custom:
                 slot_index += 1
-                if slot_index % len(SCHEDULE_TIMES) == 0:
+                if slot_index % len(account_times) == 0:
                     slot_date += timedelta(days=1)
 
     return jsonify({
