@@ -97,6 +97,7 @@ h1{font-size:22px;margin:0}
         <button class="btn-sec" onclick="selectAll()">☑️ Tout sélectionner (page)</button>
         <button class="btn-sec" id="deselectAllBtn" onclick="deselectAll()" style="display:none">✖️ Désélectionner</button>
         <button class="btn-danger" id="unscheduleSelBtn" onclick="unscheduleSelected()" style="display:none">↩️ Remettre en file d'attente</button>
+        <button class="btn-sec" onclick="checkAllStatus()">🔍 Vérifier statuts RobinReach</button>
         <button class="btn-danger" onclick="unscheduleAll()" style="margin-left:auto">↩️ Tout déprogrammer</button>
     </div>
 
@@ -231,7 +232,7 @@ function render(){
                         <input type="checkbox" class="checkbox" ${isSel?'checked':''} onchange="toggleSelect('${t.r2_key}')">
                         TikTok ${t.number} <span style="font-size:10px;color:var(--text-dim)">${t.image_keys?.length||0} img</span>
                     </div>
-                    <div class="card-meta">${t.user}</div>
+                    <div class="card-meta">${t.user} ${t.real_status?`· <span style="color:${t.real_status==='published'||t.real_status==='posted'?'var(--accent)':t.real_status==='failed'?'var(--danger)':'var(--warn)'}">${t.real_status}</span>`:''}</div>
                 </div>
             </div>
             <div class="images-grid">
@@ -304,6 +305,22 @@ async function unscheduleAll(){
     showStatus(`✅ ${d.count} TikTok(s) remis en file d'attente`);
     selected.clear();
     await loadPage(currentPage);
+}
+
+async function checkAllStatus(){
+    if(!tiktoks.length){alert('Aucun TikTok à vérifier.');return}
+    showStatus(`🔍 Vérification des statuts de ${tiktoks.length} TikTok(s)...`);
+    const keys = tiktoks.map(t=>t.r2_key);
+    const res = await fetch('/api/scheduled/check_status',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({keys})});
+    const d = await res.json();
+    if(d.error){ showStatus(`❌ ${d.error}`); return }
+    // Mettre à jour localement
+    Object.entries(d.results).forEach(([key,info])=>{
+        const t = tiktoks.find(t=>t.r2_key===key);
+        if(t) t.real_status = info.status;
+    });
+    render();
+    showStatus(`✅ Statuts vérifiés pour ${tiktoks.length} TikTok(s)`);
 }
 
 function exportPlanning(){
