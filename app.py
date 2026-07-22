@@ -657,30 +657,50 @@ def _save_tiktok(num, images_b64, user, flockages):
     }
     return r2_put_json(f"{PFX_QUEUE}tiktok_{num:04d}.json", meta)
 
-def _enrich_tiktok(data, key):
-    """Ajoute les URLs signées et la clé R2"""
-    data["image_urls"] = [r2_presigned(k) for k in data.get("image_keys", [])]
+def _enrich_tiktok(data, key, with_images=True):
+    """Ajoute les URLs signées et la clé R2. Cache l'URL avec une expiration longue."""
     data["r2_key"] = key
+    if with_images:
+        data["image_urls"] = [r2_presigned(k, expires=604800) for k in data.get("image_keys", [])]  # 7 jours
+    else:
+        data["image_urls"] = []
     return data
 
-def get_queue():
+def get_all_queue_light():
+    """Récupère tous les TikToks de la queue SANS générer les URLs images (rapide, pour dispatch/schedule)"""
     keys = sorted(r2_list_keys(PFX_QUEUE))
+    keys = [k for k in keys if "/imgs/" not in k]
     result = []
     for k in keys:
-        # Ignorer les images dans queue/imgs/
-        if "/imgs/" in k: continue
         d = r2_get_json(k)
-        if d: result.append(_enrich_tiktok(d, k))
+        if d:
+            d["r2_key"] = k
+            result.append(d)
     return result
 
-def get_scheduled():
-    keys = sorted(r2_list_keys(PFX_SCHEDULED), reverse=True)
+def get_queue(page=0, per_page=20):
+    keys = sorted(r2_list_keys(PFX_QUEUE))
+    keys = [k for k in keys if "/imgs/" not in k]
+    total = len(keys)
+    start = page * per_page
+    page_keys = keys[start:start + per_page]
     result = []
-    for k in keys[:200]:  # limiter à 200 derniers
-        if "/imgs/" in k: continue
+    for k in page_keys:
         d = r2_get_json(k)
         if d: result.append(_enrich_tiktok(d, k))
-    return result
+    return result, total
+
+def get_scheduled(page=0, per_page=20):
+    keys = sorted(r2_list_keys(PFX_SCHEDULED), reverse=True)
+    keys = [k for k in keys if "/imgs/" not in k][:200]
+    total = len(keys)
+    start = page * per_page
+    page_keys = keys[start:start + per_page]
+    result = []
+    for k in page_keys:
+        d = r2_get_json(k)
+        if d: result.append(_enrich_tiktok(d, k))
+    return result, total
 
 def move_to_scheduled(queue_key, account, dt_str, robinreach_post_id=None):
     data = r2_get_json(queue_key)
@@ -870,11 +890,17 @@ def api_save_accounts():
 # ── API Queue ───────────────────────────────────────────────────────────────
 @app.route("/api/queue")
 def api_queue():
-    return jsonify({"tiktoks": get_queue()})
+    page = int(request.args.get("page", 0))
+    per_page = int(request.args.get("per_page", 20))
+    tiktoks, total = get_queue(page=page, per_page=per_page)
+    return jsonify({"tiktoks": tiktoks, "total": total, "page": page, "per_page": per_page})
 
 @app.route("/api/scheduled")
 def api_scheduled():
-    return jsonify({"tiktoks": get_scheduled()})
+    page = int(request.args.get("page", 0))
+    per_page = int(request.args.get("per_page", 20))
+    tiktoks, total = get_scheduled(page=page, per_page=per_page)
+    return jsonify({"tiktoks": tiktoks, "total": total, "page": page, "per_page": per_page})
 
 @app.route("/api/queue/assign", methods=["POST"])
 def api_assign():
@@ -890,7 +916,7 @@ def api_assign():
 def api_dispatch():
     data = request.json; accounts = data.get("accounts",[])
     if not accounts: return jsonify({"error":"Aucun compte"}),400
-    queue = get_queue()
+    queue = get_all_queue_light()
     unassigned = [t for t in queue if not t.get("account")]
     for i,t in enumerate(unassigned):
         acc = accounts[i % len(accounts)]
@@ -905,7 +931,7 @@ def api_schedule():
     custom_slots = data.get("custom_slots", {})
     single_key = data.get("single_key")  # programmer un seul TikTok
 
-    queue = get_queue()
+    queue = get_all_queue_light()
     if single_key:
         assigned = [t for t in queue if t.get("account") and t["r2_key"] == single_key]
     else:
@@ -991,10 +1017,10 @@ def api_schedule():
 
             if ROBINREACH_API_KEY and ROBINREACH_BRAND_ID:
                 try:
-                    image_urls = [u for u in tiktok.get("image_urls",[]) if u]
+                    image_urls = [r2_presigned(k, expires=604800) for k in tiktok.get("image_keys", [])]
+                    image_urls = [u for u in image_urls if u]
                     # Format correct de l'API RobinReach
                     paris_local = slot_dt.astimezone(paris_tz)
-                    image_urls = [u for u in tiktok.get("image_urls",[]) if u]
                     payload = {
                         "content": FIXED_CAPTION,
                         "media_urls": image_urls,
