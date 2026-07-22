@@ -969,6 +969,15 @@ def api_schedule():
                 errors.append(f"Compte '{account}' non reconnu (TikTok {t.get('number','')})")
             continue
 
+        # Récupérer les créneaux déjà utilisés pour ce compte (TikToks déjà programmés)
+        used_slots = set()
+        sched_keys = r2_list_keys(PFX_SCHEDULED)
+        for sk in sched_keys:
+            if "/imgs/" in sk: continue
+            sd = r2_get_json(sk)
+            if sd and sd.get("account") == account and sd.get("scheduled_at"):
+                used_slots.add(sd["scheduled_at"])
+
         slot_date = start_date
         slot_index = 0
 
@@ -1003,9 +1012,11 @@ def api_schedule():
                 while True:
                     h,m = map(int, SCHEDULE_TIMES[slot_index % len(SCHEDULE_TIMES)].split(":"))
                     slot_dt = datetime(slot_date.year,slot_date.month,slot_date.day,h,m,tzinfo=timezone.utc)
+                    slot_iso = slot_dt.isoformat()
+                    is_future_enough = True
                     if start_date == now.date():
-                        if slot_dt > now + timedelta(minutes=30): break
-                    else:
+                        is_future_enough = slot_dt > now + timedelta(minutes=30)
+                    if is_future_enough and slot_iso not in used_slots:
                         break
                     slot_index += 1
                     if slot_index % len(SCHEDULE_TIMES) == 0:
@@ -1075,6 +1086,7 @@ def api_schedule():
                     continue
 
             move_to_scheduled(tiktok["r2_key"], account, dt_str, tiktok_data.get("robinreach_post_id"))
+            used_slots.add(dt_str)
             scheduled_count += 1
             scheduled_details.append({
                 "tiktok": tiktok.get("number",""),
@@ -1174,6 +1186,28 @@ def api_check_status():
             results[key] = {"status": "erreur", "error": str(e)}
 
     return jsonify({"results": results})
+
+@app.route("/api/scheduled/find_duplicates")
+def api_find_duplicates():
+    """Détecte les TikToks programmés au même horaire sur le même compte"""
+    keys = r2_list_keys(PFX_SCHEDULED)
+    keys = [k for k in keys if "/imgs/" not in k]
+    slots = {}  # (account, scheduled_at) -> [keys]
+    for k in keys:
+        d = r2_get_json(k)
+        if not d: continue
+        acc = d.get("account")
+        at = d.get("scheduled_at")
+        if not acc or not at: continue
+        slot_key = (acc, at)
+        slots.setdefault(slot_key, []).append({"key": k, "number": d.get("number"), "id": d.get("id")})
+
+    duplicates = []
+    for (acc, at), items in slots.items():
+        if len(items) > 1:
+            duplicates.append({"account": acc, "scheduled_at": at, "tiktoks": items})
+
+    return jsonify({"duplicates": duplicates, "count": len(duplicates)})
 
 @app.route("/api/scheduled/unschedule", methods=["POST"])
 def api_unschedule():
