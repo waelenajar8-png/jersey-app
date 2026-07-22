@@ -15,13 +15,11 @@ h1{font-size:22px;margin:0}
 .nav{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
 .nav a{color:var(--accent);text-decoration:none;font-size:13px;font-weight:600}
 .theme-btn,.config-btn{background:var(--panel);border:1px solid var(--border);color:var(--text);padding:6px 12px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600}
-/* Buffer bar */
 .buffer-bar{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
 .buffer-label{font-size:13px;font-weight:600;color:var(--warn)}
 .buffer-track{flex:1;min-width:120px;height:8px;background:var(--border);border-radius:4px;overflow:hidden}
 .buffer-fill{height:100%;background:var(--warn);border-radius:4px;transition:width .3s}
 .buffer-text{font-size:12px;color:var(--text-dim);white-space:nowrap}
-/* Toolbar */
 .toolbar{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;align-items:center}
 .btn{padding:10px 18px;background:var(--accent);color:#0f1115;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer}
 .btn:disabled{opacity:.5;cursor:not-allowed}
@@ -31,27 +29,30 @@ h1{font-size:22px;margin:0}
 .count-badge{background:var(--panel);border:1px solid var(--border);padding:6px 12px;border-radius:8px;font-size:13px;font-weight:600}
 .select-row{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center}
 .select-row span{font-size:12px;color:var(--text-dim)}
-/* Status bar */
+.filters-row{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center}
+.filter-chip{padding:5px 12px;background:var(--panel);border:1px solid var(--border);color:var(--text-dim);border-radius:100px;font-size:12px;font-weight:600;cursor:pointer}
+.filter-chip.active{background:var(--accent);color:#0f1115;border-color:var(--accent)}
+.search-input{padding:7px 12px;background:var(--panel);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:12px;min-width:160px}
 .status-bar{background:rgba(74,222,128,.08);border:1px solid rgba(74,222,128,.25);border-radius:10px;padding:12px 16px;margin-bottom:16px;font-size:13px;display:none}
 .status-bar.show{display:block}
-/* Grid */
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px}
 .card{background:var(--panel);border:2px solid var(--border);border-radius:12px;overflow:hidden;transition:border-color .15s}
 .card.selected{border-color:var(--accent)}
+.card.checked{border-color:var(--danger)}
 .card-header{padding:10px 12px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border)}
-.card-num{font-size:13px;font-weight:700}
+.card-num{font-size:13px;font-weight:700;display:flex;align-items:center;gap:6px}
 .card-meta{font-size:10px;color:var(--text-dim);margin-top:1px}
 .account-tag{background:rgba(74,222,128,.1);color:var(--accent);padding:2px 8px;border-radius:100px;font-size:10px;font-weight:700}
 .imgs-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:2px;padding:6px}
 .img-item{position:relative;cursor:grab}
 .img-item.dragging{opacity:.4;cursor:grabbing}
-.img-item img{width:100%;aspect-ratio:3/4;object-fit:cover;border-radius:3px;background:var(--bg);display:block}
+.img-item img{width:100%;aspect-ratio:3/4;object-fit:cover;border-radius:3px;background:var(--bg);display:block;cursor:zoom-in}
 .img-overlay{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;gap:2px;background:rgba(0,0,0,.5);border-radius:3px}
 .img-item:hover .img-overlay{display:flex}
 .img-arrow{background:rgba(255,255,255,.2);border:none;color:#fff;padding:2px 6px;border-radius:3px;font-size:11px;cursor:pointer;font-weight:700}
 .img-arrow:hover{background:rgba(255,255,255,.4)}
 .img-del{background:rgba(248,113,113,.85);border:none;color:#fff;padding:2px 6px;border-radius:3px;font-size:10px;cursor:pointer;font-weight:700}
-.img-num{position:absolute;bottom:2px;left:3px;background:rgba(0,0,0,.6);color:#fff;font-size:9px;padding:1px 4px;border-radius:2px;font-weight:700}
+.img-num{position:absolute;bottom:2px;left:3px;background:rgba(0,0,0,.6);color:#fff;font-size:9px;padding:1px 4px;border-radius:2px;font-weight:700;pointer-events:none}
 .more-imgs{display:flex;align-items:center;justify-content:center;background:var(--bg);border-radius:3px;aspect-ratio:3/4;font-size:10px;color:var(--text-dim);font-weight:700}
 .card-footer{padding:8px 10px;display:flex;flex-direction:column;gap:6px;border-top:1px solid var(--border)}
 .account-select{width:100%;padding:6px 9px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;font-weight:600}
@@ -68,7 +69,6 @@ h1{font-size:22px;margin:0}
 .empty{text-align:center;color:var(--text-dim);padding:60px;font-size:14px}
 .spinner{width:28px;height:28px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 12px}
 @keyframes spin{to{transform:rotate(360deg)}}
-/* Modal config */
 .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:100;display:none}
 .modal-bg.open{display:flex}
 .modal{background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:24px;width:100%;max-width:440px}
@@ -77,6 +77,20 @@ h1{font-size:22px;margin:0}
 .modal input{width:100%;padding:9px 11px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px}
 .modal-hint{font-size:11px;color:var(--text-dim);margin-top:4px}
 .modal-actions{display:flex;gap:8px;margin-top:20px;justify-content:flex-end}
+.pagination{display:flex;gap:8px;justify-content:center;align-items:center;margin-top:20px}
+.page-btn{padding:8px 14px;background:var(--panel);border:1px solid var(--border);color:var(--text);border-radius:8px;font-size:13px;cursor:pointer;font-weight:600}
+.page-btn:disabled{opacity:.4;cursor:not-allowed}
+.page-info{font-size:13px;color:var(--text-dim)}
+/* Lightbox */
+.lightbox-bg{position:fixed;inset:0;background:rgba(0,0,0,.9);z-index:300;display:none;align-items:center;justify-content:center;padding:20px}
+.lightbox-bg.open{display:flex}
+.lightbox-bg img{max-width:90vw;max-height:90vh;border-radius:8px}
+.lightbox-close{position:absolute;top:20px;right:20px;background:rgba(255,255,255,.1);border:none;color:#fff;font-size:24px;width:40px;height:40px;border-radius:50%;cursor:pointer}
+/* Recap modal */
+.recap-list{max-height:300px;overflow-y:auto;background:var(--bg);border-radius:8px;padding:10px;font-size:12px;margin-top:10px}
+.recap-item{padding:4px 0;border-bottom:1px solid var(--border);display:flex;justify-content:space-between}
+.recap-item:last-child{border-bottom:none}
+.conflict-warn{background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.3);color:var(--warn);padding:8px 12px;border-radius:8px;font-size:12px;margin-top:8px}
 </style>
 </head>
 <body>
@@ -96,7 +110,6 @@ h1{font-size:22px;margin:0}
         </div>
     </div>
 
-    <!-- Buffer bar -->
     <div class="buffer-bar" id="bufferBar" style="display:none">
         <span class="buffer-label">⏳ Buffer en cours</span>
         <div class="buffer-track"><div class="buffer-fill" id="bufferFill"></div></div>
@@ -112,7 +125,7 @@ h1{font-size:22px;margin:0}
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
             <label style="font-size:12px;color:var(--text-dim);font-weight:600">📅 Début :</label>
             <input type="date" id="startDate" style="padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px">
-            <button class="btn" id="scheduleBtn" disabled onclick="scheduleAll()">🚀 Programmer sur RobinReach</button>
+            <button class="btn" id="scheduleBtn" disabled onclick="confirmScheduleAll()">🚀 Programmer sur RobinReach</button>
         </div>
         <button class="btn-sec btn-danger" id="deleteSelBtn" style="display:none" onclick="deleteSelected()">🗑️ Supprimer sélection</button>
     </div>
@@ -123,9 +136,32 @@ h1{font-size:22px;margin:0}
         <span id="selCount"></span>
     </div>
 
-    <div id="grid" class="grid">
-        <div style="text-align:center;padding:60px;color:var(--text-dim)"><div class="spinner"></div>Chargement...</div>
+    <div class="filters-row">
+        <input type="text" class="search-input" id="searchInput" placeholder="🔍 Rechercher n° TikTok..." oninput="applyFilters()">
+        <select class="search-input" id="sortSelect" onchange="applyFilters()">
+            <option value="num_asc">Tri : N° croissant</option>
+            <option value="num_desc">Tri : N° décroissant</option>
+            <option value="date_desc">Tri : plus récent</option>
+            <option value="date_asc">Tri : plus ancien</option>
+        </select>
+        <span id="userFilters"></span>
     </div>
+
+    <div id="grid" class="grid">
+        <div style="text-align:center;padding:60px;color:var(--text-dim);grid-column:1/-1"><div class="spinner"></div>Chargement...</div>
+    </div>
+
+    <div class="pagination" id="pagination" style="display:none">
+        <button class="page-btn" id="prevPageBtn" onclick="changePage(-1)">← Précédent</button>
+        <span class="page-info" id="pageInfo">Page 1</span>
+        <button class="page-btn" id="nextPageBtn" onclick="changePage(1)">Suivant →</button>
+    </div>
+</div>
+
+<!-- Lightbox -->
+<div class="lightbox-bg" id="lightbox" onclick="closeLightbox()">
+    <button class="lightbox-close" onclick="closeLightbox()">✕</button>
+    <img id="lightboxImg" src="" onclick="event.stopPropagation()">
 </div>
 
 <!-- Modal config comptes -->
@@ -145,8 +181,19 @@ h1{font-size:22px;margin:0}
     </div>
 </div>
 
+<!-- Modal récap avant programmation -->
+<div class="modal-bg" id="recapModal">
+    <div class="modal" style="max-width:520px">
+        <h2>🚀 Confirmer la programmation</h2>
+        <div id="recapContent"></div>
+        <div class="modal-actions">
+            <button class="btn-sec" onclick="closeRecap()">Annuler</button>
+            <button class="btn" onclick="scheduleAll()">✅ Confirmer et programmer</button>
+        </div>
+    </div>
+</div>
+
 <script>
-// ── Thème ──────────────────────────────────────────────────────────────────
 const html=document.documentElement;
 const themeBtn=document.getElementById('themeBtn');
 let theme=localStorage.getItem('theme')||'dark';
@@ -154,29 +201,83 @@ applyTheme(theme);
 function applyTheme(t){theme=t;html.setAttribute('data-theme',t);themeBtn.textContent=t==='dark'?'☀️':'🌙';localStorage.setItem('theme',t)}
 themeBtn.addEventListener('click',()=>applyTheme(theme==='dark'?'light':'dark'));
 
-// ── State ──────────────────────────────────────────────────────────────────
-let tiktoks=[];
+let allTiktoks=[];     // tous les TikToks chargés (accumulés au fil des pages)
+let currentPage=0;
+let perPage=20;
+let totalCount=0;
 let selectedForMain=new Set();
+let checkedForDelete=new Set();
 let accounts={main:'',others:[]};
-let customSlots={};  // r2_key → heure choisie (format "HH:MM" ou ISO datetime pour custom)
+let customSlots={};
+let currentUserFilter='all';
+let currentSearch='';
+let currentSort='num_asc';
 
-// ── Chargement initial ─────────────────────────────────────────────────────
 async function init(){
     const [acRes, bufRes] = await Promise.all([fetch('/api/accounts'), fetch('/api/buffer')]);
     accounts = await acRes.json();
     const buf = await bufRes.json();
     updateBufferBar(buf.pending, buf.pending + buf.needed);
-    await loadQueue();
+    await loadPage(0);
 }
 
-async function loadQueue(){
-    const res=await fetch('/api/queue');
-    const data=await res.json();
-    tiktoks=data.tiktoks||[];
+async function loadPage(page){
+    currentPage = page;
+    document.getElementById('grid').innerHTML = '<div style="text-align:center;padding:60px;color:var(--text-dim);grid-column:1/-1"><div class="spinner"></div>Chargement...</div>';
+    const res = await fetch(`/api/queue?page=${page}&per_page=${perPage}`);
+    const data = await res.json();
+    allTiktoks = data.tiktoks || [];
+    totalCount = data.total || 0;
+    updateUserFilters();
+    applyFilters();
+    updateCounters();
+    updatePagination();
+}
+
+function updatePagination(){
+    const totalPages = Math.max(1, Math.ceil(totalCount / perPage));
+    document.getElementById('pagination').style.display = totalPages > 1 ? 'flex' : 'none';
+    document.getElementById('pageInfo').textContent = `Page ${currentPage+1} / ${totalPages} (${totalCount} au total)`;
+    document.getElementById('prevPageBtn').disabled = currentPage === 0;
+    document.getElementById('nextPageBtn').disabled = currentPage >= totalPages - 1;
+}
+
+function changePage(delta){
+    loadPage(currentPage + delta);
+}
+
+function updateUserFilters(){
+    const users = [...new Set(allTiktoks.map(t=>t.user).filter(Boolean))];
+    const el = document.getElementById('userFilters');
+    el.innerHTML = `<button class="filter-chip ${currentUserFilter==='all'?'active':''}" onclick="setUserFilter('all')">Tous</button>` +
+        users.map(u=>`<button class="filter-chip ${currentUserFilter===u?'active':''}" onclick="setUserFilter('${u}')">${u}</button>`).join('');
+}
+
+function setUserFilter(u){
+    currentUserFilter = u;
+    updateUserFilters();
+    applyFilters();
+}
+
+function applyFilters(){
+    currentSearch = document.getElementById('searchInput').value.trim();
+    currentSort = document.getElementById('sortSelect').value;
     render();
 }
 
-// ── Buffer bar ─────────────────────────────────────────────────────────────
+function getFilteredSorted(){
+    let list = [...allTiktoks];
+    if(currentUserFilter !== 'all') list = list.filter(t => t.user === currentUserFilter);
+    if(currentSearch) list = list.filter(t => String(t.number).includes(currentSearch));
+    switch(currentSort){
+        case 'num_asc': list.sort((a,b)=>(a.number||0)-(b.number||0)); break;
+        case 'num_desc': list.sort((a,b)=>(b.number||0)-(a.number||0)); break;
+        case 'date_desc': list.sort((a,b)=>new Date(b.created_at)-new Date(a.created_at)); break;
+        case 'date_asc': list.sort((a,b)=>new Date(a.created_at)-new Date(b.created_at)); break;
+    }
+    return list;
+}
+
 function updateBufferBar(pending, total){
     const bar=document.getElementById('bufferBar');
     const fill=document.getElementById('bufferFill');
@@ -199,51 +300,51 @@ async function clearBuffer(){
     showStatus('🗑️ Buffer vidé');
 }
 
-// ── Render ─────────────────────────────────────────────────────────────────
 function render(){
     const grid=document.getElementById('grid');
-    const countBadge=document.getElementById('countBadge');
+    const list = getFilteredSorted();
     const dispatchBtn=document.getElementById('dispatchBtn');
-    const scheduleBtn=document.getElementById('scheduleBtn');
     const deleteSelBtn=document.getElementById('deleteSelBtn');
     const deselectBtn=document.getElementById('deselectBtn');
     const selCountEl=document.getElementById('selCount');
 
-    countBadge.textContent=`${tiktoks.length} TikTok(s) en attente`;
-    dispatchBtn.disabled=tiktoks.length===0||!accounts.others?.length;
-    scheduleBtn.disabled=!tiktoks.some(t=>t.account);
-    deleteSelBtn.style.display=selectedForMain.size>0?'inline-block':'none';
+    dispatchBtn.disabled=allTiktoks.length===0||!accounts.others?.length;
+    deleteSelBtn.style.display=checkedForDelete.size>0?'inline-block':'none';
     deselectBtn.style.display=selectedForMain.size>0?'inline-block':'none';
     selCountEl.textContent=selectedForMain.size>0?`${selectedForMain.size} sélectionné(s) → ${accounts.main||'compte principal'}`:'';
 
-    if(!tiktoks.length){
-        grid.innerHTML='<div class="empty">📭 Aucun TikTok en attente<br><br>Génère des images sur le <a href="/" style="color:var(--accent)">Générateur</a> — elles seront automatiquement regroupées ici par 7</div>';
+    if(!list.length){
+        grid.innerHTML='<div class="empty" style="grid-column:1/-1">📭 Aucun TikTok trouvé<br><br>Génère des images sur le <a href="/" style="color:var(--accent)">Générateur</a></div>';
         return;
     }
 
     const allAccounts=[accounts.main,...(accounts.others||[])].filter(Boolean);
 
-    grid.innerHTML=tiktoks.map(t=>{
+    grid.innerHTML=list.map(t=>{
         const sel=selectedForMain.has(t.r2_key);
+        const checked=checkedForDelete.has(t.r2_key);
         const imgs=t.image_urls||[];
         const show=imgs.slice(0,3);
         const rem=imgs.length-3;
         const date=new Date(t.created_at).toLocaleDateString('fr-FR',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});
-        return `<div class="card ${sel?'selected':''}" id="c-${t.id}">
+        return `<div class="card ${sel?'selected':''} ${checked?'checked':''}" id="c-${t.id}">
             <div class="card-header">
                 <div>
-                    <div class="card-num">TikTok ${t.number} <span style="font-size:10px;color:var(--text-dim)">${t.image_keys?.length||0} images</span></div>
+                    <div class="card-num">
+                        <input type="checkbox" ${checked?'checked':''} onchange="toggleCheckDelete('${t.r2_key}')" style="accent-color:var(--danger)">
+                        TikTok ${t.number} <span style="font-size:10px;color:var(--text-dim)">${t.image_keys?.length||0} images</span>
+                    </div>
                     <div class="card-meta">${t.user} · ${date}</div>
                 </div>
                 ${t.account?`<span class="account-tag">${t.account}</span>`:''}
             </div>
             <div class="imgs-grid" id="imgs-${t.id}" data-key="${t.r2_key}">
-                ${imgs.map((u,i)=>`
-                <div class="img-item" draggable="true" data-index="${i}" 
-                     ondragstart="imgDragStart(event,'${t.id}')" 
-                     ondragover="event.preventDefault()" 
+                ${show.map((u,i)=>`
+                <div class="img-item" draggable="true" data-index="${i}"
+                     ondragstart="imgDragStart(event,'${t.id}')"
+                     ondragover="event.preventDefault()"
                      ondrop="imgDrop(event,'${t.id}','${t.r2_key}')">
-                    <img src="${u||''}" loading="lazy" onerror="this.style.opacity='.2'">
+                    <img src="${u||''}" loading="lazy" onerror="this.style.opacity='.15'" onclick="openLightbox('${u}')">
                     <div class="img-overlay">
                         ${i>0?`<button class="img-arrow" onclick="moveImg(event,'${t.r2_key}',${i},${i-1})">←</button>`:''}
                         <button class="img-del" onclick="deleteImage(event,'${t.r2_key}',${i},'${t.id}')">✕</button>
@@ -266,7 +367,7 @@ function render(){
                     <option value="21:00">21h00</option>
                     <option value="custom">🕐 Heure personnalisée...</option>
                 </select>
-                <input type="datetime-local" class="account-select custom-time" id="custom-${t.r2_key.replace(/[^a-z0-9]/gi,'_')}" style="margin-top:4px;display:none" onchange="setCustomTime('${t.r2_key}',this.value)">
+                <input type="datetime-local" class="account-select" id="custom-${t.r2_key.replace(/[^a-z0-9]/gi,'_')}" style="margin-top:4px;display:none" onchange="setCustomTime('${t.r2_key}',this.value)">
                 <div class="card-actions">
                     <div class="mark-btn ${sel?'on':''}" onclick="toggleMain('${t.r2_key}')">
                         ${sel?'⭐ Compte principal':'☆ Marquer principal'}
@@ -282,7 +383,34 @@ function render(){
     }).join('');
 }
 
-// ── Actions ────────────────────────────────────────────────────────────────
+// ── Lightbox ────────────────────────────────────────────────────────────────
+function openLightbox(url){
+    if(!url) return;
+    document.getElementById('lightboxImg').src = url;
+    document.getElementById('lightbox').classList.add('open');
+}
+function closeLightbox(){
+    document.getElementById('lightbox').classList.remove('open');
+}
+
+// ── Sélection suppression ──────────────────────────────────────────────────
+function toggleCheckDelete(key){
+    if(checkedForDelete.has(key)) checkedForDelete.delete(key);
+    else checkedForDelete.add(key);
+    render();
+}
+
+async function deleteSelected(){
+    if(!checkedForDelete.size) return;
+    if(!confirm(`Supprimer ${checkedForDelete.size} TikTok(s) de la file d'attente ?`)) return;
+    for(const key of checkedForDelete){
+        await fetch('/api/queue/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key})});
+    }
+    checkedForDelete.clear();
+    await loadPage(currentPage);
+}
+
+// ── Actions comptes ────────────────────────────────────────────────────────
 function toggleMain(key){
     if(selectedForMain.has(key)){selectedForMain.delete(key);assign(key,'')}
     else{selectedForMain.add(key);if(accounts.main)assign(key,accounts.main)}
@@ -291,13 +419,13 @@ function toggleMain(key){
 
 async function assign(key,account){
     await fetch('/api/queue/assign',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key,account})});
-    const t=tiktoks.find(t=>t.r2_key===key);
+    const t=allTiktoks.find(t=>t.r2_key===key);
     if(t) t.account=account;
     render();
 }
 
 function selectAll(){
-    tiktoks.forEach(t=>{selectedForMain.add(t.r2_key);if(accounts.main)assign(t.r2_key,accounts.main)});
+    getFilteredSorted().forEach(t=>{selectedForMain.add(t.r2_key);if(accounts.main)assign(t.r2_key,accounts.main)});
     render();
 }
 function deselectAll(){selectedForMain.clear();render()}
@@ -308,26 +436,57 @@ async function dispatchAuto(){
         body:JSON.stringify({accounts:accounts.others})});
     const d=await res.json();
     showStatus(`✅ ${d.count} TikTok(s) dispatchés sur ${accounts.others.join(', ')}`);
-    await loadQueue();
+    await loadPage(currentPage);
 }
 
-async function scheduleAll(){
-    const assigned=tiktoks.filter(t=>t.account);
+// ── Créneaux ────────────────────────────────────────────────────────────────
+function setSlot(key, value){
+    const safeId = key.replace(/[^a-z0-9]/gi,'_');
+    const customInput = document.getElementById(`custom-${safeId}`);
+    if(value === 'custom'){
+        if(customInput) customInput.style.display='block';
+        delete customSlots[key];
+    } else if(value === ''){
+        if(customInput) customInput.style.display='none';
+        delete customSlots[key];
+    } else {
+        if(customInput) customInput.style.display='none';
+        customSlots[key] = value;
+    }
+}
+function setCustomTime(key, value){
+    if(value) customSlots[key] = value;
+}
+
+// ── Récap avant programmation globale ──────────────────────────────────────
+function confirmScheduleAll(){
+    const assigned=allTiktoks.filter(t=>t.account);
     if(!assigned.length){alert('Assigne d\'abord un compte à chaque TikTok');return}
     const startDate = document.getElementById('startDate').value;
-    const msg = startDate
-        ? `Programmer ${assigned.length} TikTok(s) à partir du ${startDate} ?`
-        : `Programmer ${assigned.length} TikTok(s) à partir d'aujourd'hui ?`;
-    if(!confirm(msg)) return;
+    const byAccount = {};
+    assigned.forEach(t=>{byAccount[t.account]=(byAccount[t.account]||0)+1});
+    let html = `<p style="font-size:13px;color:var(--text-dim)">Tu vas programmer <b>${assigned.length}</b> TikTok(s) à partir du <b>${startDate||'aujourd\'hui'}</b> :</p>`;
+    html += '<div class="recap-list">' + Object.entries(byAccount).map(([acc,n])=>`<div class="recap-item"><span>${acc}</span><span>${n} TikTok(s)</span></div>`).join('') + '</div>';
+    // Détection conflit simple : même compte + créneau custom identique
+    const customEntries = Object.entries(customSlots);
+    if(customEntries.length){
+        html += `<div class="conflict-warn">⚠️ ${customEntries.length} TikTok(s) ont un créneau personnalisé — vérifie qu'ils ne se chevauchent pas.</div>`;
+    }
+    document.getElementById('recapContent').innerHTML = html;
+    document.getElementById('recapModal').classList.add('open');
+}
+function closeRecap(){ document.getElementById('recapModal').classList.remove('open'); }
+
+async function scheduleAll(){
+    closeRecap();
+    const assigned=allTiktoks.filter(t=>t.account);
+    const startDate = document.getElementById('startDate').value;
     showStatus(`🚀 Programmation de ${assigned.length} TikTok(s) en cours...`);
     document.getElementById('scheduleBtn').disabled=true;
     const res=await fetch('/api/queue/schedule',{
         method:'POST',
         headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({
-            start_date: startDate || null,
-            custom_slots: customSlots
-        })
+        body:JSON.stringify({start_date: startDate || null, custom_slots: customSlots})
     });
     const d=await res.json();
     document.getElementById('scheduleBtn').disabled=false;
@@ -342,71 +501,13 @@ async function scheduleAll(){
         alert(recap);
         showStatus(`✅ ${d.scheduled} TikTok(s) programmés avec succès !`);
         customSlots={};
-        // Retirer les TikToks programmés de la liste sans recharger toute la page
-        if(d.details?.length){
-            const scheduledNums = new Set(d.details.map(x=>String(x.tiktok)));
-            tiktoks = tiktoks.filter(t=>!scheduledNums.has(String(t.number)));
-            selectedForMain.clear();
-            render();
-        }
     }
+    await loadPage(currentPage);
 }
 
-async function deleteTiktok(key){
-    if(!confirm('Supprimer ce TikTok et ses images ?')) return;
-    await fetch('/api/queue/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key})});
-    selectedForMain.delete(key);
-    await loadQueue();
-}
-
-async function deleteSelected(){
-    if(!confirm(`Supprimer ${selectedForMain.size} TikTok(s) ?`)) return;
-    for(const key of selectedForMain){
-        await fetch('/api/queue/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key})});
-    }
-    selectedForMain.clear();
-    await loadQueue();
-}
-
-async function moveImg(e, r2Key, fromIndex, toIndex){
-    e.stopPropagation();
-    const t = tiktoks.find(t=>t.r2_key===r2Key);
-    if(!t) return;
-    const imgs = t.image_urls||[];
-    const newOrder = Array.from({length:imgs.length},(_,i)=>i);
-    // Swap les deux positions
-    [newOrder[fromIndex], newOrder[toIndex]] = [newOrder[toIndex], newOrder[fromIndex]];
-    await fetch('/api/queue/reorder',{
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({key:r2Key, order:newOrder})
-    });
-    await loadQueue();
-}
-
-function setSlot(key, value){
-    const safeId = key.replace(/[^a-z0-9]/gi,'_');
-    const customInput = document.getElementById(`custom-${safeId}`);
-    if(value === 'custom'){
-        if(customInput) customInput.style.display='block';
-        delete customSlots[key];
-    } else if(value === ''){
-        if(customInput) customInput.style.display='none';
-        delete customSlots[key];
-    } else {
-        if(customInput) customInput.style.display='none';
-        customSlots[key] = value;  // "HH:MM" en heure française
-    }
-}
-
-function setCustomTime(key, value){
-    // value est en format "2026-07-18T02:00" (heure locale navigateur = heure française)
-    if(value) customSlots[key] = value;  // ISO datetime local
-}
-
-// ── Programmer un seul TikTok ──────────────────────────────────────────────
+// ── Programmer un seul TikTok ───────────────────────────────────────────────
 async function scheduleOne(key){
-    const t = tiktoks.find(t=>t.r2_key===key);
+    const t = allTiktoks.find(t=>t.r2_key===key);
     if(!t||!t.account){alert('Assigne d\'abord un compte.');return}
 
     const btn = document.querySelector(`#c-${t.id} .schedule-one-btn`);
@@ -431,12 +532,13 @@ async function scheduleOne(key){
         if(d.scheduled>0&&d.details?.length){
             const detail = d.details[0];
             if(statusEl){statusEl.className='card-status ok';statusEl.textContent=`✅ Programmé le ${detail.time}`}
-            // Retirer de la liste sans recharger toute la page
-            tiktoks = tiktoks.filter(t=>t.r2_key!==key);
+            allTiktoks = allTiktoks.filter(t=>t.r2_key!==key);
             selectedForMain.delete(key);
+            checkedForDelete.delete(key);
             delete customSlots[key];
-            // Mettre à jour juste le compteur et le bouton "Programmer tout"
+            totalCount = Math.max(0, totalCount - 1);
             updateCounters();
+            render();
         } else {
             const err = d.errors?.[0] || 'Erreur inconnue';
             if(statusEl){statusEl.className='card-status err';statusEl.textContent=`❌ ${err}`}
@@ -451,10 +553,16 @@ async function scheduleOne(key){
 function updateCounters(){
     const countBadge=document.getElementById('countBadge');
     const scheduleBtn=document.getElementById('scheduleBtn');
-    const dispatchBtn=document.getElementById('dispatchBtn');
-    countBadge.textContent=`${tiktoks.length} TikTok(s) en attente`;
-    scheduleBtn.disabled=!tiktoks.some(t=>t.account);
-    dispatchBtn.disabled=tiktoks.length===0||!accounts.others?.length;
+    countBadge.textContent=`${totalCount} TikTok(s) en attente`;
+    scheduleBtn.disabled=!allTiktoks.some(t=>t.account);
+}
+
+async function deleteTiktok(key){
+    if(!confirm('Supprimer ce TikTok et ses images ?')) return;
+    await fetch('/api/queue/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key})});
+    selectedForMain.delete(key);
+    checkedForDelete.delete(key);
+    await loadPage(currentPage);
 }
 
 // ── Drag & drop images ─────────────────────────────────────────────────────
@@ -473,35 +581,38 @@ async function imgDrop(e, tiktokId, r2Key){
     if(dragTiktokId !== tiktokId) return;
     const destIndex = parseInt(e.currentTarget.dataset.index);
     if(dragSrcIndex === null || dragSrcIndex === destIndex) return;
-
-    const t = tiktoks.find(t=>t.id===tiktokId);
+    const t = allTiktoks.find(t=>t.id===tiktokId);
     if(!t) return;
     const imgs = t.image_urls || [];
     const newOrder = Array.from({length:imgs.length},(_,i)=>i);
-    // Swap
     newOrder.splice(destIndex, 0, newOrder.splice(dragSrcIndex, 1)[0]);
-
-    await fetch('/api/queue/reorder',{
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({key:r2Key, order:newOrder})
-    });
+    await fetch('/api/queue/reorder',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:r2Key, order:newOrder})});
     dragSrcIndex = null;
-    await loadQueue();
+    await loadPage(currentPage);
+}
+
+async function moveImg(e, r2Key, fromIndex, toIndex){
+    e.stopPropagation();
+    const t = allTiktoks.find(t=>t.r2_key===r2Key);
+    if(!t) return;
+    const imgs = t.image_urls||[];
+    const newOrder = Array.from({length:imgs.length},(_,i)=>i);
+    [newOrder[fromIndex], newOrder[toIndex]] = [newOrder[toIndex], newOrder[fromIndex]];
+    // Mise à jour optimiste locale avant réponse serveur pour fluidité
+    const newUrls = newOrder.map(i=>imgs[i]);
+    t.image_urls = newUrls;
+    render();
+    await fetch('/api/queue/reorder',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:r2Key, order:newOrder})});
 }
 
 async function deleteImage(e, r2Key, imgIndex, tiktokId){
     e.stopPropagation();
     if(!confirm('Supprimer cette image du TikTok ?')) return;
-    const res = await fetch('/api/queue/delete_image',{
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({key:r2Key, index:imgIndex})
-    });
+    const res = await fetch('/api/queue/delete_image',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:r2Key, index:imgIndex})});
     const d = await res.json();
     if(d.success){
-        showStatus(`🗑️ Image supprimée — ${d.remaining} image(s) restante(s) dans ce TikTok`);
-        await loadQueue();
+        showStatus(`🗑️ Image supprimée — ${d.remaining} image(s) restante(s)`);
+        await loadPage(currentPage);
     }
 }
 
@@ -510,7 +621,6 @@ function openConfig(){
     const available = accounts.available || [];
     const mainSel = document.getElementById('mainAccount');
     mainSel.innerHTML = available.map(a => `<option value="${a}" ${a===accounts.main?'selected':''}>${a}</option>`).join('');
-
     const checksDiv = document.getElementById('otherAccountsChecks');
     checksDiv.innerHTML = available.map(a => `
         <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:500;cursor:pointer">
@@ -518,7 +628,6 @@ function openConfig(){
             ${a}
         </label>
     `).join('');
-
     document.getElementById('configModal').classList.add('open');
 }
 function closeConfig(){document.getElementById('configModal').classList.remove('open')}
@@ -532,7 +641,6 @@ async function saveConfig(){
     render();
 }
 
-// ── Status ─────────────────────────────────────────────────────────────────
 function showStatus(msg){
     const bar=document.getElementById('statusBar');
     bar.textContent=msg;bar.classList.add('show');
@@ -540,15 +648,14 @@ function showStatus(msg){
 }
 
 // ── Init ───────────────────────────────────────────────────────────────────
-// Mettre la date d'aujourd'hui par défaut
 document.getElementById('startDate').value = new Date().toISOString().slice(0,10);
 init();
+// Refresh léger du buffer uniquement (pas tout le grid) toutes les 20s
 setInterval(async()=>{
     const res=await fetch('/api/buffer');
     const buf=await res.json();
     updateBufferBar(buf.pending,buf.pending+buf.needed);
-},15000);
-setInterval(loadQueue,30000);
+},20000);
 </script>
 </body>
 </html>
