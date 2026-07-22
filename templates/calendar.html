@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Calendrier — Vola Kits</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root[data-theme="dark"]{
+    --bg:#0a0b0f;--bg-elevated:#0f1117;--panel:#15171e;--panel-hover:#1a1d26;
+    --border:#242832;--border-strong:#323847;
+    --accent:#4ade80;--accent-grad:linear-gradient(135deg,#4ade80,#22d3ee);--accent-dim:rgba(74,222,128,.12);
+    --text:#f1f3f6;--text-dim:#8b93a3;--text-faint:#5b6373;
+    --danger:#f87171;--danger-dim:rgba(248,113,113,.12);
+    --warn:#fbbf24;--warn-dim:rgba(251,191,36,.12);
+    --purple:#a78bfa;--purple-dim:rgba(167,139,250,.12);
+    --shadow-sm:0 1px 2px rgba(0,0,0,.3);
+    --shadow-md:0 4px 12px rgba(0,0,0,.35),0 1px 3px rgba(0,0,0,.3);
+    --shadow-lg:0 12px 32px rgba(0,0,0,.45),0 2px 8px rgba(0,0,0,.3);
+}
+:root[data-theme="light"]{
+    --bg:#f7f8fa;--bg-elevated:#ffffff;--panel:#ffffff;--panel-hover:#f9fafb;
+    --border:#e5e7eb;--border-strong:#d1d5db;
+    --accent:#16a34a;--accent-grad:linear-gradient(135deg,#16a34a,#0891b2);--accent-dim:rgba(22,163,74,.08);
+    --text:#0f172a;--text-dim:#64748b;--text-faint:#94a3b8;
+    --danger:#dc2626;--danger-dim:rgba(220,38,38,.08);
+    --warn:#d97706;--warn-dim:rgba(217,119,6,.08);
+    --purple:#7c3aed;--purple-dim:rgba(124,58,237,.08);
+    --shadow-sm:0 1px 2px rgba(15,23,42,.06);
+    --shadow-md:0 4px 12px rgba(15,23,42,.08),0 1px 3px rgba(15,23,42,.06);
+    --shadow-lg:0 12px 32px rgba(15,23,42,.12),0 2px 8px rgba(15,23,42,.06);
+}
+*{box-sizing:border-box}
+::selection{background:var(--accent);color:#0a0b0f}
+body{margin:0;font-family:'Inter',-apple-system,BlinkMacSystemFont,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;padding:32px 24px;-webkit-font-smoothing:antialiased;letter-spacing:-.01em}
+.wrap{max-width:1400px;margin:0 auto}
+@keyframes fadeInUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ── Topbar ── */
+.topbar{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:24px;flex-wrap:wrap;gap:12px}
+h1{font-size:24px;margin:0;font-weight:800;letter-spacing:-.02em}
+.nav{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.nav a{color:var(--text-dim);text-decoration:none;font-size:13px;font-weight:600;padding:6px 10px;border-radius:8px;transition:all .15s}
+.nav a:hover{color:var(--text);background:var(--panel-hover)}
+.theme-btn{background:var(--panel);border:1px solid var(--border);color:var(--text);padding:6px 12px;border-radius:100px;cursor:pointer;font-size:13px;font-weight:600;box-shadow:var(--shadow-sm);transition:all .15s}
+.theme-btn:hover{border-color:var(--border-strong);transform:translateY(-1px)}
+@media(max-width:640px){
+    .topbar{flex-direction:column;align-items:stretch}
+    .nav{flex-wrap:nowrap;overflow-x:auto;padding-bottom:4px;scrollbar-width:none}
+    .nav::-webkit-scrollbar{display:none}
+    .nav a,.theme-btn{flex-shrink:0}
+}
+
+/* ── Contrôles ── */
+.controls{display:flex;align-items:center;gap:12px;margin-bottom:20px;flex-wrap:wrap}
+.month-nav{display:flex;align-items:center;gap:10px}
+.month-btn{background:var(--panel);border:1px solid var(--border);color:var(--text);padding:8px 14px;border-radius:10px;cursor:pointer;font-size:18px;font-weight:700;transition:all .15s;box-shadow:var(--shadow-sm)}
+.month-btn:hover{border-color:var(--border-strong);transform:translateY(-1px)}
+.month-label{font-size:18px;font-weight:800;letter-spacing:-.02em;min-width:180px;text-align:center}
+.account-tabs{display:flex;gap:6px;flex-wrap:wrap}
+.account-tab{padding:7px 14px;background:var(--panel);border:1px solid var(--border);color:var(--text-dim);border-radius:100px;font-size:12px;font-weight:600;cursor:pointer;transition:all .15s}
+.account-tab:hover{border-color:var(--border-strong)}
+.account-tab.active{background:var(--accent-grad);color:#06170d;border-color:transparent}
+
+/* ── Stats rapides ── */
+.quick-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px}
+@media(max-width:700px){.quick-stats{grid-template-columns:1fr 1fr}}
+.stat{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:14px 16px;box-shadow:var(--shadow-sm)}
+.stat-label{font-size:11px;color:var(--text-dim);font-weight:600;margin-bottom:5px}
+.stat-value{font-size:22px;font-weight:800;letter-spacing:-.02em}
+.stat-sub{font-size:11px;color:var(--text-faint);margin-top:4px}
+
+/* ── Calendrier ── */
+.calendar{background:var(--panel);border:1px solid var(--border);border-radius:18px;overflow:hidden;box-shadow:var(--shadow-sm)}
+.cal-header{display:grid;grid-template-columns:repeat(7,1fr);border-bottom:1px solid var(--border)}
+.cal-dow{padding:10px 0;text-align:center;font-size:11px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:.05em}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr)}
+.cal-day{border-right:1px solid var(--border);border-bottom:1px solid var(--border);min-height:110px;padding:8px;transition:background .15s;position:relative}
+.cal-day:nth-child(7n){border-right:none}
+.cal-day.other-month{opacity:.3}
+.cal-day.today{background:var(--accent-dim)}
+.cal-day.today .day-num{background:var(--accent-grad);color:#06170d;border-radius:100px;width:24px;height:24px;display:flex;align-items:center;justify-content:center}
+.day-num{font-size:12px;font-weight:700;margin-bottom:5px;color:var(--text-dim)}
+.cal-day.today .day-num{color:#06170d}
+.day-events{display:flex;flex-direction:column;gap:3px}
+.event-pill{padding:2px 6px;border-radius:5px;font-size:10px;font-weight:600;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;align-items:center;gap:4px;transition:opacity .15s}
+.event-pill:hover{opacity:.8}
+.event-pill.scheduled{background:var(--accent-dim);color:var(--accent)}
+.event-pill.published{background:rgba(167,139,250,.15);color:var(--purple)}
+.event-pill.failed{background:var(--danger-dim);color:var(--danger)}
+.event-thumb{width:12px;height:12px;border-radius:2px;object-fit:cover;flex-shrink:0}
+.more-events{font-size:9px;color:var(--text-faint);font-weight:600;padding:1px 4px}
+.day-capacity{position:absolute;bottom:4px;right:6px;display:flex;gap:2px}
+.cap-dot{width:5px;height:5px;border-radius:50%}
+.cap-dot.filled{background:var(--accent)}
+.cap-dot.empty{background:var(--border)}
+
+/* ── Popup détail jour ── */
+.day-popup-bg{position:fixed;inset:0;background:rgba(5,6,10,.7);backdrop-filter:blur(3px);z-index:200;display:none;align-items:center;justify-content:center;padding:20px}
+.day-popup-bg.open{display:flex}
+.day-popup{background:var(--panel);border:1px solid var(--border);border-radius:18px;padding:24px;width:100%;max-width:480px;max-height:80vh;overflow-y:auto;box-shadow:var(--shadow-lg)}
+.day-popup h2{font-size:16px;margin:0 0 16px;font-weight:800;letter-spacing:-.01em}
+.popup-event{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)}
+.popup-event:last-child{border-bottom:none}
+.popup-thumb{width:40px;height:56px;border-radius:6px;object-fit:cover;background:var(--bg-elevated);flex-shrink:0}
+.popup-info{flex:1;min-width:0}
+.popup-time{font-size:13px;font-weight:700}
+.popup-account{font-size:11px;color:var(--text-dim);font-weight:500}
+.popup-status{font-size:10px;padding:2px 8px;border-radius:100px;font-weight:700;display:inline-block;margin-top:3px}
+.status-scheduled{background:var(--accent-dim);color:var(--accent)}
+.status-published{background:var(--purple-dim);color:var(--purple)}
+.status-failed{background:var(--danger-dim);color:var(--danger)}
+.popup-close{background:var(--bg-elevated);border:1px solid var(--border);color:var(--text);padding:8px 16px;border-radius:10px;cursor:pointer;font-size:13px;font-weight:600;margin-top:16px;width:100%;transition:all .15s}
+.popup-close:hover{border-color:var(--border-strong)}
+
+/* ── Légende ── */
+.legend{display:flex;gap:16px;margin-top:16px;flex-wrap:wrap}
+.legend-item{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-dim);font-weight:500}
+.legend-dot{width:10px;height:10px;border-radius:3px}
+
+.spinner{width:28px;height:28px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;margin:40px auto}
+</style>
+</head>
+<body>
+<div class="wrap">
+    <div class="topbar">
+        <div>
+            <h1>📅 Calendrier</h1>
+            <div style="color:var(--text-dim);font-size:13px;margin-top:3px;font-weight:500">Planning des publications par compte</div>
+        </div>
+        <div class="nav">
+            <a href="/">🎨 Générateur</a>
+            <a href="/queue">📋 File d'attente</a>
+            <a href="/scheduled">✅ Programmés</a>
+            <a href="/dashboard">📊 Dashboard</a>
+            <a href="/stats">📈 Stats</a>
+            <button class="theme-btn" id="themeBtn">☀️</button>
+        </div>
+    </div>
+
+    <div class="controls">
+        <div class="month-nav">
+            <button class="month-btn" onclick="changeMonth(-1)">‹</button>
+            <div class="month-label" id="monthLabel">—</div>
+            <button class="month-btn" onclick="changeMonth(1)">›</button>
+        </div>
+        <div class="account-tabs" id="accountTabs">
+            <div class="account-tab active" data-account="all" onclick="setAccount('all',this)">Tous les comptes</div>
+        </div>
+    </div>
+
+    <div class="quick-stats" id="quickStats">
+        <div class="stat"><div class="stat-label">Ce mois</div><div class="stat-value" id="statMonth">—</div><div class="stat-sub">posts programmés</div></div>
+        <div class="stat"><div class="stat-label">Cette semaine</div><div class="stat-value" id="statWeek">—</div><div class="stat-sub">posts</div></div>
+        <div class="stat"><div class="stat-label">Jours restants</div><div class="stat-value" id="statDaysLeft">—</div><div class="stat-sub">avec au moins 1 post</div></div>
+        <div class="stat"><div class="stat-label">Jours vides</div><div class="stat-value" id="statEmpty">—</div><div class="stat-sub" id="statEmptyHint">ce mois-ci</div></div>
+    </div>
+
+    <div class="calendar">
+        <div class="cal-header">
+            <div class="cal-dow">Lun</div>
+            <div class="cal-dow">Mar</div>
+            <div class="cal-dow">Mer</div>
+            <div class="cal-dow">Jeu</div>
+            <div class="cal-dow">Ven</div>
+            <div class="cal-dow">Sam</div>
+            <div class="cal-dow">Dim</div>
+        </div>
+        <div class="cal-grid" id="calGrid">
+            <div class="spinner" style="grid-column:1/-1"></div>
+        </div>
+    </div>
+
+    <div class="legend">
+        <div class="legend-item"><div class="legend-dot" style="background:var(--accent)"></div>Programmé</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--purple)"></div>Publié</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--danger)"></div>Échoué</div>
+    </div>
+</div>
+
+<!-- Popup détail jour -->
+<div class="day-popup-bg" id="dayPopup">
+    <div class="day-popup">
+        <h2 id="popupTitle">—</h2>
+        <div id="popupEvents"></div>
+        <button class="popup-close" onclick="closePopup()">Fermer</button>
+    </div>
+</div>
+
+<script>
+// ── Thème ──
+const html=document.documentElement;
+const themeBtn=document.getElementById('themeBtn');
+let theme=localStorage.getItem('theme')||'dark';
+applyTheme(theme);
+function applyTheme(t){theme=t;html.setAttribute('data-theme',t);themeBtn.textContent=t==='dark'?'☀️':'🌙';localStorage.setItem('theme',t)}
+themeBtn.addEventListener('click',()=>applyTheme(theme==='dark'?'light':'dark'));
+
+// ── State ──
+let currentAccount='all';
+let allEvents=[];
+let scheduleTimes={};
+let currentDate=new Date();
+let viewYear=currentDate.getFullYear();
+let viewMonth=currentDate.getMonth(); // 0-11
+
+// ── Init ──
+async function init(){
+    const res=await fetch('/api/calendar');
+    const data=await res.json();
+    allEvents=data.events||[];
+    scheduleTimes=data.schedule_times||{};
+
+    // Construire les onglets de comptes
+    const tabs=document.getElementById('accountTabs');
+    tabs.innerHTML=`<div class="account-tab active" data-account="all" onclick="setAccount('all',this)">Tous</div>`;
+    (data.accounts||[]).forEach(acc=>{
+        const tab=document.createElement('div');
+        tab.className='account-tab';
+        tab.dataset.account=acc;
+        tab.onclick=function(){setAccount(acc,this)};
+        tab.textContent=acc;
+        tabs.appendChild(tab);
+    });
+
+    renderCalendar();
+}
+
+function setAccount(account,el){
+    currentAccount=account;
+    document.querySelectorAll('.account-tab').forEach(t=>t.classList.remove('active'));
+    el.classList.add('active');
+    renderCalendar();
+}
+
+function changeMonth(delta){
+    viewMonth+=delta;
+    if(viewMonth>11){viewMonth=0;viewYear++}
+    if(viewMonth<0){viewMonth=11;viewYear--}
+    renderCalendar();
+}
+
+function getFilteredEvents(){
+    return currentAccount==='all'?allEvents:allEvents.filter(e=>e.account===currentAccount);
+}
+
+function getMaxSlotsPerDay(){
+    if(currentAccount==='all') return null; // pas de limite affichée en mode "tous"
+    const times=scheduleTimes[currentAccount]||[];
+    return times.length;
+}
+
+function renderCalendar(){
+    const events=getFilteredEvents();
+    const maxSlots=getMaxSlotsPerDay();
+
+    // Titre du mois
+    const monthNames=['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
+    document.getElementById('monthLabel').textContent=`${monthNames[viewMonth]} ${viewYear}`;
+
+    // Grouper les events par date
+    const byDate={};
+    events.forEach(e=>{
+        if(!byDate[e.date]) byDate[e.date]={events:[]};
+        byDate[e.date].events.push(e);
+    });
+
+    // Stats rapides
+    const now=new Date();
+    const monthStr=`${viewYear}-${String(viewMonth+1).padStart(2,'0')}`;
+    const thisMonthEvents=events.filter(e=>e.date.startsWith(monthStr));
+    document.getElementById('statMonth').textContent=thisMonthEvents.length;
+
+    const weekStart=new Date(now);
+    weekStart.setDate(now.getDate()-now.getDay()+1);
+    weekStart.setHours(0,0,0,0);
+    const weekEnd=new Date(weekStart);weekEnd.setDate(weekStart.getDate()+7);
+    const thisWeekEvents=events.filter(e=>{const d=new Date(e.date);return d>=weekStart&&d<weekEnd});
+    document.getElementById('statWeek').textContent=thisWeekEvents.length;
+
+    // Jours avec posts ce mois
+    const daysWithPosts=new Set(thisMonthEvents.map(e=>e.date));
+    const daysInMonth=new Date(viewYear,viewMonth+1,0).getDate();
+    const today=new Date();
+    let daysLeft=0;
+    for(let d=1;d<=daysInMonth;d++){
+        const dateStr=`${viewYear}-${String(viewMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+        const dayDate=new Date(viewYear,viewMonth,d);
+        if(dayDate>=today&&daysWithPosts.has(dateStr)) daysLeft++;
+    }
+    document.getElementById('statDaysLeft').textContent=daysLeft;
+
+    // Jours vides restants ce mois
+    let emptyDays=0;
+    for(let d=1;d<=daysInMonth;d++){
+        const dateStr=`${viewYear}-${String(viewMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+        const dayDate=new Date(viewYear,viewMonth,d);
+        if(dayDate>=today&&!daysWithPosts.has(dateStr)) emptyDays++;
+    }
+    document.getElementById('statEmpty').textContent=emptyDays;
+    document.getElementById('statEmptyHint').textContent=emptyDays===0?'🎉 Tout est planifié !':'jours sans post ce mois';
+
+    // Construire la grille
+    const firstDay=new Date(viewYear,viewMonth,1);
+    let startDow=firstDay.getDay(); // 0=dim
+    startDow=startDow===0?6:startDow-1; // Convertir en lun=0
+
+    const grid=document.getElementById('calGrid');
+    let html='';
+
+    // Jours du mois précédent
+    const prevMonthDays=new Date(viewYear,viewMonth,0).getDate();
+    for(let i=startDow-1;i>=0;i--){
+        html+=`<div class="cal-day other-month"><div class="day-num">${prevMonthDays-i}</div></div>`;
+    }
+
+    // Jours du mois courant
+    const todayStr=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+    for(let d=1;d<=daysInMonth;d++){
+        const dateStr=`${viewYear}-${String(viewMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+        const isToday=dateStr===todayStr;
+        const dayEvents=(byDate[dateStr]?.events||[]).sort((a,b)=>a.time.localeCompare(b.time));
+        const show=dayEvents.slice(0,3);
+        const more=dayEvents.length-3;
+
+        // Indicateurs de capacité
+        let capDots='';
+        if(maxSlots){
+            for(let i=0;i<maxSlots;i++){
+                capDots+=`<div class="cap-dot ${i<dayEvents.length?'filled':'empty'}"></div>`;
+            }
+        }
+
+        const eventsHtml=show.map(e=>{
+            const cls=e.real_status==='published'||e.real_status==='posted'?'published':e.real_status==='failed'?'failed':'scheduled';
+            const thumbHtml=e.thumb?`<img class="event-thumb" src="${e.thumb}" onerror="this.style.display='none'">`:'';
+            return `<div class="event-pill ${cls}" onclick="openPopup('${dateStr}');event.stopPropagation();">${thumbHtml}${e.time}</div>`;
+        }).join('');
+
+        html+=`<div class="cal-day${isToday?' today':''}" onclick="openPopup('${dateStr}')">
+            <div class="day-num">${d}</div>
+            <div class="day-events">${eventsHtml}${more>0?`<div class="more-events">+${more} autres</div>`:''}</div>
+            ${capDots?`<div class="day-capacity">${capDots}</div>`:''}
+        </div>`;
+    }
+
+    // Jours du mois suivant
+    const totalCells=startDow+daysInMonth;
+    const remaining=(7-totalCells%7)%7;
+    for(let i=1;i<=remaining;i++){
+        html+=`<div class="cal-day other-month"><div class="day-num">${i}</div></div>`;
+    }
+
+    grid.innerHTML=html;
+}
+
+// ── Popup détail ──
+function openPopup(dateStr){
+    const events=getFilteredEvents().filter(e=>e.date===dateStr).sort((a,b)=>a.time.localeCompare(b.time));
+    if(!events.length) return;
+
+    const [y,m,d]=dateStr.split('-');
+    document.getElementById('popupTitle').textContent=`${d}/${m}/${y} — ${events.length} post(s)`;
+
+    const html=events.map(e=>{
+        const cls=e.real_status==='published'||e.real_status==='posted'?'published':e.real_status==='failed'?'failed':'scheduled';
+        const label=cls==='published'?'✅ Publié':cls==='failed'?'❌ Échoué':'🕐 Programmé';
+        const thumbHtml=e.thumb?`<img class="popup-thumb" src="${e.thumb}" onerror="this.style.background='var(--bg-elevated)';this.style.display='block'">`:`<div class="popup-thumb"></div>`;
+        return `<div class="popup-event">
+            ${thumbHtml}
+            <div class="popup-info">
+                <div class="popup-time">${e.time}</div>
+                <div class="popup-account">${e.account}</div>
+                <span class="popup-status status-${cls}">${label}</span>
+            </div>
+        </div>`;
+    }).join('');
+
+    document.getElementById('popupEvents').innerHTML=html;
+    document.getElementById('dayPopup').classList.add('open');
+}
+function closePopup(){document.getElementById('dayPopup').classList.remove('open')}
+document.getElementById('dayPopup').addEventListener('click',function(e){if(e.target===this)closePopup()});
+
+init();
+// Refresh toutes les 5 minutes
+setInterval(init,300000);
+</script>
+</body>
+</html>
