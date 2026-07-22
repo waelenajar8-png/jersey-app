@@ -48,8 +48,11 @@ tr:last-child td{border-bottom:none}
         <h1>📊 Dashboard</h1>
         <div class="nav">
             <a href="/">🎨 Générateur</a>
+            <a href="/queue">📋 File d'attente</a>
+            <a href="/scheduled">✅ Programmés</a>
             <a href="/stats">📈 Stats</a>
             <a href="/templates">🗂️ Templates</a>
+            <a href="/remove_box">🗑️ Supprimer boîte</a>
             <button class="theme-btn" id="themeBtn">☀️ Mode clair</button>
         </div>
     </div>
@@ -148,8 +151,7 @@ const today = new Date().toISOString().slice(0,10);
 const rpd = parseInt(localStorage.getItem(`rpd_${today}`) || '0');
 document.getElementById('rpdValue').textContent = `${1000 - rpd} / 1000`;
 
-// Auto-refresh toutes les 30 secondes
-setTimeout(() => location.reload(), 30000);
+// Pas d'auto-reload brutal — l'utilisateur peut rafraîchir manuellement (F5) s'il veut les données à jour
 </script>
 </body>
 </html>
