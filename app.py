@@ -1601,3 +1601,70 @@ def api_template_image():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT",5000))
     app.run(host="0.0.0.0", port=port, debug=False, threaded=True)
+
+@app.route("/calendar")
+def calendar_page():
+    return render_template("calendar.html")
+
+@app.route("/api/calendar")
+def api_calendar():
+    """Retourne tous les TikToks programmés groupés par compte et par date"""
+    account_filter = request.args.get("account", "all")
+    
+    # Lire tous les TikToks programmés
+    keys = r2_list_keys(PFX_SCHEDULED)
+    events = []
+    
+    for k in keys:
+        if "/imgs/" in k:
+            continue
+        d = r2_get_json(k)
+        if not d or not d.get("scheduled_at"):
+            continue
+        acc = d.get("account", "")
+        if account_filter != "all" and acc != account_filter:
+            continue
+        
+        # Convertir en heure Paris pour l'affichage
+        try:
+            from zoneinfo import ZoneInfo
+            paris_tz = ZoneInfo("Europe/Paris")
+            dt_utc = datetime.fromisoformat(d["scheduled_at"])
+            if dt_utc.tzinfo is None:
+                dt_utc = dt_utc.replace(tzinfo=timezone.utc)
+            dt_paris = dt_utc.astimezone(paris_tz)
+            date_str = dt_paris.strftime("%Y-%m-%d")
+            time_str = dt_paris.strftime("%Hh%M")
+        except Exception:
+            date_str = d["scheduled_at"][:10]
+            time_str = d["scheduled_at"][11:16]
+        
+        # Thumbnail : première image
+        thumb_url = None
+        img_keys = d.get("image_keys", [])
+        if img_keys:
+            thumb_url = r2_presigned(img_keys[0], expires=86400)
+        
+        events.append({
+            "id": d.get("id"),
+            "number": d.get("number"),
+            "account": acc,
+            "date": date_str,
+            "time": time_str,
+            "scheduled_at": d.get("scheduled_at"),
+            "real_status": d.get("real_status", "scheduled"),
+            "thumb": thumb_url,
+            "r2_key": k,
+        })
+    
+    # Stats par compte
+    accounts_list = list(ROBINREACH_ACCOUNTS.keys())
+    
+    return jsonify({
+        "events": events,
+        "accounts": accounts_list,
+        "schedule_times": {
+            acc: get_schedule_times_for_account(acc)
+            for acc in accounts_list
+        }
+    })
