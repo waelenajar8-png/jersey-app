@@ -5,6 +5,24 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>File d'attente — TikToks</title>
 <style>
+@keyframes fadeInUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.card{animation:fadeInUp .3s ease both}
+.card:hover{box-shadow:0 4px 16px rgba(0,0,0,.15);transform:translateY(-2px);transition:transform .2s,box-shadow .2s,border-color .15s}
+.img-item img{transition:transform .25s ease}
+.img-item:hover img{transform:scale(1.04)}
+.btn,.btn-sec,.btn-danger,.theme-btn,.config-btn,.page-btn{transition:transform .15s,box-shadow .15s,opacity .15s}
+.btn:hover:not(:disabled),.btn-sec:hover:not(:disabled),.page-btn:hover:not(:disabled){transform:translateY(-1px);box-shadow:0 3px 10px rgba(0,0,0,.2)}
+.filter-chip,.filter-btn{transition:all .15s}
+.filter-chip:hover,.filter-btn:hover{transform:translateY(-1px)}
+.status-bar{transition:opacity .3s,transform .3s}
+.status-bar:not(.show){opacity:0;transform:translateY(-4px);pointer-events:none}
+.status-bar.show{opacity:1;transform:translateY(0)}
+.buffer-fill,.week-fill{transition:width .5s cubic-bezier(.4,0,.2,1)}
+.mark-btn,.schedule-one-btn,.unschedule-btn{transition:all .15s}
+.mark-btn:hover,.schedule-one-btn:hover:not(:disabled){transform:translateY(-1px)}
+.spinner{animation:spin .8s linear infinite}
+</style>
+<style>
 :root[data-theme="dark"]{--bg:#0f1115;--panel:#1a1d24;--border:#2a2e37;--accent:#4ade80;--text:#e5e7eb;--text-dim:#9ca3af;--danger:#f87171;--warn:#fbbf24;--purple:#a78bfa}
 :root[data-theme="light"]{--bg:#f3f4f6;--panel:#fff;--border:#d1d5db;--accent:#16a34a;--text:#111827;--text-dim:#6b7280;--danger:#ef4444;--warn:#d97706;--purple:#7c3aed}
 *{box-sizing:border-box}
