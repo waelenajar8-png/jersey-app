@@ -39,6 +39,7 @@ PFX_LOGS      = "logs/"
 KEY_BUFFER    = "buffer/pending.json"
 KEY_COUNTER   = "meta/tiktok_counter.json"
 KEY_ACCOUNTS  = "meta/accounts.json"
+KEY_USED_SLOTS = "meta/used_slots.json"
 
 # Lock pour éviter race conditions sur le compteur/buffer
 _r2_lock = threading.Lock()
@@ -586,6 +587,40 @@ def get_accounts():
 def save_accounts(data):
     return r2_put_json(KEY_ACCOUNTS, data)
 
+# ── Index des créneaux utilisés (évite de re-scanner tous les TikToks programmés) ──
+def get_used_slots_index():
+    """Retourne {account: [scheduled_at, ...]} — un seul appel R2 au lieu de N.
+    Si l'index n'existe pas encore (migration), il est reconstruit une seule fois."""
+    idx = r2_get_json(KEY_USED_SLOTS)
+    if idx is None:
+        idx = rebuild_used_slots_index()
+    return idx
+
+def add_used_slot(account, dt_str):
+    idx = get_used_slots_index()
+    idx.setdefault(account, [])
+    if dt_str not in idx[account]:
+        idx[account].append(dt_str)
+    r2_put_json(KEY_USED_SLOTS, idx)
+
+def remove_used_slot(account, dt_str):
+    idx = get_used_slots_index()
+    if account in idx and dt_str in idx[account]:
+        idx[account].remove(dt_str)
+        r2_put_json(KEY_USED_SLOTS, idx)
+
+def rebuild_used_slots_index():
+    """Reconstruit l'index depuis R2 (utile si l'index se désynchronise) — scan complet, à usage rare"""
+    idx = {}
+    sched_keys = r2_list_keys(PFX_SCHEDULED)
+    for sk in sched_keys:
+        if "/imgs/" in sk: continue
+        sd = r2_get_json(sk)
+        if sd and sd.get("account") and sd.get("scheduled_at"):
+            idx.setdefault(sd["account"], []).append(sd["scheduled_at"])
+    r2_put_json(KEY_USED_SLOTS, idx)
+    return idx
+
 # ── Buffer persistant R2 ───────────────────────────────────────────────────
 
 # ── Buffer local (/tmp) ────────────────────────────────────────────────────
@@ -982,14 +1017,9 @@ def api_schedule():
                 errors.append(f"Compte '{account}' non reconnu (TikTok {t.get('number','')})")
             continue
 
-        # Récupérer les créneaux déjà utilisés pour ce compte (TikToks déjà programmés)
-        used_slots = set()
-        sched_keys = r2_list_keys(PFX_SCHEDULED)
-        for sk in sched_keys:
-            if "/imgs/" in sk: continue
-            sd = r2_get_json(sk)
-            if sd and sd.get("account") == account and sd.get("scheduled_at"):
-                used_slots.add(sd["scheduled_at"])
+        # Récupérer les créneaux déjà utilisés pour ce compte via l'index (1 seul appel R2 au lieu de N)
+        used_slots_idx = get_used_slots_index()
+        used_slots = set(used_slots_idx.get(account, []))
 
         slot_date = start_date
         slot_index = 0
@@ -1100,6 +1130,7 @@ def api_schedule():
 
             move_to_scheduled(tiktok["r2_key"], account, dt_str, tiktok_data.get("robinreach_post_id"))
             used_slots.add(dt_str)
+            add_used_slot(account, dt_str)
             scheduled_count += 1
             scheduled_details.append({
                 "tiktok": tiktok.get("number",""),
@@ -1248,6 +1279,12 @@ def api_unschedule():
                     robinreach_errors.append(f"Post {robinreach_post_id}: {del_resp.text[:100]}")
             except Exception as e:
                 robinreach_errors.append(f"Post {robinreach_post_id}: {str(e)}")
+
+        # Libérer le créneau dans l'index pour qu'il redevienne disponible
+        old_account = tiktok.get("account")
+        old_slot = tiktok.get("scheduled_at")
+        if old_account and old_slot:
+            remove_used_slot(old_account, old_slot)
 
         # Déplacer les images vers queue/imgs/
         new_img_keys = []
