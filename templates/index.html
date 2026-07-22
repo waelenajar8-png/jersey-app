@@ -504,10 +504,12 @@ function getConfidence(data){
 async function retryItem(index){
     const item=currentItems[index];if(!item)return;
     const card=document.getElementById(`card-${index}`);if(!card)return;
+    if(!confirm('⚠️ Cette image sera régénérée pour cet affichage/téléchargement uniquement.\n\nSi les 7 images de ce TikTok ont déjà été formées dans la file d\'attente, il faudra aussi supprimer/corriger manuellement l\'image dans /queue — cette régénération ne la remplace PAS automatiquement là-bas.\n\nContinuer ?')) return;
     const sub=`${item.name.toUpperCase()}${item.number?' / '+item.number:''}${item.name_below?' / '+item.name_below.toUpperCase():''}`;
     card.innerHTML=`<div class="card-title">IMAGE ${index+1}</div><div class="card-sub">${sub}</div><div class="card-imgs"><div class="img-wrap"><div class="img-label">Original</div><img src="${item.orig}"></div><div class="card-ph"><div class="spinner"></div></div></div>`;
     const fd=new FormData();
     fd.append('image',item.file);fd.append('name',item.name);fd.append('number',item.number);fd.append('name_below',item.name_below||'');fd.append('user',userEl.value.trim());
+    fd.append('skip_buffer','true'); // évite de créer une image égarée dans un futur TikTok différent
     try{
         const res=await fetch('/generate_single',{method:'POST',body:fd});
         const d=await res.json();incrRPD();
