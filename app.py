@@ -780,7 +780,7 @@ def build_prompt(name, number, name_below=None):
     parts.append("Keep ALL else identical: colors, texture, pattern, outlines, lighting, shadows, background, tags. Only swap text content.")
     return " ".join(parts)
 
-def call_gemini(img_bytes, mime, name, number, name_below=None, max_retries=2, resolution="1k"):
+def call_gemini(img_bytes, mime, name, number, name_below=None, max_retries=5, resolution="1k"):
     img_b64 = base64.b64encode(img_bytes).decode()
     prompt = build_prompt(name, number, name_below)
     payload = {"contents": [{"parts": [
@@ -788,15 +788,25 @@ def call_gemini(img_bytes, mime, name, number, name_below=None, max_retries=2, r
         {"inline_data": {"mime_type": mime, "data": img_b64}}
     ]}]}
     last_error = None
-    for _ in range(max_retries + 1):
+    for attempt_num in range(max_retries + 1):
         try:
             resp = requests.post(MODEL_URL,
                 headers={"x-goog-api-key": API_KEY, "Content-Type": "application/json"},
                 json=payload, timeout=120)
         except requests.RequestException as e:
-            last_error = f"Erreur réseau: {e}"; time.sleep(1); continue
+            last_error = f"Erreur réseau: {e}"
+            time.sleep(min(3 * (attempt_num + 1), 15))
+            continue
         if resp.status_code != 200:
-            last_error = f"API {resp.status_code}: {resp.text[:200]}"; time.sleep(1); continue
+            last_error = f"API {resp.status_code}: {resp.text[:200]}"
+            if resp.status_code in (503, 429):
+                # Google surchargé/limite atteinte — c'est temporaire, on attend plus longtemps et on insiste
+                wait = min(4 * (attempt_num + 1), 30)
+                print(f"[GEMINI] {resp.status_code} — surcharge temporaire, retry dans {wait}s ({attempt_num+1}/{max_retries})")
+                time.sleep(wait)
+            else:
+                time.sleep(1)
+            continue
         data = resp.json()
         try:
             for part in data["candidates"][0]["content"]["parts"]:
