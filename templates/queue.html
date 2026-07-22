@@ -456,7 +456,12 @@ function closeLightbox(){
 function toggleCheckDelete(key){
     if(checkedForDelete.has(key)) checkedForDelete.delete(key);
     else checkedForDelete.add(key);
-    render();
+    const t=allTiktoks.find(t=>t.r2_key===key);
+    if(t){
+        const card=document.getElementById(`c-${t.id}`);
+        if(card) card.classList.toggle('checked', checkedForDelete.has(key));
+    }
+    document.getElementById('deleteSelBtn').style.display=checkedForDelete.size>0?'inline-block':'none';
 }
 
 async function deleteSelected(){
@@ -481,9 +486,23 @@ async function deleteSelected(){
 
 // ── Actions comptes ────────────────────────────────────────────────────────
 function toggleMain(key){
-    if(selectedForMain.has(key)){selectedForMain.delete(key);assign(key,'')}
-    else{selectedForMain.add(key);if(accounts.main)assign(key,accounts.main)}
-    render();
+    const t=allTiktoks.find(t=>t.r2_key===key);
+    let isSel;
+    if(selectedForMain.has(key)){selectedForMain.delete(key);assign(key,'');isSel=false}
+    else{selectedForMain.add(key);if(accounts.main)assign(key,accounts.main);isSel=true}
+    if(t){
+        const card=document.getElementById(`c-${t.id}`);
+        if(card){
+            card.classList.toggle('selected', isSel);
+            const markBtn=card.querySelector('.mark-btn');
+            if(markBtn){
+                markBtn.classList.toggle('on', isSel);
+                markBtn.textContent=isSel?'⭐ Compte principal':'☆ Marquer principal';
+            }
+        }
+    }
+    document.getElementById('deselectBtn').style.display=selectedForMain.size>0?'inline-block':'none';
+    document.getElementById('selCount').textContent=selectedForMain.size>0?`${selectedForMain.size} sélectionné(s) → ${accounts.main||'compte principal'}`:'';
 }
 
 async function assign(key,account){
