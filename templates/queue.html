@@ -403,10 +403,17 @@ function toggleCheckDelete(key){
 async function deleteSelected(){
     if(!checkedForDelete.size) return;
     if(!confirm(`Supprimer ${checkedForDelete.size} TikTok(s) de la file d'attente ?`)) return;
-    for(const key of checkedForDelete){
+    const keys = [...checkedForDelete];
+    const total = keys.length;
+    let done = 0;
+    showStatus(`⏳ Suppression 0/${total}...`);
+    for(const key of keys){
         await fetch('/api/queue/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key})});
+        done++;
+        showStatus(`⏳ Suppression ${done}/${total}...`);
     }
     checkedForDelete.clear();
+    showStatus(`✅ ${total} TikTok(s) supprimé(s)`);
     await loadPage(currentPage);
 }
 
@@ -641,10 +648,12 @@ async function saveConfig(){
     render();
 }
 
+let statusHideTimer=null;
 function showStatus(msg){
     const bar=document.getElementById('statusBar');
     bar.textContent=msg;bar.classList.add('show');
-    setTimeout(()=>bar.classList.remove('show'),4000);
+    if(statusHideTimer) clearTimeout(statusHideTimer);
+    statusHideTimer=setTimeout(()=>bar.classList.remove('show'),4000);
 }
 
 // ── Init ───────────────────────────────────────────────────────────────────
