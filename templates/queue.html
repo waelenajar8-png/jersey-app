@@ -355,6 +355,26 @@ async function clearBuffer(){
     showStatus('🗑️ Buffer vidé');
 }
 
+function renderImgsGridHtml(t){
+    const imgs=t.image_urls||[];
+    const show=imgs.slice(0,3);
+    const rem=imgs.length-3;
+    return `${show.map((u,i)=>`
+                <div class="img-item" draggable="true" data-index="${i}"
+                     ondragstart="imgDragStart(event,'${t.id}')"
+                     ondragover="event.preventDefault()"
+                     ondrop="imgDrop(event,'${t.id}','${t.r2_key}')">
+                    <img src="${u||''}" loading="lazy" onerror="this.style.opacity='.15'" onclick="openLightbox('${u}')">
+                    <div class="img-overlay">
+                        ${i>0?`<button class="img-arrow" onclick="moveImg(event,'${t.r2_key}',${i},${i-1})">←</button>`:''}
+                        <button class="img-del" onclick="deleteImage(event,'${t.r2_key}',${i},'${t.id}')">✕</button>
+                        ${i<imgs.length-1?`<button class="img-arrow" onclick="moveImg(event,'${t.r2_key}',${i},${i+1})">→</button>`:''}
+                    </div>
+                    <div class="img-num">${i+1}</div>
+                </div>`).join('')}
+                ${rem>0?`<div class="more-imgs">+${rem}</div>`:''}`;
+}
+
 function render(){
     const grid=document.getElementById('grid');
     const list = getFilteredSorted();
@@ -378,9 +398,6 @@ function render(){
     grid.innerHTML=list.map(t=>{
         const sel=selectedForMain.has(t.r2_key);
         const checked=checkedForDelete.has(t.r2_key);
-        const imgs=t.image_urls||[];
-        const show=imgs.slice(0,3);
-        const rem=imgs.length-3;
         const date=new Date(t.created_at).toLocaleDateString('fr-FR',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});
         return `<div class="card ${sel?'selected':''} ${checked?'checked':''}" id="c-${t.id}">
             <div class="card-header">
@@ -394,20 +411,7 @@ function render(){
                 ${t.account?`<span class="account-tag">${t.account}</span>`:''}
             </div>
             <div class="imgs-grid" id="imgs-${t.id}" data-key="${t.r2_key}">
-                ${show.map((u,i)=>`
-                <div class="img-item" draggable="true" data-index="${i}"
-                     ondragstart="imgDragStart(event,'${t.id}')"
-                     ondragover="event.preventDefault()"
-                     ondrop="imgDrop(event,'${t.id}','${t.r2_key}')">
-                    <img src="${u||''}" loading="lazy" onerror="this.style.opacity='.15'" onclick="openLightbox('${u}')">
-                    <div class="img-overlay">
-                        ${i>0?`<button class="img-arrow" onclick="moveImg(event,'${t.r2_key}',${i},${i-1})">←</button>`:''}
-                        <button class="img-del" onclick="deleteImage(event,'${t.r2_key}',${i},'${t.id}')">✕</button>
-                        ${i<imgs.length-1?`<button class="img-arrow" onclick="moveImg(event,'${t.r2_key}',${i},${i+1})">→</button>`:''}
-                    </div>
-                    <div class="img-num">${i+1}</div>
-                </div>`).join('')}
-                ${rem>0?`<div class="more-imgs">+${rem}</div>`:''}
+                ${renderImgsGridHtml(t)}
             </div>
             <div class="card-footer">
                 <select class="account-select" onchange="assign('${t.r2_key}',this.value)">
@@ -483,10 +487,30 @@ function toggleMain(key){
 }
 
 async function assign(key,account){
-    await fetch('/api/queue/assign',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key,account})});
     const t=allTiktoks.find(t=>t.r2_key===key);
     if(t) t.account=account;
-    render();
+    // Mise à jour ciblée : juste le badge compte + bouton programmer de cette carte
+    if(t){
+        const card=document.getElementById(`c-${t.id}`);
+        if(card){
+            const header=card.querySelector('.card-header');
+            let tag=header.querySelector('.account-tag');
+            if(account){
+                if(!tag){tag=document.createElement('span');tag.className='account-tag';header.appendChild(tag);}
+                tag.textContent=account;
+            } else if(tag){
+                tag.remove();
+            }
+            const scheduleBtn=card.querySelector('.schedule-one-btn');
+            if(scheduleBtn) scheduleBtn.disabled=!account;
+        }
+    }
+    updateCounters();
+    try{
+        await fetch('/api/queue/assign',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key,account})});
+    }catch(e){
+        showStatus('❌ Erreur réseau — l\'assignation n\'a peut-être pas été sauvegardée, recharge la page pour vérifier');
+    }
 }
 
 function selectAll(){
@@ -656,9 +680,16 @@ async function imgDrop(e, tiktokId, r2Key){
     const imgs = t.image_urls || [];
     const newOrder = Array.from({length:imgs.length},(_,i)=>i);
     newOrder.splice(destIndex, 0, newOrder.splice(dragSrcIndex, 1)[0]);
-    await fetch('/api/queue/reorder',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:r2Key, order:newOrder})});
+    // Mise à jour optimiste locale — on ne redessine QUE la grille d'images de cette carte
+    t.image_urls = newOrder.map(i=>imgs[i]);
+    const imgsGridEl = document.getElementById(`imgs-${t.id}`);
+    if(imgsGridEl) imgsGridEl.innerHTML = renderImgsGridHtml(t);
     dragSrcIndex = null;
-    await loadPage(currentPage);
+    try{
+        await fetch('/api/queue/reorder',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:r2Key, order:newOrder})});
+    }catch(e){
+        showStatus('❌ Erreur réseau — le nouvel ordre n\'a peut-être pas été sauvegardé, recharge la page pour vérifier');
+    }
 }
 
 async function moveImg(e, r2Key, fromIndex, toIndex){
@@ -668,11 +699,16 @@ async function moveImg(e, r2Key, fromIndex, toIndex){
     const imgs = t.image_urls||[];
     const newOrder = Array.from({length:imgs.length},(_,i)=>i);
     [newOrder[fromIndex], newOrder[toIndex]] = [newOrder[toIndex], newOrder[fromIndex]];
-    // Mise à jour optimiste locale avant réponse serveur pour fluidité
+    // Mise à jour optimiste locale — on ne redessine QUE la grille d'images de cette carte, pas toute la page
     const newUrls = newOrder.map(i=>imgs[i]);
     t.image_urls = newUrls;
-    render();
-    await fetch('/api/queue/reorder',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:r2Key, order:newOrder})});
+    const imgsGridEl = document.getElementById(`imgs-${t.id}`);
+    if(imgsGridEl) imgsGridEl.innerHTML = renderImgsGridHtml(t);
+    try{
+        await fetch('/api/queue/reorder',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:r2Key, order:newOrder})});
+    }catch(e){
+        showStatus('❌ Erreur réseau — le nouvel ordre n\'a peut-être pas été sauvegardé, recharge la page pour vérifier');
+    }
 }
 
 async function deleteImage(e, r2Key, imgIndex, tiktokId){
