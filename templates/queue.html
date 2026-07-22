@@ -137,7 +137,7 @@ h1{font-size:22px;margin:0}
     </div>
 
     <div class="filters-row">
-        <input type="text" class="search-input" id="searchInput" placeholder="🔍 Rechercher n° TikTok..." oninput="applyFilters()">
+        <input type="text" class="search-input" id="searchInput" placeholder="🔍 N° TikTok ou flocage..." oninput="applyFilters()">
         <select class="search-input" id="sortSelect" onchange="applyFilters()">
             <option value="num_asc">Tri : N° croissant</option>
             <option value="num_desc">Tri : N° décroissant</option>
@@ -268,7 +268,10 @@ function applyFilters(){
 function getFilteredSorted(){
     let list = [...allTiktoks];
     if(currentUserFilter !== 'all') list = list.filter(t => t.user === currentUserFilter);
-    if(currentSearch) list = list.filter(t => String(t.number).includes(currentSearch));
+    if(currentSearch) list = list.filter(t => 
+        String(t.number).includes(currentSearch) || 
+        (t.flockages||[]).some(f => f.toLowerCase().includes(currentSearch.toLowerCase()))
+    );
     switch(currentSort){
         case 'num_asc': list.sort((a,b)=>(a.number||0)-(b.number||0)); break;
         case 'num_desc': list.sort((a,b)=>(b.number||0)-(a.number||0)); break;
