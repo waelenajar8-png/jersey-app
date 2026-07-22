@@ -1122,6 +1122,46 @@ def api_delete_image():
     r2_put_json(key, tiktok)
     return jsonify({"success": True, "remaining": len(tiktok["image_keys"])})
 
+@app.route("/api/scheduled/check_status", methods=["POST"])
+def api_check_status():
+    """Vérifie le vrai statut de publication sur RobinReach pour des TikToks donnés"""
+    data = request.json or {}
+    keys = data.get("keys", [])
+    if not keys:
+        return jsonify({"error": "keys requis"}), 400
+    if not ROBINREACH_API_KEY or not ROBINREACH_BRAND_ID:
+        return jsonify({"error": "RobinReach non configuré"}), 400
+
+    results = {}
+    for key in keys:
+        tiktok = r2_get_json(key)
+        if not tiktok:
+            results[key] = {"status": "introuvable"}
+            continue
+        post_id = tiktok.get("robinreach_post_id")
+        if not post_id:
+            results[key] = {"status": "pas_d_id"}
+            continue
+        try:
+            resp = requests.get(
+                f"https://robinreach.com/api/v1/posts/{post_id}?api_key={ROBINREACH_API_KEY}&brand_id={ROBINREACH_BRAND_ID}",
+                headers={"Accept": "application/json"},
+                timeout=15
+            )
+            if resp.status_code == 200:
+                post_data = resp.json()
+                real_status = post_data.get("status") or post_data.get("post_status") or "inconnu"
+                results[key] = {"status": real_status, "raw": post_data}
+                # Mettre à jour le statut réel dans notre stockage
+                tiktok["real_status"] = real_status
+                r2_put_json(key, tiktok)
+            else:
+                results[key] = {"status": "erreur_api", "code": resp.status_code}
+        except Exception as e:
+            results[key] = {"status": "erreur", "error": str(e)}
+
+    return jsonify({"results": results})
+
 @app.route("/api/scheduled/unschedule", methods=["POST"])
 def api_unschedule():
     """Remet des TikToks programmés dans la file d'attente ET supprime de RobinReach"""
