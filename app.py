@@ -8,7 +8,6 @@ import requests
 import boto3
 
 REPLICATE_API_KEY = os.environ.get("REPLICATE_API_KEY")
-print(f"[DEBUG] REPLICATE_API_KEY: {'OK' if REPLICATE_API_KEY else 'MANQUANTE'}")
 from datetime import datetime, timezone, timedelta
 from concurrent.futures import ThreadPoolExecutor
 from flask import Flask, render_template, request, Response, jsonify
@@ -518,12 +517,13 @@ def r2_presigned(key, expires=86400):  # 24h
 
 # ── Compteur TikTok (atomique via R2) ─────────────────────────────────────
 def get_next_tiktok_number():
-    """Incrémente et retourne le prochain numéro de TikTok"""
-    data = r2_get_json(KEY_COUNTER) or {"next": 1}
-    num = data["next"]
-    data["next"] = num + 1
-    r2_put_json(KEY_COUNTER, data)
-    return num
+    """Incrémente et retourne le prochain numéro de TikTok (thread-safe via lock)"""
+    with _r2_lock:
+        data = r2_get_json(KEY_COUNTER) or {"next": 1}
+        num = data["next"]
+        data["next"] = num + 1
+        r2_put_json(KEY_COUNTER, data)
+        return num
 
 # ── Logs persistants sur R2 ────────────────────────────────────────────────
 def log_generation(user, success):
@@ -770,10 +770,11 @@ def call_gemini(img_bytes, mime, name, number, name_below=None, max_retries=2, r
                     if REPLICATE_API_KEY:
                         upscaled = False
                         attempt = 0
-                        while not upscaled:
+                        MAX_UPSCALE_ATTEMPTS = 30  # limite haute pour éviter de bloquer le serveur indéfiniment
+                        while not upscaled and attempt < MAX_UPSCALE_ATTEMPTS:
                             attempt += 1
                             try:
-                                print(f"[UPSCALE] Tentative {attempt}/{max_retries}...")
+                                print(f"[UPSCALE] Tentative {attempt}/{MAX_UPSCALE_ATTEMPTS}...")
                                 r = requests.post(
                                     "https://api.replicate.com/v1/models/nightmareai/real-esrgan/predictions",
                                     headers={"Authorization": f"Bearer {REPLICATE_API_KEY}", "Content-Type": "application/json", "Prefer": "wait"},
@@ -798,7 +799,7 @@ def call_gemini(img_bytes, mime, name, number, name_below=None, max_retries=2, r
                                         print("[UPSCALE] ✅ 4K")
                                         upscaled = True
                                     else:
-                                        print(f"[UPSCALE] Pas d'output, retry {attempt}/{max_retries}...")
+                                        print(f"[UPSCALE] Pas d'output, retry {attempt}/{MAX_UPSCALE_ATTEMPTS}...")
                                         time.sleep(3)
                                 else:
                                     wait = min(10 * attempt, 120) if r.status_code == 429 else min(5 * attempt, 60)
@@ -808,6 +809,10 @@ def call_gemini(img_bytes, mime, name, number, name_below=None, max_retries=2, r
                                 wait = min(5 * attempt, 60)
                                 print(f"[UPSCALE] Erreur: {e}, retry {attempt} dans {wait}s...")
                                 time.sleep(wait)
+                        if not upscaled:
+                            print(f"[UPSCALE] ❌ Échec après {MAX_UPSCALE_ATTEMPTS} tentatives — image non upscalée retournée en erreur")
+                            last_error = f"❌ Upscaling 4K impossible après {MAX_UPSCALE_ATTEMPTS} tentatives (Replicate indisponible). Relance cette image."
+                            continue
                     return {"success": True, "image": img}
             last_error = "Pas d'image dans la réponse."
         except (KeyError, IndexError) as e:
@@ -838,12 +843,20 @@ def dashboard():
     queue_count = len([k for k in r2_list_keys(PFX_QUEUE) if "/imgs/" not in k])
     sched_count = len([k for k in r2_list_keys(PFX_SCHEDULED) if "/imgs/" not in k])
     today_count = len(today_e)
+
+    # Récupérer les vraies sessions récentes depuis R2
+    session_keys = sorted(r2_list_keys("sessions/"), reverse=True)[:10]
+    recent_sessions = []
+    for sk in session_keys:
+        s = r2_get_json(sk)
+        if s: recent_sessions.append(s)
+
     return render_template("dashboard.html",
         today_count=today_count,
         today_success=sum(1 for e in today_e if e.get("success")),
         today_cost=round(today_count*COST_PER_IMAGE,2),
         tiktoks_done=today_count//7, tiktoks_goal=20,
-        by_user=by_user, recent_sessions=[],
+        by_user=by_user, recent_sessions=recent_sessions,
         queue_count=queue_count, scheduled_count=sched_count)
 
 @app.route("/stats")
@@ -1367,13 +1380,16 @@ def generate_single():
     number = request.form.get("number","").strip()
     name_below = request.form.get("name_below","").strip() or None
     resolution = request.form.get("resolution", "1k").strip()
+    skip_buffer = request.form.get("skip_buffer", "false").lower() == "true"
     if not f: return jsonify({"error":"Aucune image"}),400
     result = call_gemini(f.read(), f.mimetype or "image/png", name, number, name_below, resolution=resolution)
     log_generation(user, result["success"])
     if result["success"]:
-        # Ajouter au buffer
-        floc = f"{name}/{number}/{name_below or ''}"
-        add_to_buffer_and_create_tiktoks([result["image"]], [floc], user)
+        # Ajouter au buffer SEULEMENT si ce n'est pas un "Relancer" d'une image déjà comptabilisée
+        # (évite de dupliquer l'image dans le buffer/un futur TikTok différent)
+        if not skip_buffer:
+            floc = f"{name}/{number}/{name_below or ''}"
+            add_to_buffer_and_create_tiktoks([result["image"]], [floc], user)
         return jsonify({"image": result["image"]})
     return jsonify({"error": result["error"]}), 500
 
