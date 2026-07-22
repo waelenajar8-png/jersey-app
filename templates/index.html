@@ -294,6 +294,14 @@ const fileCount=document.getElementById('fileCount');
 let selectedFiles=[];
 let currentItems=[];
 let generatedImages={};
+let generationInProgress=false;
+window.addEventListener('beforeunload', (e) => {
+    if (generationInProgress) {
+        e.preventDefault();
+        e.returnValue = 'Une génération est en cours — si tu fermes maintenant, tu perdras les images non téléchargées.';
+        return e.returnValue;
+    }
+});
 let sessionId=crypto.randomUUID();
 
 dropzone.addEventListener('click',()=>imageInput.click());
@@ -402,6 +410,7 @@ async function launch(testMode=false){
     }
 
     const parallel=parseInt(document.getElementById('parallelInput').value)||5;
+    generationInProgress=true;
     generateBtn.disabled=true;testBtn.disabled=true;
     generateBtn.textContent='En cours...';
     zipBtn.style.display='none';
@@ -432,6 +441,7 @@ async function launch(testMode=false){
         if(!res.ok){const d=await res.json();statusEl.textContent='Erreur: '+(d.error||'inconnue');return}
         const reader=res.body.getReader();const decoder=new TextDecoder();
         let buffer='';let done=0;const total=filesToUse.length;
+        const genStartTime=Date.now();
         while(true){
             const{value,done:sd}=await reader.read();if(sd)break;
             buffer+=decoder.decode(value,{stream:true});
@@ -443,13 +453,19 @@ async function launch(testMode=false){
                 if(data.buffer_update){statusEl.innerHTML=`⏳ ${data.pending}/7 images en buffer — encore ${data.needed} avant le prochain TikTok`;updateBufferBadge();continue;}
                 renderResult(data);incrRPD();done++;
                 progressFill.style.width=`${Math.round(done/total*100)}%`;
-                if(done<total)statusEl.textContent=`${done}/${total} traité(s)`;
+                if(done<total){
+                    const elapsed=(Date.now()-genStartTime)/1000;
+                    const avgPerImg=elapsed/done;
+                    const remaining=Math.round(avgPerImg*(total-done));
+                    const remainingText=remaining>60?`~${Math.round(remaining/60)} min`:`~${remaining}s`;
+                    statusEl.textContent=`${done}/${total} traité(s) — temps restant estimé : ${remainingText}`;
+                }
             }
         }
         notifyDone(total,testMode);
         if(Object.keys(generatedImages).length>0){zipBtn.style.display='inline-block';document.getElementById('selectAllImgBtn').style.display='inline-block';}
     }catch(err){statusEl.textContent='Erreur: '+err.message}
-    finally{generateBtn.disabled=false;testBtn.disabled=false;generateBtn.textContent='Lancer la génération'}
+    finally{generationInProgress=false;generateBtn.disabled=false;testBtn.disabled=false;generateBtn.textContent='Lancer la génération'}
 }
 
 function renderResult(data){
