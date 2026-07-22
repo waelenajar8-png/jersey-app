@@ -5,39 +5,73 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Suppression boîte — Vola Kits</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
-:root[data-theme="dark"]{--bg:#0f1115;--panel:#1a1d24;--border:#2a2e37;--accent:#4ade80;--text:#e5e7eb;--text-dim:#9ca3af;--danger:#f87171}
-:root[data-theme="light"]{--bg:#f3f4f6;--panel:#fff;--border:#d1d5db;--accent:#16a34a;--text:#111827;--text-dim:#6b7280;--danger:#ef4444}
+:root[data-theme="dark"]{
+    --bg:#0a0b0f; --bg-elevated:#0f1117;
+    --panel:#15171e; --panel-hover:#1a1d26;
+    --border:#242832; --border-strong:#323847;
+    --accent:#4ade80; --accent-grad:linear-gradient(135deg,#4ade80,#22d3ee); --accent-dim:rgba(74,222,128,.12);
+    --text:#f1f3f6; --text-dim:#8b93a3; --text-faint:#5b6373;
+    --danger:#f87171; --danger-dim:rgba(248,113,113,.12);
+    --shadow-sm:0 1px 2px rgba(0,0,0,.3);
+    --shadow-md:0 4px 12px rgba(0,0,0,.35),0 1px 3px rgba(0,0,0,.3);
+    --shadow-glow:0 0 0 1px rgba(74,222,128,.15),0 4px 16px rgba(74,222,128,.08);
+}
+:root[data-theme="light"]{
+    --bg:#f7f8fa; --bg-elevated:#ffffff;
+    --panel:#ffffff; --panel-hover:#f9fafb;
+    --border:#e5e7eb; --border-strong:#d1d5db;
+    --accent:#16a34a; --accent-grad:linear-gradient(135deg,#16a34a,#0891b2); --accent-dim:rgba(22,163,74,.08);
+    --text:#0f172a; --text-dim:#64748b; --text-faint:#94a3b8;
+    --danger:#dc2626; --danger-dim:rgba(220,38,38,.08);
+    --shadow-sm:0 1px 2px rgba(15,23,42,.06);
+    --shadow-md:0 4px 12px rgba(15,23,42,.08),0 1px 3px rgba(15,23,42,.06);
+    --shadow-glow:0 0 0 1px rgba(22,163,74,.12),0 4px 16px rgba(22,163,74,.06);
+}
 *{box-sizing:border-box}
-body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;padding:24px}
+::selection{background:var(--accent);color:#0a0b0f}
+body{margin:0;font-family:'Inter',-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;padding:32px 24px;letter-spacing:-0.01em;-webkit-font-smoothing:antialiased}
 .wrap{max-width:1200px;margin:0 auto}
-.topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;flex-wrap:wrap;gap:12px}
-h1{font-size:22px;margin:0}
-.nav a{color:var(--accent);text-decoration:none;font-size:13px;font-weight:600}
-.panel{background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:24px;margin-bottom:20px}
-.dropzone{border:2px dashed var(--border);border-radius:12px;padding:40px;text-align:center;cursor:pointer;color:var(--text-dim);font-size:14px;transition:border-color .2s}
-.dropzone:hover,.dropzone.drag{border-color:var(--accent);color:var(--text)}
+@keyframes fadeInUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+@keyframes spin{to{transform:rotate(360deg)}}
+.card{animation:fadeInUp .35s cubic-bezier(.16,1,.3,1) both}
+.topbar{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:24px;flex-wrap:wrap;gap:12px}
+h1{font-size:24px;margin:0;font-weight:800;letter-spacing:-0.02em}
+.nav{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.nav a{color:var(--text-dim);text-decoration:none;font-size:13px;font-weight:600;padding:6px 10px;border-radius:8px;transition:all .15s ease}
+.nav a:hover{color:var(--text);background:var(--panel-hover)}
+.theme-btn{background:var(--panel);border:1px solid var(--border);color:var(--text);padding:6px 12px;border-radius:100px;cursor:pointer;font-size:13px;font-weight:600;box-shadow:var(--shadow-sm);transition:all .15s ease}
+.theme-btn:hover{border-color:var(--border-strong);transform:translateY(-1px)}
+.panel{background:var(--panel);border:1px solid var(--border);border-radius:18px;padding:26px;margin-bottom:20px;box-shadow:var(--shadow-sm)}
+.dropzone{border:1.5px dashed var(--border-strong);border-radius:14px;padding:44px;text-align:center;cursor:pointer;color:var(--text-dim);font-size:14px;transition:all .2s ease;background:var(--bg-elevated)}
+.dropzone:hover{border-color:var(--accent);color:var(--text);background:var(--accent-dim)}
+.dropzone.drag{border-color:var(--accent);background:var(--accent-dim);transform:scale(1.005)}
 input[type=file]{display:none}
-.file-count{font-weight:700;color:var(--accent);font-size:13px;margin-top:8px}
-.btn{padding:14px 28px;background:var(--accent);color:#0f1115;border:none;border-radius:8px;font-size:15px;font-weight:700;cursor:pointer;margin-top:16px}
-.btn:disabled{opacity:.5;cursor:not-allowed}
-.btn-zip{padding:12px 24px;background:var(--panel);border:1px solid var(--border);color:var(--text);border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;margin-top:12px;display:none}
-.status{font-size:13px;color:var(--text-dim);margin-top:12px}
-.progress-bar{height:6px;background:var(--border);border-radius:3px;overflow:hidden;margin-top:10px}
-.progress-fill{height:100%;background:var(--accent);width:0%;transition:width .3s}
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;margin-top:20px}
-.card{background:var(--panel);border:1px solid var(--border);border-radius:10px;overflow:hidden}
-.card-imgs{display:grid;grid-template-columns:1fr 1fr;gap:2px}
+.file-count{font-weight:700;color:var(--accent);font-size:13px;margin-top:10px}
+.btn{padding:14px 28px;background:var(--accent-grad);color:#06170d;border:none;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer;margin-top:18px;box-shadow:var(--shadow-glow);transition:all .18s cubic-bezier(.16,1,.3,1)}
+.btn:hover:not(:disabled){transform:translateY(-1.5px);box-shadow:0 6px 20px rgba(74,222,128,.25),var(--shadow-glow)}
+.btn:disabled{opacity:.4;cursor:not-allowed;box-shadow:none}
+.btn-zip{padding:12px 24px;background:var(--panel);border:1px solid var(--border);color:var(--text);border-radius:11px;font-size:14px;font-weight:700;cursor:pointer;margin-top:12px;display:none;transition:all .15s ease}
+.btn-zip:hover{border-color:var(--border-strong);transform:translateY(-1px)}
+.status{font-size:13px;color:var(--text-dim);margin-top:14px;font-weight:500}
+.progress-bar{height:6px;background:var(--border);border-radius:100px;overflow:hidden;margin-top:12px}
+.progress-fill{height:100%;background:var(--accent-grad);width:0%;transition:width .3s cubic-bezier(.4,0,.2,1);border-radius:100px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px;margin-top:24px}
+.card{background:var(--panel);border:1.5px solid var(--border);border-radius:14px;overflow:hidden;transition:transform .18s ease,box-shadow .18s ease}
+.card:hover{transform:translateY(-2px);box-shadow:var(--shadow-md)}
+.card-imgs{display:grid;grid-template-columns:1fr 1fr;gap:3px}
 .card-imgs img{width:100%;aspect-ratio:3/4;object-fit:cover;display:block}
-.card-label{font-size:10px;color:var(--text-dim);padding:4px 8px;text-align:center}
-.card-status{font-size:11px;padding:6px 8px;text-align:center;font-weight:600}
+.card-label{font-size:10px;color:var(--text-dim);padding:6px 8px;text-align:center;font-weight:500}
+.card-status{font-size:11px;padding:7px 8px;text-align:center;font-weight:600}
 .card-status.ok{color:var(--accent)}
 .card-status.err{color:var(--danger)}
 .card-status.loading{color:var(--text-dim)}
-.card-ph{display:flex;align-items:center;justify-content:center;aspect-ratio:3/4;background:var(--bg)}
-.spinner{width:20px;height:20px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite}
-@keyframes spin{to{transform:rotate(360deg)}}
-.dl-btn{display:block;text-align:center;padding:6px;background:var(--bg);border-top:1px solid var(--border);color:var(--text);font-size:11px;text-decoration:none;cursor:pointer}
+.card-ph{display:flex;align-items:center;justify-content:center;aspect-ratio:3/4;background:var(--bg-elevated)}
+.spinner{width:20px;height:20px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite}
+.dl-btn{display:block;text-align:center;padding:8px;background:var(--bg-elevated);border-top:1px solid var(--border);color:var(--text);font-size:11px;text-decoration:none;cursor:pointer;font-weight:600;transition:color .15s ease}
+.dl-btn:hover{color:var(--accent)}
 </style>
 </head>
 <body>
@@ -45,7 +79,13 @@ input[type=file]{display:none}
     <div class="topbar">
         <h1>🗑️ Suppression de la boîte</h1>
         <div class="nav">
-            <a href="/">← Retour au générateur</a>
+            <a href="/">🎨 Générateur</a>
+            <a href="/queue">📋 File d'attente</a>
+            <a href="/scheduled">✅ Programmés</a>
+            <a href="/dashboard">📊 Dashboard</a>
+            <a href="/stats">📈 Stats</a>
+            <a href="/templates">🗂️ Templates</a>
+            <button class="theme-btn" id="themeBtn">☀️</button>
         </div>
     </div>
 
@@ -65,6 +105,13 @@ input[type=file]{display:none}
 </div>
 
 <script>
+const html = document.documentElement;
+const themeBtn = document.getElementById('themeBtn');
+let theme = localStorage.getItem('theme') || 'dark';
+applyTheme(theme);
+function applyTheme(t){theme=t;html.setAttribute('data-theme',t);themeBtn.textContent=t==='dark'?'☀️':'🌙';localStorage.setItem('theme',t)}
+themeBtn.addEventListener('click',()=>applyTheme(theme==='dark'?'light':'dark'));
+
 const dropzone = document.getElementById('dropzone');
 const fileInput = document.getElementById('fileInput');
 const fileCount = document.getElementById('fileCount');
