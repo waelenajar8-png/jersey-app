@@ -32,13 +32,12 @@ h1{font-size:22px;margin:0}
 .status-bar{background:rgba(74,222,128,.08);border:1px solid rgba(74,222,128,.25);border-radius:10px;padding:12px 16px;margin-bottom:16px;font-size:13px;display:none}
 .status-bar.show{display:block}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px}
-.card{background:var(--panel);border:1px solid var(--border);border-radius:12px;overflow:hidden;transition:border-color .15s}
-.card.selected{border-color:var(--warn);box-shadow:0 0 0 2px var(--warn)}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:12px;overflow:hidden}
 .card-header{padding:10px 12px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
-.card-num{font-size:13px;font-weight:700}
+.card-num{font-size:13px;font-weight:700;display:flex;align-items:center;gap:6px}
 .card-meta{font-size:10px;color:var(--text-dim);margin-top:1px}
 .images-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:2px;padding:6px}
-.images-grid img{width:100%;aspect-ratio:3/4;object-fit:cover;border-radius:3px;background:var(--bg)}
+.images-grid img{width:100%;aspect-ratio:3/4;object-fit:cover;border-radius:3px;background:var(--bg);cursor:zoom-in}
 .more{display:flex;align-items:center;justify-content:center;background:var(--bg);border-radius:3px;aspect-ratio:3/4;font-size:10px;color:var(--text-dim);font-weight:700}
 .card-footer{padding:8px 12px;display:flex;align-items:center;justify-content:space-between;border-top:1px solid var(--border);flex-wrap:wrap;gap:6px}
 .account-tag{background:rgba(74,222,128,.1);color:var(--accent);padding:3px 8px;border-radius:100px;font-size:10px;font-weight:700}
@@ -52,6 +51,14 @@ h1{font-size:22px;margin:0}
 .week-track{flex:1;height:8px;background:var(--border);border-radius:4px;overflow:hidden}
 .week-fill{height:100%;background:var(--accent);border-radius:4px;transition:width .5s}
 .week-text{font-size:12px;color:var(--text-dim);white-space:nowrap}
+.pagination{display:flex;gap:8px;justify-content:center;align-items:center;margin-top:20px}
+.page-btn{padding:8px 14px;background:var(--panel);border:1px solid var(--border);color:var(--text);border-radius:8px;font-size:13px;cursor:pointer;font-weight:600}
+.page-btn:disabled{opacity:.4;cursor:not-allowed}
+.page-info{font-size:13px;color:var(--text-dim)}
+.lightbox-bg{position:fixed;inset:0;background:rgba(0,0,0,.9);z-index:300;display:none;align-items:center;justify-content:center;padding:20px}
+.lightbox-bg.open{display:flex}
+.lightbox-bg img{max-width:90vw;max-height:90vh;border-radius:8px}
+.lightbox-close{position:absolute;top:20px;right:20px;background:rgba(255,255,255,.1);border:none;color:#fff;font-size:24px;width:40px;height:40px;border-radius:50%;cursor:pointer}
 </style>
 </head>
 <body>
@@ -65,6 +72,7 @@ h1{font-size:22px;margin:0}
             <a href="/">🎨 Générateur</a>
             <a href="/queue">📋 File d'attente</a>
             <a href="/dashboard">📊 Dashboard</a>
+            <button class="theme-btn" onclick="exportPlanning()">📄 Export planning</button>
             <button class="theme-btn" id="themeBtn">☀️</button>
         </div>
     </div>
@@ -86,7 +94,7 @@ h1{font-size:22px;margin:0}
 
     <div class="toolbar">
         <span class="count-badge" id="countBadge">⏳ Chargement...</span>
-        <button class="btn-sec" id="selectAllBtn" onclick="selectAll()">☑️ Tout sélectionner</button>
+        <button class="btn-sec" onclick="selectAll()">☑️ Tout sélectionner (page)</button>
         <button class="btn-sec" id="deselectAllBtn" onclick="deselectAll()" style="display:none">✖️ Désélectionner</button>
         <button class="btn-danger" id="unscheduleSelBtn" onclick="unscheduleSelected()" style="display:none">↩️ Remettre en file d'attente</button>
         <button class="btn-danger" onclick="unscheduleAll()" style="margin-left:auto">↩️ Tout déprogrammer</button>
@@ -97,8 +105,19 @@ h1{font-size:22px;margin:0}
     </div>
 
     <div id="grid" class="grid">
-        <div class="loading"><div class="spinner"></div>Chargement...</div>
+        <div class="loading" style="grid-column:1/-1;text-align:center"><div class="spinner"></div>Chargement...</div>
     </div>
+
+    <div class="pagination" id="pagination" style="display:none">
+        <button class="page-btn" id="prevPageBtn" onclick="changePage(-1)">← Précédent</button>
+        <span class="page-info" id="pageInfo">Page 1</span>
+        <button class="page-btn" id="nextPageBtn" onclick="changePage(1)">Suivant →</button>
+    </div>
+</div>
+
+<div class="lightbox-bg" id="lightbox" onclick="closeLightbox()">
+    <button class="lightbox-close" onclick="closeLightbox()">✕</button>
+    <img id="lightboxImg" src="" onclick="event.stopPropagation()">
 </div>
 
 <script>
@@ -112,18 +131,34 @@ themeBtn.addEventListener('click',()=>applyTheme(theme==='dark'?'light':'dark'))
 let tiktoks=[];
 let currentFilter='all';
 let selected=new Set();
+let currentPage=0;
+let perPage=20;
+let totalCount=0;
 
-async function load(){
-    const res=await fetch('/api/scheduled');
+async function loadPage(page){
+    currentPage=page;
+    document.getElementById('grid').innerHTML='<div class="loading" style="grid-column:1/-1;text-align:center"><div class="spinner"></div>Chargement...</div>';
+    const res=await fetch(`/api/scheduled?page=${page}&per_page=${perPage}`);
     const data=await res.json();
     tiktoks=data.tiktoks||[];
+    totalCount=data.total||0;
     updateStats();
     updateFilters();
     render();
+    updatePagination();
 }
 
+function updatePagination(){
+    const totalPages=Math.max(1,Math.ceil(totalCount/perPage));
+    document.getElementById('pagination').style.display=totalPages>1?'flex':'none';
+    document.getElementById('pageInfo').textContent=`Page ${currentPage+1} / ${totalPages} (${totalCount} au total)`;
+    document.getElementById('prevPageBtn').disabled=currentPage===0;
+    document.getElementById('nextPageBtn').disabled=currentPage>=totalPages-1;
+}
+function changePage(delta){ loadPage(currentPage+delta); }
+
 function updateStats(){
-    document.getElementById('totalCount').textContent=tiktoks.length;
+    document.getElementById('totalCount').textContent=totalCount;
     const now=new Date();
     const weekStart=new Date(now);
     weekStart.setDate(now.getDate()-now.getDay());
@@ -136,7 +171,7 @@ function updateStats(){
     });
     document.getElementById('weekCount').textContent=weekItems.length;
     document.getElementById('weekFill').style.width=`${Math.min(weekItems.length/28*100,100)}%`;
-    document.getElementById('weekText').textContent=`${weekItems.length}/28 TikToks cette semaine`;
+    document.getElementById('weekText').textContent=`${weekItems.length}/28 TikToks cette semaine (page actuelle)`;
     const accounts=new Set(tiktoks.map(t=>t.account).filter(Boolean));
     document.getElementById('accountCount').textContent=accounts.size;
 }
@@ -170,13 +205,13 @@ function render(){
     const selCountEl=document.getElementById('selCount');
 
     let filtered=currentFilter==='all'?tiktoks:tiktoks.filter(t=>t.account===currentFilter);
-    countBadge.textContent=`${filtered.length} TikTok(s)`;
+    countBadge.textContent=`${filtered.length} TikTok(s) affichés (page)`;
     selCountEl.textContent=selected.size;
     unscheduleSelBtn.style.display=selected.size>0?'inline-block':'none';
     deselectAllBtn.style.display=selected.size>0?'inline-block':'none';
 
     if(!filtered.length){
-        grid.innerHTML='<div class="empty">📭 Aucun TikTok programmé<br><br><a href="/queue" style="color:var(--accent)">← File d\'attente</a></div>';
+        grid.innerHTML='<div class="empty" style="grid-column:1/-1">📭 Aucun TikTok programmé<br><br><a href="/queue" style="color:var(--accent)">← File d\'attente</a></div>';
         return;
     }
 
@@ -189,16 +224,18 @@ function render(){
         const timeStr=scheduledDate.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
         const isSel=selected.has(t.r2_key);
 
-        return `<div class="card ${isSel?'selected':''}" id="scard-${t.id}">
+        return `<div class="card" id="scard-${t.id}">
             <div class="card-header">
                 <div>
-                    <div class="card-num">TikTok ${t.number} <span style="font-size:10px;color:var(--text-dim)">${t.image_keys?.length||0} img</span></div>
+                    <div class="card-num">
+                        <input type="checkbox" class="checkbox" ${isSel?'checked':''} onchange="toggleSelect('${t.r2_key}')">
+                        TikTok ${t.number} <span style="font-size:10px;color:var(--text-dim)">${t.image_keys?.length||0} img</span>
+                    </div>
                     <div class="card-meta">${t.user}</div>
                 </div>
-                <input type="checkbox" class="checkbox" ${isSel?'checked':''} onchange="toggleSelect('${t.r2_key}')">
             </div>
             <div class="images-grid">
-                ${show.map(u=>`<img src="${u||''}" loading="lazy" onerror="this.style.opacity='.2'">`).join('')}
+                ${show.map(u=>`<img src="${u||''}" loading="lazy" onerror="this.style.opacity='.15'" onclick="openLightbox('${u}')">`).join('')}
                 ${rem>0?`<div class="more">+${rem}</div>`:''}
             </div>
             <div class="card-footer">
@@ -209,6 +246,13 @@ function render(){
         </div>`;
     }).join('');
 }
+
+function openLightbox(url){
+    if(!url) return;
+    document.getElementById('lightboxImg').src=url;
+    document.getElementById('lightbox').classList.add('open');
+}
+function closeLightbox(){ document.getElementById('lightbox').classList.remove('open'); }
 
 function toggleSelect(key){
     if(selected.has(key)) selected.delete(key);
@@ -227,51 +271,52 @@ function deselectAll(){
     render();
 }
 
-// Déprogrammer un seul TikTok
 async function unscheduleSingle(key){
-    if(!confirm('Remettre ce TikTok en file d\'attente ?')) return;
+    if(!confirm('Remettre ce TikTok en file d\'attente ? (déprogrammé aussi sur RobinReach)')) return;
     showStatus('⏳ Déprogrammation en cours...');
-    const res=await fetch('/api/scheduled/unschedule',{
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({keys:[key]})
-    });
+    const res=await fetch('/api/scheduled/unschedule',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({keys:[key]})});
     const d=await res.json();
     showStatus(`✅ ${d.count} TikTok(s) remis en file d'attente`);
     selected.delete(key);
-    await load();
+    await loadPage(currentPage);
 }
 
-// Déprogrammer la sélection
 async function unscheduleSelected(){
     if(!selected.size){alert('Aucun TikTok sélectionné');return}
-    if(!confirm(`Remettre ${selected.size} TikTok(s) en file d'attente ?`)) return;
+    if(!confirm(`Remettre ${selected.size} TikTok(s) en file d'attente ? (déprogrammés aussi sur RobinReach)`)) return;
     showStatus('⏳ Déprogrammation en cours...');
-    const res=await fetch('/api/scheduled/unschedule',{
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({keys:[...selected]})
-    });
+    const res=await fetch('/api/scheduled/unschedule',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({keys:[...selected]})});
     const d=await res.json();
     showStatus(`✅ ${d.count} TikTok(s) remis en file d'attente`);
     selected.clear();
-    await load();
+    await loadPage(currentPage);
 }
 
-// Tout déprogrammer
 async function unscheduleAll(){
-    if(!confirm(`Déprogrammer TOUS les ${tiktoks.length} TikToks et les remettre en file d'attente ?`)) return;
-    showStatus('⏳ Déprogrammation de tous les TikToks...');
+    if(!confirm(`Déprogrammer TOUS les TikToks de cette page (${tiktoks.length}) et les remettre en file d'attente ?`)) return;
+    showStatus('⏳ Déprogrammation en cours...');
     const allKeys=tiktoks.map(t=>t.r2_key);
-    const res=await fetch('/api/scheduled/unschedule',{
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({keys:allKeys})
-    });
+    const res=await fetch('/api/scheduled/unschedule',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({keys:allKeys})});
     const d=await res.json();
     showStatus(`✅ ${d.count} TikTok(s) remis en file d'attente`);
     selected.clear();
-    await load();
+    await loadPage(currentPage);
+}
+
+function exportPlanning(){
+    let text = `📅 PLANNING TIKTOK — Export du ${new Date().toLocaleDateString('fr-FR')}\n\n`;
+    const sorted = [...tiktoks].sort((a,b)=>new Date(a.scheduled_at)-new Date(b.scheduled_at));
+    sorted.forEach(t=>{
+        const d = new Date(t.scheduled_at);
+        text += `TikTok ${t.number} — ${t.account} — ${d.toLocaleDateString('fr-FR')} ${d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})}\n`;
+    });
+    const blob = new Blob([text], {type:'text/plain'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `planning_tiktok_${new Date().toISOString().slice(0,10)}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
 }
 
 function showStatus(msg){
@@ -280,8 +325,7 @@ function showStatus(msg){
     setTimeout(()=>bar.classList.remove('show'),4000);
 }
 
-load();
-setInterval(load,60000);
+loadPage(0);
 </script>
 </body>
 </html>
