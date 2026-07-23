@@ -306,9 +306,10 @@ applyTheme(theme);
 function applyTheme(t){theme=t;html.setAttribute('data-theme',t);themeBtn.textContent=t==='dark'?'☀️':'🌙';localStorage.setItem('theme',t)}
 themeBtn.addEventListener('click',()=>applyTheme(theme==='dark'?'light':'dark'));
 
-let allTiktoks=[];     // tous les TikToks chargés (accumulés au fil des pages)
-let currentPage=0;
-let perPage=20;
+// ── Cache local — toutes les données en mémoire, zéro latence UI ──────────
+let allTiktoks=[];
+let _filteredTiktoks=[];
+let _displayCount=20; // nombre affiché (infinite scroll)
 let totalCount=0;
 let selectedForMain=new Set();
 let checkedForDelete=new Set();
@@ -317,38 +318,71 @@ let customSlots={};
 let currentUserFilter='all';
 let currentSearch='';
 let currentSort='num_asc';
+let _cacheLoaded=false;
 
 async function init(){
     const [acRes, bufRes] = await Promise.all([fetch('/api/accounts'), fetch('/api/buffer')]);
     accounts = await acRes.json();
     const buf = await bufRes.json();
     updateBufferBar(buf.pending, buf.pending + buf.needed);
-    await loadPage(0);
+    await loadAll();
 }
 
-async function loadPage(page){
-    currentPage = page;
+async function loadAll(){
+    // Charger TOUT en une seule requête — cache complet en mémoire
     document.getElementById('grid').innerHTML = '<div style="text-align:center;padding:60px;color:var(--text-dim);grid-column:1/-1"><div class="spinner"></div>Chargement...</div>';
-    const res = await fetch(`/api/queue?page=${page}&per_page=${perPage}`);
+    const res = await fetch('/api/queue/all');
     const data = await res.json();
     allTiktoks = data.tiktoks || [];
-    totalCount = data.total || 0;
+    totalCount = allTiktoks.length;
+    _cacheLoaded = true;
+    _displayCount = 20;
     updateUserFilters();
     applyFilters();
     updateCounters();
-    updatePagination();
+    setupInfiniteScroll();
+}
+
+async function loadPage(page){
+    // Compatibilité — redirige vers loadAll si pas encore chargé
+    if(!_cacheLoaded) { await loadAll(); return; }
+    applyFilters();
 }
 
 function updatePagination(){
-    const totalPages = Math.max(1, Math.ceil(totalCount / perPage));
-    document.getElementById('pagination').style.display = totalPages > 1 ? 'flex' : 'none';
-    document.getElementById('pageInfo').textContent = `Page ${currentPage+1} / ${totalPages} (${totalCount} au total)`;
-    document.getElementById('prevPageBtn').disabled = currentPage === 0;
-    document.getElementById('nextPageBtn').disabled = currentPage >= totalPages - 1;
+    // Remplacé par infinite scroll — on cache la pagination
+    document.getElementById('pagination').style.display = 'none';
 }
 
-function changePage(delta){
-    loadPage(currentPage + delta);
+function changePage(delta){ /* plus utilisé avec infinite scroll */ }
+
+function setupInfiniteScroll(){
+    window.removeEventListener('scroll', _onScroll);
+    window.addEventListener('scroll', _onScroll, {passive: true});
+}
+
+function _onScroll(){
+    if(window.innerHeight + window.scrollY >= document.body.offsetHeight - 300){
+        const filtered = getFilteredSorted();
+        if(_displayCount < filtered.length){
+            _displayCount += 20;
+            renderMore();
+        }
+    }
+}
+
+function renderMore(){
+    const filtered = getFilteredSorted();
+    const toShow = filtered.slice(0, _displayCount);
+    const existing = new Set([...document.querySelectorAll('[id^="c-"]')].map(el=>el.id.replace('c-','')));
+    const grid = document.getElementById('grid');
+    toShow.forEach(t=>{
+        if(!existing.has(t.id)){
+            const div = document.createElement('div');
+            div.innerHTML = renderCard(t);
+            grid.appendChild(div.firstElementChild);
+        }
+    });
 }
 
 function updateUserFilters(){
@@ -409,10 +443,9 @@ async function clearBuffer(){
 }
 
 function renderImgsGridHtml(t){
-    const imgs=t.image_urls||[];
-    const total=t.image_keys?.length||imgs.length;
-    const thumb=imgs[0]||'';
-    // Afficher seulement la thumbnail + bouton éditer — page légère et rapide
+    // Utiliser thumb_url (chargé en une seule requête) sinon première image_url
+    const thumb=t.thumb_url||(t.image_urls&&t.image_urls[0])||'';
+    const total=t.image_count||t.image_keys?.length||t.image_urls?.length||0;
     return `<div style="position:relative;cursor:pointer" onclick="openImgEditor('${t.r2_key}','${t.id}','TikTok ${t.number}')">
         <div class="img-item" data-index="0">
             <img src="${thumb}" loading="lazy" onerror="this.style.opacity='.15'">
@@ -481,7 +514,10 @@ function render(){
 
     const allAccounts=[accounts.main,...(accounts.others||[])].filter(Boolean);
 
-    grid.innerHTML=list.map(t=>{
+    grid.innerHTML=list.slice(0,_displayCount).map(t=>renderCard(t)).join('');
+}
+
+function renderCard(t){
         const sel=selectedForMain.has(t.r2_key);
         const checked=checkedForDelete.has(t.r2_key);
         const date=new Date(t.created_at).toLocaleDateString('fr-FR',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});
@@ -525,7 +561,6 @@ function render(){
                 <div class="card-status" id="status-${t.id}"></div>
             </div>
         </div>`;
-    }).join('');
 }
 
 // ── Lightbox ────────────────────────────────────────────────────────────────
@@ -652,7 +687,7 @@ async function deleteSelected(){
     }
     checkedForDelete.clear();
     showStatus(failed>0 ? `⚠️ ${total-failed}/${total} supprimé(s), ${failed} échec(s) — réessaie pour ceux en échec` : `✅ ${total} TikTok(s) supprimé(s)`);
-    await loadPage(currentPage);
+    await loadAll();
 }
 
 // ── Actions comptes ────────────────────────────────────────────────────────
@@ -727,7 +762,7 @@ async function dispatchAuto(){
         if(!res.ok){showStatus(`❌ Erreur serveur (${res.status}) — réessaie`);return}
         const d=await res.json();
         showStatus(`✅ ${d.count} TikTok(s) dispatchés sur ${accounts.others.join(', ')}`);
-        await loadPage(currentPage);
+        await loadAll();
     }catch(e){
         showStatus(`❌ Erreur réseau : ${e.message} — vérifie ta connexion et réessaie`);
     }
@@ -803,7 +838,7 @@ async function scheduleAll(){
         showStatus(`✅ ${d.scheduled} TikTok(s) programmés avec succès !`);
     }
     updateCounters();
-    await loadPage(currentPage);
+    await loadAll();
 }
 
 // ── Programmer un seul TikTok ───────────────────────────────────────────────
@@ -863,7 +898,7 @@ async function deleteTiktok(key){
     await fetch('/api/queue/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key})});
     selectedForMain.delete(key);
     checkedForDelete.delete(key);
-    await loadPage(currentPage);
+    await loadAll();
 }
 
 // ── Drag & drop images ─────────────────────────────────────────────────────
@@ -928,7 +963,7 @@ async function deleteImage(e, r2Key, imgIndex, tiktokId){
     const d = await res.json();
     if(d.success){
         showStatus(`🗑️ Image supprimée — ${d.remaining} image(s) restante(s)`);
-        await loadPage(currentPage);
+        await loadAll();
     }
 }
 
