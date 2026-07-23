@@ -162,6 +162,7 @@ h1{font-size:24px;margin:0;font-weight:800;letter-spacing:-0.02em}
             <a href="/dashboard">📊 Dashboard</a>
             <a href="/calendar">📅 Calendrier</a>
             <a href="/stats">📈 Stats</a>
+            <a href="/monitor">👀 Monitor</a>
             <button class="config-btn" onclick="openConfig()">⚙️ Comptes</button>
             <button class="theme-btn" id="themeBtn">☀️</button>
         </div>
@@ -365,37 +366,53 @@ async function clearBuffer(){
 
 function renderImgsGridHtml(t){
     const imgs=t.image_urls||[];
-    const thumb=imgs[0]||'';
     const total=t.image_keys?.length||imgs.length;
-    return `<div class="img-item" data-index="0">
+    // Si toutes les images sont chargées, afficher avec drag & drop complet
+    if(imgs.length>=total&&imgs.length>0){
+        return renderAllImgsHtml(t);
+    }
+    // Sinon afficher thumbnail + bouton charger tout
+    const thumb=imgs[0]||'';
+    return `<div class="img-item" data-index="0"
+                draggable="true"
+                ondragstart="imgDragStart(event,'${t.id}')"
+                ondragover="event.preventDefault()"
+                ondrop="imgDrop(event,'${t.id}','${t.r2_key}')">
                 <img src="${thumb}" loading="lazy" onerror="this.style.opacity='.15'" onclick="openLightbox('${thumb}')">
                 <div class="img-overlay">
                     <button class="img-del" onclick="deleteImage(event,'${t.r2_key}',0,'${t.id}')">✕</button>
                 </div>
                 <div class="img-num">1/${total}</div>
             </div>
-            ${total>1?`<div class="more-imgs" style="cursor:pointer;font-size:12px" onclick="loadAllImgs('${t.r2_key}','${t.id}')">+${total-1}<br><span style="font-size:9px">voir tout</span></div>`:''}`;
+            ${total>1?`<div class="more-imgs" style="cursor:pointer;font-size:11px;flex-direction:column;gap:2px" onclick="loadAllImgs('${t.r2_key}','${t.id}')">
+                <span style="font-size:16px">🖼️</span>+${total-1} imgs<span style="font-size:9px;opacity:.7">cliquer pour réordonner</span>
+            </div>`:''}`;
 }
 
 async function loadAllImgs(r2Key, tiktokId){
     const t=allTiktoks.find(t=>t.id===tiktokId);
     if(!t) return;
+    // Feedback visuel pendant le chargement
+    const imgsGridEl=document.getElementById(`imgs-${tiktokId}`);
+    if(imgsGridEl) imgsGridEl.style.opacity='0.5';
     const res=await fetch(`/api/queue/images?key=${encodeURIComponent(r2Key)}`);
     const d=await res.json();
-    if(d.image_urls) {
+    if(d.image_urls){
         t.image_urls=d.image_urls;
-        const imgsGridEl=document.getElementById(`imgs-${tiktokId}`);
-        if(imgsGridEl) imgsGridEl.innerHTML=renderAllImgsHtml(t);
+        if(imgsGridEl){
+            imgsGridEl.style.opacity='1';
+            imgsGridEl.innerHTML=renderAllImgsHtml(t);
+        }
     }
 }
 
 function renderAllImgsHtml(t){
     const imgs=t.image_urls||[];
-    const rem=imgs.length-3;
-    return imgs.slice(0,3).map((u,i)=>`
+    return imgs.map((u,i)=>`
         <div class="img-item" draggable="true" data-index="${i}"
              ondragstart="imgDragStart(event,'${t.id}')"
-             ondragover="event.preventDefault()"
+             ondragover="event.preventDefault();event.currentTarget.style.outline='2px solid var(--accent)'"
+             ondragleave="event.currentTarget.style.outline=''"
              ondrop="imgDrop(event,'${t.id}','${t.r2_key}')">
             <img src="${u||''}" loading="lazy" onerror="this.style.opacity='.15'" onclick="openLightbox('${u}')">
             <div class="img-overlay">
@@ -403,9 +420,8 @@ function renderAllImgsHtml(t){
                 <button class="img-del" onclick="deleteImage(event,'${t.r2_key}',${i},'${t.id}')">✕</button>
                 ${i<imgs.length-1?`<button class="img-arrow" onclick="moveImg(event,'${t.r2_key}',${i},${i+1})">→</button>`:''}
             </div>
-            <div class="img-num">${i+1}</div>
-        </div>`).join('')+
-    (rem>0?`<div class="more-imgs">+${rem}</div>`:'');
+            <div class="img-num">${i+1}/${imgs.length}</div>
+        </div>`).join('');
 }
 
 function render(){
@@ -742,7 +758,10 @@ async function imgDrop(e, tiktokId, r2Key){
     // Mise à jour optimiste locale — on ne redessine QUE la grille d'images de cette carte
     t.image_urls = newOrder.map(i=>imgs[i]);
     const imgsGridEl = document.getElementById(`imgs-${t.id}`);
-    if(imgsGridEl) imgsGridEl.innerHTML = renderImgsGridHtml(t);
+    if(imgsGridEl){
+        imgsGridEl.querySelectorAll('.img-item').forEach(el=>el.style.outline='');
+        imgsGridEl.innerHTML = renderAllImgsHtml(t);
+    }
     dragSrcIndex = null;
     try{
         await fetch('/api/queue/reorder',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:r2Key, order:newOrder})});
@@ -762,7 +781,7 @@ async function moveImg(e, r2Key, fromIndex, toIndex){
     const newUrls = newOrder.map(i=>imgs[i]);
     t.image_urls = newUrls;
     const imgsGridEl = document.getElementById(`imgs-${t.id}`);
-    if(imgsGridEl) imgsGridEl.innerHTML = renderImgsGridHtml(t);
+    if(imgsGridEl) imgsGridEl.innerHTML = renderAllImgsHtml(t);
     try{
         await fetch('/api/queue/reorder',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:r2Key, order:newOrder})});
     }catch(e){
