@@ -778,27 +778,27 @@ def _save_buffer(buf):
 
 def add_to_buffer_and_create_tiktoks(new_images_b64, new_flockages, user):
     with _buffer_lock:
-     buf = get_buffer()
-    if not buf.get("user"):
-        buf["user"] = user
-    buf["images_b64"].extend(new_images_b64)
-    buf["flockages"].extend(new_flockages)
-    print(f"[BUFFER] Now has {len(buf['images_b64'])} images")
+        buf = get_buffer()
+        if not buf.get("user"):
+            buf["user"] = user
+        buf["images_b64"].extend(new_images_b64)
+        buf["flockages"].extend(new_flockages)
+        print(f"[BUFFER] Now has {len(buf['images_b64'])} images")
 
-    created = []
-    while len(buf["images_b64"]) >= TIKTOK_SIZE:
-        batch_b64  = buf["images_b64"][:TIKTOK_SIZE]
-        batch_floc = buf["flockages"][:TIKTOK_SIZE]
-        tiktok_num = get_next_tiktok_number()
-        print(f"[BUFFER] Creating TikTok {tiktok_num}...")
-        _save_tiktok(tiktok_num, batch_b64, buf["user"], batch_floc)
-        created.append(tiktok_num)
-        buf["images_b64"] = buf["images_b64"][TIKTOK_SIZE:]
-        buf["flockages"]  = buf["flockages"][TIKTOK_SIZE:]
+        created = []
+        while len(buf["images_b64"]) >= TIKTOK_SIZE:
+            batch_b64  = buf["images_b64"][:TIKTOK_SIZE]
+            batch_floc = buf["flockages"][:TIKTOK_SIZE]
+            tiktok_num = get_next_tiktok_number()
+            print(f"[BUFFER] Creating TikTok {tiktok_num}...")
+            _save_tiktok(tiktok_num, batch_b64, buf["user"], batch_floc)
+            created.append(tiktok_num)
+            buf["images_b64"] = buf["images_b64"][TIKTOK_SIZE:]
+            buf["flockages"]  = buf["flockages"][TIKTOK_SIZE:]
 
-    _save_buffer(buf)
-    print(f"[BUFFER] Done — {len(created)} TikToks created, {len(buf['images_b64'])} pending")
-    return created, len(buf["images_b64"])
+        _save_buffer(buf)
+        print(f"[BUFFER] Done — {len(created)} TikToks created, {len(buf['images_b64'])} pending")
+        return created, len(buf["images_b64"])
 
 
 # ── TikTok queue ───────────────────────────────────────────────────────────
