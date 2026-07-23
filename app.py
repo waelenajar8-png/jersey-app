@@ -1609,14 +1609,14 @@ def generate_bulk():
 
 @app.route("/api/jobs/progress/<session_id>")
 def api_jobs_progress(session_id):
-    """Polling endpoint — appelé toutes les 2s par le frontend pour voir l'avancement"""
+    """Polling endpoint — retourne aussi les nouvelles images depuis last_seen"""
+    last_seen = int(request.args.get("last_seen", 0))
     with _job_sessions_lock:
         s = _job_sessions.get(session_id)
-    # Fallback R2 si Railway a redémarré et la session n'est plus en RAM
+    # Fallback R2 si Railway a redémarré
     if not s:
         saved = r2_get_json(f"sessions/{session_id}.json")
         if saved:
-            # Session terminée retrouvée dans R2
             return jsonify({
                 "session_id": session_id,
                 "total": saved.get("total", 0),
@@ -1627,8 +1627,13 @@ def api_jobs_progress(session_id):
                 "tiktoks_created": [],
                 "buffer_remaining": 0,
                 "percent": 100,
+                "new_results": [],
             })
         return jsonify({"error": "Session introuvable"}), 404
+    # Retourner seulement les résultats qu'on a pas encore vus
+    with _job_sessions_lock:
+        all_results = s["results"][:]
+    new_results = all_results[last_seen:]
     return jsonify({
         "session_id": session_id,
         "total": s["total"],
@@ -1639,6 +1644,8 @@ def api_jobs_progress(session_id):
         "tiktoks_created": s.get("tiktoks_created", []),
         "buffer_remaining": s.get("buffer_remaining", 0),
         "percent": round(s["done"] / s["total"] * 100) if s["total"] else 0,
+        "new_results": [{"image": r["image"], "floc": r["floc"], "index": last_seen + i} for i, r in enumerate(new_results)],
+        "seen_count": last_seen + len(new_results),
     })
 
 @app.route("/api/jobs/cancel/<session_id>", methods=["POST"])
