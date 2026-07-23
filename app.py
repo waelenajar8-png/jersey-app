@@ -723,6 +723,7 @@ def rebuild_used_slots_index():
 
 # ── Buffer persistant R2 (thread-safe) ────────────────────────────────────
 _buffer_lock = threading.Lock()
+_schedule_lock = threading.Lock()
 
 def get_buffer():
     data = r2_get_json(KEY_BUFFER)
@@ -1076,6 +1077,14 @@ def api_dispatch():
 
 @app.route("/api/queue/schedule", methods=["POST"])
 def api_schedule():
+    if not _schedule_lock.acquire(blocking=False):
+        return jsonify({"error": "Une programmation est déjà en cours, réessaie dans quelques secondes."}), 429
+    try:
+     return _do_schedule()
+    finally:
+     _schedule_lock.release()
+
+def _do_schedule():
     data = request.json or {}
     start_date_str = data.get("start_date")
     custom_slots = data.get("custom_slots", {})
