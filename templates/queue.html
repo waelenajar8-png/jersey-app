@@ -554,10 +554,24 @@ function toggleMain(key){
     document.getElementById('selCount').textContent=selectedForMain.size>0?`${selectedForMain.size} sélectionné(s) → ${accounts.main||'compte principal'}`:'';
 }
 
-async function assign(key,account){
+// Batch assignations — toutes envoyées ensemble après 400ms d'inactivité
+const _pendingAssigns = {};
+let _assignTimer = null;
+
+async function flushAssigns(){
+    const batch = Object.entries(_pendingAssigns).map(([key, account]) => ({key, account}));
+    if(!batch.length) return;
+    Object.keys(_pendingAssigns).forEach(k => delete _pendingAssigns[k]);
+    try{
+        await fetch('/api/queue/assign_batch',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({assignments: batch})});
+    }catch(e){
+        showStatus('❌ Erreur réseau — recharge la page pour vérifier les assignations');
+    }
+}
+
+function assign(key, account){
     const t=allTiktoks.find(t=>t.r2_key===key);
     if(t) t.account=account;
-    // Mise à jour ciblée : juste le badge compte + bouton programmer de cette carte
     if(t){
         const card=document.getElementById(`c-${t.id}`);
         if(card){
@@ -566,19 +580,15 @@ async function assign(key,account){
             if(account){
                 if(!tag){tag=document.createElement('span');tag.className='account-tag';header.appendChild(tag);}
                 tag.textContent=account;
-            } else if(tag){
-                tag.remove();
-            }
+            } else if(tag){ tag.remove(); }
             const scheduleBtn=card.querySelector('.schedule-one-btn');
             if(scheduleBtn) scheduleBtn.disabled=!account;
         }
     }
     updateCounters();
-    try{
-        await fetch('/api/queue/assign',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key,account})});
-    }catch(e){
-        showStatus('❌ Erreur réseau — l\'assignation n\'a peut-être pas été sauvegardée, recharge la page pour vérifier');
-    }
+    _pendingAssigns[key] = account;
+    if(_assignTimer) clearTimeout(_assignTimer);
+    _assignTimer = setTimeout(flushAssigns, 400);
 }
 
 function selectAll(){
