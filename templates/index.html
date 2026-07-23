@@ -589,6 +589,12 @@ async function launch(testMode=false){
                     const done=d.done; const errors=d.errors; const success=d.success;
                     progressFill.style.width=`${d.percent}%`;
 
+                    // Mettre à jour le badge buffer en temps réel
+                    if(d.buffer_remaining>0){
+                        bufferBadge.style.display='block';
+                        bufferBadge.textContent=`⏳ buffer: ${d.buffer_remaining}/7`;
+                    }
+
                     // Afficher les nouvelles images dès qu'elles arrivent
                     if(d.new_results&&d.new_results.length>0){
                         for(const res of d.new_results){
