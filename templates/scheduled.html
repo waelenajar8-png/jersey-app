@@ -358,28 +358,36 @@ async function unscheduleSelected(){
     const btn=document.getElementById('unscheduleSelBtn');
     btn.disabled=true;
     const keys=[...selected];
-    const total=keys.length;
-    let done=0;
-    // Déprogrammer un par un avec feedback en temps réel
-    for(const key of keys){
-        showStatus(`⏳ Déprogrammation ${done+1}/${total}...`);
+    showStatus(`⏳ Déprogrammation de ${keys.length} TikTok(s)...`);
+    // Griser toutes les cartes immédiatement
+    keys.forEach(key=>{
         const t=tiktoks.find(t=>t.r2_key===key);
         if(t){const card=document.getElementById(`scard-${t.id}`);if(card){card.style.opacity='0.3';card.style.pointerEvents='none';}}
-        try{
-            const res=await fetch('/api/scheduled/unschedule',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({keys:[key]})});
-            if(res.ok){
-                tiktoks=tiktoks.filter(t=>t.r2_key!==key);
-                totalCount=Math.max(0,totalCount-1);
-                selected.delete(key);
-            }
-        }catch(e){}
-        done++;
-        render();
+    });
+    try{
+        // UN SEUL appel pour tous les TikToks — beaucoup plus rapide
+        const res=await fetch('/api/scheduled/unschedule',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({keys})});
+        if(res.ok){
+            const d=await res.json();
+            tiktoks=tiktoks.filter(t=>!keys.includes(t.r2_key));
+            totalCount=Math.max(0,totalCount-keys.length);
+            selected.clear();
+            updateStats();
+            updatePagination();
+            render();
+            showStatus(`✅ ${d.count} TikTok(s) remis en file d'attente`);
+        } else {
+            showStatus(`❌ Erreur serveur (${res.status}) — réessaie`);
+            // Remettre les cartes en état normal
+            keys.forEach(key=>{
+                const t=tiktoks.find(t=>t.r2_key===key);
+                if(t){const card=document.getElementById(`scard-${t.id}`);if(card){card.style.opacity='1';card.style.pointerEvents='auto';}}
+            });
+        }
+    }catch(e){
+        showStatus(`❌ Erreur réseau — réessaie`);
     }
     btn.disabled=false;
-    updateStats();
-    updatePagination();
-    showStatus(`✅ ${done} TikTok(s) remis en file d'attente`);
 }
 
 async function unscheduleAll(){
