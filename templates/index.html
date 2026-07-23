@@ -511,7 +511,9 @@ document.getElementById('loadTemplatesBtn').addEventListener('click',async()=>{
             const arr=new Uint8Array(bin.length);
             for(let i=0;i<bin.length;i++)arr[i]=bin.charCodeAt(i);
             const blob=new Blob([arr],{type:d.mime||'image/png'});
-            blobs.push(new File([blob],key,{type:d.mime||'image/png'}));
+            const file=new File([blob],key,{type:d.mime||'image/png'});
+            file._templateKey=key; // stocker la clé R2 du template
+            blobs.push(file);
         }
     }
     setFiles(blobs);
@@ -671,7 +673,7 @@ async function launch(testMode=false){
 
     for(let i=0;i<filesToUse.length;i++){
         const parts=linesToUse[i].split('/').map(p=>p.trim());
-        currentItems[i]={file:filesToUse[i],name:parts[0]||'',number:parts[1]||'',name_below:parts[2]||'',orig:origPreviews[i]};
+        currentItems[i]={file:filesToUse[i],name:parts[0]||'',number:parts[1]||'',name_below:parts[2]||'',orig:origPreviews[i],template_key:filesToUse[i]._templateKey||''};
         const card=document.createElement('div');
         card.className='card';card.id=`card-${i}`;
         const sub=`${(parts[0]||'').toUpperCase()}${parts[1]?' / '+parts[1]:''}${parts[2]?' / '+parts[2].toUpperCase():''}`;
@@ -681,6 +683,7 @@ async function launch(testMode=false){
 
     const formData=new FormData();
     filesToUse.forEach(f=>formData.append('images',f));
+    formData.append('template_keys', JSON.stringify(filesToUse.map(f=>f._templateKey||'')));
     formData.append('flockages',linesToUse.join('\n'));
     formData.append('user',userName);
     formData.append('session_id',sessionId);
