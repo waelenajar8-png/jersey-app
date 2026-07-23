@@ -22,7 +22,7 @@ _job_sessions = {}
 _job_sessions_lock = threading.Lock()
 
 # Nombre de workers parallèles pour la génération
-WORKER_COUNT = 50
+WORKER_COUNT = 20
 
 def _get_or_create_session(session_id, total):
     with _job_sessions_lock:
