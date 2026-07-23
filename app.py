@@ -76,16 +76,28 @@ def _finalize_session(session_id, user):
 
 def _run_bulk_async(session_id, items, user, resolution):
     """Lance la génération en background avec WORKER_COUNT workers"""
+    import gc
     session = _get_or_create_session(session_id, len(items))
 
     def process_one(item):
-        res = call_gemini(item["bytes"], item["mime"], item["name"], item["number"], item["name_below"], resolution=resolution)
-        log_generation(user, res["success"])
-        if res["success"]:
-            floc = f"{item['name']}/{item['number']}/{item.get('name_below','') or ''}"
-            _update_session(session_id, True, res["image"], floc)
-        else:
-            _update_session(session_id, False, error=res.get("error"))
+        try:
+            img_bytes = item["bytes"]
+            res = call_gemini(img_bytes, item["mime"], item["name"], item["number"], item["name_below"], resolution=resolution)
+            log_generation(user, res["success"])
+            if res["success"]:
+                floc = f"{item['name']}/{item['number']}/{item.get('name_below','') or ''}"
+                _update_session(session_id, True, res["image"], floc)
+                # Libérer la mémoire immédiatement après traitement
+                res["image"] = None
+            else:
+                _update_session(session_id, False, error=res.get("error"))
+        except Exception as e:
+            print(f"[WORKER] Erreur inattendue: {e}")
+            _update_session(session_id, False, error=str(e))
+        finally:
+            # Forcer le garbage collector à libérer la RAM
+            item["bytes"] = None
+            gc.collect()
 
     with ThreadPoolExecutor(max_workers=WORKER_COUNT) as ex:
         list(ex.map(process_one, items))
