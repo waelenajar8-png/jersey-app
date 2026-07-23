@@ -326,15 +326,29 @@ function deselectAll(){
 async function unscheduleSingle(key){
     if(!confirm('Remettre ce TikTok en file d\'attente ? (déprogrammé aussi sur RobinReach)')) return;
     showStatus('⏳ Déprogrammation en cours...');
+    // Retirer la carte instantanément
+    const t=tiktoks.find(t=>t.r2_key===key);
+    if(t){
+        const card=document.getElementById(`scard-${t.id}`);
+        if(card){card.style.opacity='0.3';card.style.pointerEvents='none';}
+    }
     try{
         const res=await fetch('/api/scheduled/unschedule',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({keys:[key]})});
-        if(!res.ok){showStatus(`❌ Erreur serveur (${res.status}) — réessaie`);return}
+        if(!res.ok){
+            if(t){const card=document.getElementById(`scard-${t.id}`);if(card){card.style.opacity='1';card.style.pointerEvents='auto';}}
+            showStatus(`❌ Erreur serveur (${res.status}) — réessaie`);return
+        }
         const d=await res.json();
-        showStatus(`✅ ${d.count} TikTok(s) remis en file d'attente`);
+        tiktoks=tiktoks.filter(t=>t.r2_key!==key);
         selected.delete(key);
-        await loadPage(currentPage);
+        totalCount=Math.max(0,totalCount-1);
+        showStatus(`✅ ${d.count} TikTok(s) remis en file d'attente`);
+        updateStats();
+        render();
+        updatePagination();
     }catch(e){
-        showStatus(`❌ Erreur réseau : ${e.message} — le TikTok n'a peut-être pas été déprogrammé, vérifie et réessaie`);
+        if(t){const card=document.getElementById(`scard-${t.id}`);if(card){card.style.opacity='1';card.style.pointerEvents='auto';}}
+        showStatus(`❌ Erreur réseau : ${e.message} — vérifie et réessaie`);
     }
 }
 
@@ -343,19 +357,29 @@ async function unscheduleSelected(){
     if(!confirm(`Remettre ${selected.size} TikTok(s) en file d'attente ? (déprogrammés aussi sur RobinReach)`)) return;
     const btn=document.getElementById('unscheduleSelBtn');
     btn.disabled=true;
-    showStatus(`⏳ Déprogrammation de ${selected.size} TikTok(s) en cours... (peut prendre du temps)`);
-    try{
-        const res=await fetch('/api/scheduled/unschedule',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({keys:[...selected]})});
-        btn.disabled=false;
-        if(!res.ok){showStatus(`❌ Erreur serveur (${res.status}) — réessaie`);return}
-        const d=await res.json();
-        showStatus(`✅ ${d.count} TikTok(s) remis en file d'attente`);
-        selected.clear();
-        await loadPage(currentPage);
-    }catch(e){
-        btn.disabled=false;
-        showStatus(`❌ Erreur réseau : ${e.message} — vérifie ta connexion et réessaie`);
+    const keys=[...selected];
+    const total=keys.length;
+    let done=0;
+    // Déprogrammer un par un avec feedback en temps réel
+    for(const key of keys){
+        showStatus(`⏳ Déprogrammation ${done+1}/${total}...`);
+        const t=tiktoks.find(t=>t.r2_key===key);
+        if(t){const card=document.getElementById(`scard-${t.id}`);if(card){card.style.opacity='0.3';card.style.pointerEvents='none';}}
+        try{
+            const res=await fetch('/api/scheduled/unschedule',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({keys:[key]})});
+            if(res.ok){
+                tiktoks=tiktoks.filter(t=>t.r2_key!==key);
+                totalCount=Math.max(0,totalCount-1);
+                selected.delete(key);
+            }
+        }catch(e){}
+        done++;
+        render();
     }
+    btn.disabled=false;
+    updateStats();
+    updatePagination();
+    showStatus(`✅ ${done} TikTok(s) remis en file d'attente`);
 }
 
 async function unscheduleAll(){
