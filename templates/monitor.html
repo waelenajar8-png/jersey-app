@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Monitor — Sessions en cours</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root[data-theme="dark"]{
+    --bg:#0a0b0f;--bg-elevated:#0f1117;--panel:#15171e;--panel-hover:#1a1d26;
+    --border:#242832;--border-strong:#323847;
+    --accent:#4ade80;--accent-grad:linear-gradient(135deg,#4ade80,#22d3ee);--accent-dim:rgba(74,222,128,.12);
+    --text:#f1f3f6;--text-dim:#8b93a3;--text-faint:#5b6373;
+    --danger:#f87171;--danger-dim:rgba(248,113,113,.12);
+    --warn:#fbbf24;--warn-dim:rgba(251,191,36,.12);
+    --shadow-sm:0 1px 2px rgba(0,0,0,.3);--shadow-md:0 4px 12px rgba(0,0,0,.35);
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;padding:32px 24px;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1100px;margin:0 auto}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+@keyframes fadeInUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+.topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:28px;flex-wrap:wrap;gap:12px}
+h1{font-size:24px;margin:0;font-weight:800;letter-spacing:-0.02em}
+.nav{display:flex;gap:6px}
+.nav a{color:var(--text-dim);text-decoration:none;font-size:13px;font-weight:600;padding:6px 10px;border-radius:8px;transition:all .15s}
+.nav a:hover{color:var(--text);background:var(--panel-hover)}
+.live-dot{width:8px;height:8px;background:var(--accent);border-radius:50%;animation:pulse 1.5s infinite;display:inline-block;margin-right:6px}
+.refresh-info{font-size:12px;color:var(--text-faint);font-weight:500}
+
+/* Sessions grid */
+.sessions-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:20px}
+.session-card{background:var(--panel);border:1.5px solid var(--border);border-radius:16px;padding:20px;animation:fadeInUp .35s cubic-bezier(.16,1,.3,1) both;transition:border-color .2s}
+.session-card.running{border-color:rgba(74,222,128,.35);box-shadow:0 0 0 1px rgba(74,222,128,.1)}
+.session-card.done{border-color:var(--border)}
+.session-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+.session-user{font-size:16px;font-weight:800;display:flex;align-items:center;gap:8px}
+.status-pill{font-size:10px;font-weight:700;padding:3px 10px;border-radius:100px}
+.status-pill.running{background:var(--accent-dim);color:var(--accent)}
+.status-pill.done{background:rgba(100,100,100,.15);color:var(--text-dim)}
+
+/* Stats */
+.stats-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px}
+.stat-box{background:var(--bg-elevated);border-radius:10px;padding:12px;text-align:center}
+.stat-val{font-size:20px;font-weight:800;font-family:'JetBrains Mono',monospace;letter-spacing:-0.02em}
+.stat-val.accent{color:var(--accent)}
+.stat-val.warn{color:var(--warn)}
+.stat-label{font-size:10px;color:var(--text-faint);font-weight:600;margin-top:3px;text-transform:uppercase;letter-spacing:.04em}
+
+/* Progress */
+.prog-label{display:flex;justify-content:space-between;font-size:12px;font-weight:600;margin-bottom:6px}
+.prog-label span{color:var(--text-dim)}
+.prog-track{height:8px;background:var(--border);border-radius:100px;overflow:hidden;margin-bottom:14px}
+.prog-fill{height:100%;background:var(--accent-grad);border-radius:100px;transition:width .5s cubic-bezier(.4,0,.2,1)}
+
+/* Tiktoks */
+.tiktoks-row{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
+.tiktok-chip{background:var(--accent-dim);color:var(--accent);border:1px solid rgba(74,222,128,.2);padding:3px 10px;border-radius:100px;font-size:11px;font-weight:700}
+
+/* Chrono */
+.chrono{font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:700;color:var(--text-dim)}
+.chrono.running{color:var(--accent)}
+
+/* Empty */
+.empty{text-align:center;padding:80px 20px;color:var(--text-dim)}
+.empty-icon{font-size:48px;margin-bottom:16px}
+
+/* Historique */
+.history-section{margin-top:40px}
+.history-title{font-size:16px;font-weight:800;margin-bottom:16px;display:flex;align-items:center;gap:8px}
+.history-table{width:100%;border-collapse:collapse;font-size:12.5px;background:var(--panel);border-radius:14px;overflow:hidden;border:1px solid var(--border)}
+.history-table th{padding:11px 16px;text-align:left;color:var(--text-dim);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.04em;border-bottom:1px solid var(--border)}
+.history-table td{padding:11px 16px;border-bottom:1px solid var(--border)}
+.history-table tr:last-child td{border-bottom:none}
+.history-table tr:hover td{background:var(--panel-hover)}
+</style>
+</head>
+<body>
+<div class="wrap">
+    <div class="topbar">
+        <div>
+            <h1><span class="live-dot"></span>Monitor</h1>
+            <div class="refresh-info">Mise à jour toutes les 3 secondes</div>
+        </div>
+        <div class="nav">
+            <a href="/">🎨 Générateur</a>
+            <a href="/queue">📋 File d'attente</a>
+            <a href="/scheduled">✅ Programmés</a>
+            <a href="/stats">📈 Stats</a>
+        </div>
+    </div>
+
+    <div id="activeSessions"></div>
+
+    <div class="history-section">
+        <div class="history-title">📋 Sessions récentes</div>
+        <table class="history-table">
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>User</th>
+                    <th>Images</th>
+                    <th>Durée</th>
+                    <th>Vitesse</th>
+                    <th>Coût</th>
+                </tr>
+            </thead>
+            <tbody id="historyBody">
+                <tr><td colspan="6" style="text-align:center;color:var(--text-dim);padding:20px">Chargement...</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+// Chrono en direct pour les sessions actives
+const _chronos = {}; // session_id -> {start, interval}
+
+function startLiveChrono(sessionId, startTime, elId){
+    if(_chronos[sessionId]) return; // déjà lancé
+    const startMs = new Date(startTime).getTime();
+    _chronos[sessionId] = setInterval(()=>{
+        const el = document.getElementById(elId);
+        if(!el){ clearInterval(_chronos[sessionId]); delete _chronos[sessionId]; return; }
+        const elapsed = Math.floor((Date.now() - startMs) / 1000);
+        const m = Math.floor(elapsed/60).toString().padStart(2,'0');
+        const s = (elapsed%60).toString().padStart(2,'0');
+        el.textContent = `⏱️ ${m}:${s}`;
+    }, 1000);
+}
+
+function stopLiveChrono(sessionId){
+    if(_chronos[sessionId]){ clearInterval(_chronos[sessionId]); delete _chronos[sessionId]; }
+}
+
+async function loadActiveSessions(){
+    try{
+        const res = await fetch('/api/monitor/sessions');
+        const d = await res.json();
+        renderActive(d.active || []);
+    }catch(e){}
+}
+
+function renderActive(sessions){
+    const el = document.getElementById('activeSessions');
+    if(!sessions.length){
+        // Arrêter tous les chronos
+        Object.keys(_chronos).forEach(stopLiveChrono);
+        el.innerHTML = `<div class="empty">
+            <div class="empty-icon">👀</div>
+            <div style="font-size:15px;font-weight:700;margin-bottom:8px">Aucune génération en cours</div>
+            <div style="font-size:13px">Quand Moh ou Wael lance une génération, tu la vois ici en direct.</div>
+        </div>`;
+        return;
+    }
+
+    // Arrêter les chronos des sessions finies
+    const activeIds = new Set(sessions.map(s=>s.session_id));
+    Object.keys(_chronos).forEach(id=>{ if(!activeIds.has(id)) stopLiveChrono(id); });
+
+    el.innerHTML = `<div class="sessions-grid">${sessions.map(s=>{
+        const pct = s.total > 0 ? Math.round(s.done / s.total * 100) : 0;
+        const isRunning = s.status === 'running';
+        const chronoId = `chrono-${s.session_id}`;
+        const elapsed = s.elapsed_seconds || 0;
+        const m = Math.floor(elapsed/60).toString().padStart(2,'0');
+        const sec = (elapsed%60).toString().padStart(2,'0');
+        const chronoText = isRunning ? '⏱️ --:--' : `✅ ${m}:${sec}`;
+        const ipm = s.done > 0 && elapsed > 0 ? (s.done / (elapsed/60)).toFixed(1) : '—';
+        const cost = s.total ? `$${(s.total * 0.069).toFixed(2)}` : '—';
+        return `<div class="session-card ${isRunning?'running':'done'}">
+            <div class="session-header">
+                <div class="session-user">👤 ${s.user||'Inconnu'}</div>
+                <div style="display:flex;align-items:center;gap:8px">
+                    <span class="chrono ${isRunning?'running':''}" id="${chronoId}">${chronoText}</span>
+                    <span class="status-pill ${isRunning?'running':'done'}">${isRunning?'🟢 EN COURS':'✅ TERMINÉ'}</span>
+                </div>
+            </div>
+            <div class="stats-row">
+                <div class="stat-box">
+                    <div class="stat-val accent">${s.done}</div>
+                    <div class="stat-label">Faites</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-val">${s.total}</div>
+                    <div class="stat-label">Total</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-val warn">${s.errors||0}</div>
+                    <div class="stat-label">Erreurs</div>
+                </div>
+            </div>
+            <div class="prog-label">
+                <span>${pct}%</span>
+                <span>${s.done}/${s.total} images</span>
+            </div>
+            <div class="prog-track"><div class="prog-fill" style="width:${pct}%"></div></div>
+            <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text-dim);margin-bottom:10px">
+                <span>⚡ ${ipm} img/min</span>
+                <span>💰 ${cost}</span>
+                <span>🎬 ${(s.tiktoks_created||[]).length} TikTok(s)</span>
+            </div>
+            ${s.tiktoks_created?.length ? `<div class="tiktoks-row">${s.tiktoks_created.map(n=>`<span class="tiktok-chip">TikTok ${n}</span>`).join('')}</div>` : ''}
+        </div>`;
+    }).join('')}</div>`;
+
+    // Lancer les chronos pour les sessions actives
+    sessions.filter(s=>s.status==='running').forEach(s=>{
+        startLiveChrono(s.session_id, s.created_at, `chrono-${s.session_id}`);
+    });
+}
+
+async function loadHistory(){
+    try{
+        const res = await fetch('/api/sessions');
+        const d = await res.json();
+        const sessions = (d.sessions||[]).filter(s=>s.end); // seulement les terminées
+        const tbody = document.getElementById('historyBody');
+        if(!sessions.length){
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-dim);padding:20px">Aucune session enregistrée</td></tr>';
+            return;
+        }
+        tbody.innerHTML = sessions.map(s=>{
+            const dur = s.elapsed_seconds ? `${Math.floor(s.elapsed_seconds/60)}m${(s.elapsed_seconds%60).toString().padStart(2,'0')}s` : '—';
+            const ipm = s.images_per_min ? `${s.images_per_min} img/min` : '—';
+            const date = s.start ? new Date(s.start).toLocaleDateString('fr-FR',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}) : '—';
+            const cost = s.total ? `$${(s.total*0.069).toFixed(2)}` : '—';
+            return `<tr>
+                <td>${date}</td>
+                <td><b>${s.user||'—'}</b></td>
+                <td>${s.success||0}/${s.total||0}</td>
+                <td style="color:var(--accent);font-weight:700;font-family:'JetBrains Mono',monospace">${dur}</td>
+                <td>${ipm}</td>
+                <td>${cost}</td>
+            </tr>`;
+        }).join('');
+    }catch(e){}
+}
+
+// Polling toutes les 3s pour les sessions actives
+loadActiveSessions();
+loadHistory();
+setInterval(loadActiveSessions, 3000);
+setInterval(loadHistory, 30000);
+</script>
+</body>
+</html>
