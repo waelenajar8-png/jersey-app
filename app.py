@@ -184,6 +184,24 @@ KEY_USED_SLOTS = "meta/used_slots.json"
 # Lock pour éviter race conditions sur le compteur/buffer
 _r2_lock = threading.Lock()
 _log_lock = threading.Lock()
+_r2_client = None
+_r2_client_lock = threading.Lock()
+
+def get_r2():
+    global _r2_client
+    if not R2_ENDPOINT:
+        return None
+    with _r2_client_lock:
+        if _r2_client is None:
+            _r2_client = boto3.client(
+                "s3",
+                endpoint_url=R2_ENDPOINT,
+                aws_access_key_id=R2_ACCESS_KEY,
+                aws_secret_access_key=R2_SECRET_KEY,
+                config=Config(signature_version="s3v4", max_pool_connections=100),
+                region_name="auto",
+            )
+        return _r2_client
 
 DEFAULT_FLOCAGES = [
     'UN PEU / 2 / LIMONADE',
@@ -580,17 +598,7 @@ DEFAULT_FLOCAGES = [
     'UN PEU / 2 / GAZZOUZ',
 ]
 
-def get_r2():
-    if not R2_ENDPOINT:
-        return None
-    return boto3.client(
-        "s3",
-        endpoint_url=R2_ENDPOINT,
-        aws_access_key_id=R2_ACCESS_KEY,
-        aws_secret_access_key=R2_SECRET_KEY,
-        config=Config(signature_version="s3v4"),
-        region_name="auto",
-    )
+
 
 def r2_put_json(key, data):
     r2 = get_r2()
@@ -1671,20 +1679,29 @@ def api_jobs_progress(session_id):
                 "new_results": [],
             })
         return jsonify({"error": "Session introuvable"}), 404
-    # Retourner seulement les résultats qu'on a pas encore vus
+    # Lire tout sous lock pour cohérence des compteurs
     with _job_sessions_lock:
-        all_results = s["results"][:]
-    new_results = all_results[last_seen:]
+        snap = {
+            "total": s["total"],
+            "done": s["done"],
+            "errors": s["errors"],
+            "status": s["status"],
+            "tiktoks_created": list(s.get("tiktoks_created", [])),
+            "buffer_remaining": s.get("buffer_remaining", 0),
+            "new_results": s["results"][last_seen:],
+        }
+    new_results = snap["new_results"]
+    done = snap["done"]; total = snap["total"]
     return jsonify({
         "session_id": session_id,
-        "total": s["total"],
-        "done": s["done"],
-        "errors": s["errors"],
-        "success": s["done"] - s["errors"],
-        "status": s["status"],
-        "tiktoks_created": s.get("tiktoks_created", []),
-        "buffer_remaining": s.get("buffer_remaining", 0),
-        "percent": round(s["done"] / s["total"] * 100) if s["total"] else 0,
+        "total": total,
+        "done": done,
+        "errors": snap["errors"],
+        "success": done - snap["errors"],
+        "status": snap["status"],
+        "tiktoks_created": snap["tiktoks_created"],
+        "buffer_remaining": snap["buffer_remaining"],
+        "percent": round(done / total * 100) if total else 0,
         "new_results": [{"image": r["image"], "floc": r["floc"], "index": r.get("orig_index", last_seen + i)} for i, r in enumerate(new_results)],
         "seen_count": last_seen + len(new_results),
     })
