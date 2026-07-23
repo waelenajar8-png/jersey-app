@@ -171,6 +171,33 @@ R2_BUCKET     = os.environ.get("R2_BUCKET", "jersey-templates")
 ROBINREACH_API_KEY  = os.environ.get("ROBINREACH_API_KEY")
 ROBINREACH_BRAND_ID = os.environ.get("ROBINREACH_BRAND_ID")
 
+# ── Auth utilisateurs ──────────────────────────────────────────────────────
+# Format: { "prenom": "mot_de_passe" }
+# Change les mots de passe dans les variables Railway (AUTH_USERS en JSON)
+_DEFAULT_USERS = {
+    "Wael": os.environ.get("AUTH_PASS_WAEL", "wael2024"),
+    "Moh": os.environ.get("AUTH_PASS_MOH", "moh2024"),
+    "Wassim": os.environ.get("AUTH_PASS_WASSIM", "wassim2024"),
+    "Seik": os.environ.get("AUTH_PASS_SEIK", "seik2024"),
+}
+
+def get_auth_users():
+    raw = os.environ.get("AUTH_USERS")
+    if raw:
+        try: return json.loads(raw)
+        except: pass
+    return _DEFAULT_USERS
+
+@app.route("/api/auth/login", methods=["POST"])
+def api_auth_login():
+    data = request.json or {}
+    name = data.get("name", "").strip()
+    password = data.get("password", "").strip()
+    users = get_auth_users()
+    if name in users and users[name] == password:
+        return jsonify({"success": True, "user": name})
+    return jsonify({"success": False, "error": "Prénom ou mot de passe incorrect"}), 401
+
 # Préfixes R2
 PFX_QUEUE     = "queue/"
 PFX_SCHEDULED = "scheduled/"
