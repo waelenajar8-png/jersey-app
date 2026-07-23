@@ -475,6 +475,55 @@ const statusEl=document.getElementById('status');
 const progressFill=document.getElementById('progressFill');
 const resultsEl=document.getElementById('results');
 
+// ── Reprise de session après refresh ───────────────────────────────────────
+async function resumeSessionIfAny(){
+    const saved=localStorage.getItem('active_session');
+    if(!saved) return;
+    try{
+        const {sid,total,startTime}=JSON.parse(saved);
+        const r=await fetch('/api/jobs/progress/'+sid);
+        if(!r.ok){localStorage.removeItem('active_session');return}
+        const d=await r.json();
+        if(d.status==='done'||d.status==='cancelled'){
+            localStorage.removeItem('active_session');
+            statusEl.innerHTML='✅ Session précédente terminée — '+d.success+'/'+d.total+' images dans la queue. <a href="/queue" style="color:var(--accent);font-weight:700">Voir la file →</a>';
+            progressFill.style.width='100%';
+            return;
+        }
+        statusEl.textContent='⚡ Génération en cours (reprise)... '+d.done+'/'+d.total;
+        progressFill.style.width=d.percent+'%';
+        generateBtn.disabled=true;testBtn.disabled=true;generateBtn.textContent='En cours...';
+        generationInProgress=true;
+        await new Promise((resolve)=>{
+            const poll=setInterval(async()=>{
+                try{
+                    const r2=await fetch('/api/jobs/progress/'+sid);
+                    if(!r2.ok){clearInterval(poll);resolve();return}
+                    const d2=await r2.json();
+                    progressFill.style.width=d2.percent+'%';
+                    if(d2.done>0&&d2.done<d2.total){
+                        const elapsed=(Date.now()-startTime)/1000;
+                        const rem=Math.round((elapsed/d2.done)*(d2.total-d2.done));
+                        statusEl.textContent=d2.done+'/'+d2.total+' traité(s) — reste '+(rem>60?'~'+Math.round(rem/60)+' min':'~'+rem+'s');
+                    }
+                    if(d2.status==='done'||d2.status==='cancelled'){
+                        clearInterval(poll);
+                        localStorage.removeItem('active_session');
+                        if(d2.tiktoks_created&&d2.tiktoks_created.length>0){
+                            statusEl.innerHTML='✅ '+d2.success+'/'+d2.total+' images — '+d2.tiktoks_created.length+' TikTok(s) créé(s) ! <a href="/queue" style="color:var(--accent);font-weight:700">Voir la file →</a>';
+                        } else {
+                            statusEl.textContent='✅ '+d2.success+'/'+d2.total+' images générées';
+                        }
+                        updateBufferBadge();resolve();
+                    }
+                }catch(e){}
+            },2000);
+        });
+        generationInProgress=false;generateBtn.disabled=false;testBtn.disabled=false;generateBtn.textContent='Lancer la génération';
+    }catch(e){localStorage.removeItem('active_session');}
+}
+resumeSessionIfAny();
+
 testBtn.addEventListener('click',()=>launch(true));
 generateBtn.addEventListener('click',()=>launch(false));
 
@@ -524,6 +573,8 @@ async function launch(testMode=false){
         const res=await fetch('/generate_bulk',{method:'POST',body:formData});
         if(!res.ok){const d=await res.json();statusEl.textContent='Erreur: '+(d.error||'inconnue');return}
         const {session_id:sid, total, workers}=await res.json();
+        // Sauvegarder la session pour reprise après refresh
+        localStorage.setItem('active_session', JSON.stringify({sid, total, startTime: Date.now()}));
         statusEl.textContent=`⚡ Génération lancée avec ${workers} workers parallèles...`;
 
         // Polling toutes les 2s — plus jamais de timeout Railway
@@ -562,6 +613,7 @@ async function launch(testMode=false){
                         } else {
                             statusEl.textContent=`✅ ${success}/${total} images générées${errors>0?' — '+errors+' erreur(s)':''}`;
                         }
+                        localStorage.removeItem('active_session');
                         updateBufferBadge();
                         notifyDone(total,testMode);
                         resolve();
