@@ -251,6 +251,7 @@ input[type=file]{display:none}
         <button class="btn-sec" id="selectAllImgBtn" style="display:none" onclick="selectAllImages()">☑️ Tout sélectionner</button>
         <button class="btn-sec" id="dlSelBtn" style="display:none" onclick="dlSelected()">⬇️ Télécharger la sélection (<span id="selImgCount">0</span>)</button>
         <button class="btn-sec" id="zipBtn">📦 ZIP</button>
+        <button class="btn-sec" id="retryFailedBtn" style="display:none;background:var(--danger-dim);border-color:rgba(248,113,113,.3);color:var(--danger)" onclick="retryAllFailed()">🔄 Relancer les échecs (<span id="failedCount">0</span>)</button>
         <div class="chrono-badge" id="chronoBadge">⏱️ 00:00</div>
     </div>
     <div class="status" id="status"></div>
@@ -762,6 +763,7 @@ async function launch(testMode=false){
                         localStorage.removeItem('active_session');
                         const elapsed = chronoStop();
                         updateBufferBadge();
+                        updateFailedBtn();
                         notifyDone(total,testMode);
                         // Sauvegarder les stats de session
                         try{
@@ -858,6 +860,76 @@ zipBtn.addEventListener('click',async()=>{
     URL.revokeObjectURL(url);
     zipBtn.disabled=false;zipBtn.textContent='📦 Tout télécharger en ZIP';
 });
+
+// ── Relancer tous les échecs ──────────────────────────────────────────────
+let _failedItems = [];
+
+function updateFailedBtn(){
+    const failed = Object.entries(currentItems).filter(([idx]) => !generatedImages[idx]);
+    // Ne compter que les items qui ont été traités (card existe et pas de spinner)
+    const realFailed = failed.filter(([idx]) => {
+        const card = document.getElementById(`card-${idx}`);
+        if(!card) return false;
+        const ph = card.querySelector('.card-ph');
+        if(ph && ph.querySelector('.spinner')) return false; // encore en cours
+        return !generatedImages[idx];
+    });
+    _failedItems = realFailed.map(([idx]) => parseInt(idx));
+    const btn = document.getElementById('retryFailedBtn');
+    const countEl = document.getElementById('failedCount');
+    if(_failedItems.length > 0 && !generationInProgress){
+        btn.style.display = 'inline-block';
+        countEl.textContent = _failedItems.length;
+    } else {
+        btn.style.display = 'none';
+    }
+}
+
+async function retryAllFailed(){
+    if(!_failedItems.length) return;
+    const btn = document.getElementById('retryFailedBtn');
+    btn.disabled = true;
+    btn.textContent = `⏳ Relancement en cours...`;
+    const total = _failedItems.length;
+    let done = 0;
+    for(const idx of _failedItems){
+        const item = currentItems[idx];
+        if(!item) continue;
+        // Remettre le spinner
+        const card = document.getElementById(`card-${idx}`);
+        if(card){
+            const ph = card.querySelector('.card-ph') || card.querySelector('.card-err-box');
+            if(ph) ph.outerHTML = `<div class="card-ph"><div class="spinner"></div></div>`;
+        }
+        const fd = new FormData();
+        fd.append('image', item.file);
+        fd.append('name', item.name);
+        fd.append('number', item.number);
+        fd.append('name_below', item.name_below||'');
+        fd.append('user', userEl.value.trim());
+        fd.append('skip_buffer', 'true');
+        try{
+            const res = await fetch('/generate_single',{method:'POST',body:fd});
+            const d = await res.json();
+            incrRPD();
+            if(!res.ok||d.error){ renderResult({index:idx,error:d.error||'Erreur'}); }
+            else {
+                generatedImages[idx] = {src:`data:image/png;base64,${d.image}`,name:item.name,number:item.number};
+                renderResult({index:idx,image:d.image});
+            }
+        }catch(e){ renderResult({index:idx,error:e.message}); }
+        done++;
+        btn.textContent = `⏳ ${done}/${total} relancé(s)...`;
+        // Délai entre chaque pour ne pas spammer Replicate
+        await new Promise(r=>setTimeout(r,3000));
+    }
+    btn.disabled = false;
+    updateFailedBtn();
+    if(Object.keys(generatedImages).length>0){
+        document.getElementById('zipBtn').style.display='inline-block';
+        document.getElementById('selectAllImgBtn').style.display='inline-block';
+    }
+}
 
 // ── Notification ───────────────────────────────────────────────────────────
 function notifyDone(total,testMode){
