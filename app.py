@@ -52,6 +52,8 @@ def _update_session(session_id, success, image_b64=None, floc=None, error=None, 
             s["pending_buffer"].append({"image": image_b64, "floc": floc})
         else:
             s["errors"] += 1
+            # Stocker aussi les erreurs pour que le frontend puisse les afficher
+            s["results"].append({"image": None, "floc": floc or "", "orig_index": idx, "error": error or "Erreur inconnue"})
         if s["done"] >= s["total"]:
             s["status"] = "done"
         # Créer un TikTok toutes les 7 images — comme avant
@@ -1736,7 +1738,7 @@ def api_jobs_progress(session_id):
         "tiktoks_created": snap["tiktoks_created"],
         "buffer_remaining": snap["buffer_remaining"],
         "percent": round(done / total * 100) if total else 0,
-        "new_results": [{"image": r["image"], "floc": r["floc"], "index": r.get("orig_index", last_seen + i)} for i, r in enumerate(new_results)],
+        "new_results": [{"image": r.get("image"), "floc": r.get("floc",""), "index": r.get("orig_index", last_seen + i), "error": r.get("error")} for i, r in enumerate(new_results)],
         "seen_count": last_seen + len(new_results),
     })
 
