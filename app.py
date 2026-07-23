@@ -1165,9 +1165,7 @@ def api_schedule():
                     h,m = map(int, account_times[slot_index % len(account_times)].split(":"))
                     slot_dt = datetime(slot_date.year,slot_date.month,slot_date.day,h,m,tzinfo=timezone.utc)
                     slot_iso = slot_dt.isoformat()
-                    is_future_enough = True
-                    if start_date == now.date():
-                        is_future_enough = slot_dt > now + timedelta(minutes=30)
+                    is_future_enough = slot_dt > now + timedelta(minutes=30)
                     if is_future_enough and slot_iso not in used_slots:
                         break
                     slot_index += 1
