@@ -15,6 +15,95 @@ from botocore.config import Config
 
 app = Flask(__name__)
 
+# ── Job Queue Asynchrone ────────────────────────────────────────────────────
+# Stockage en mémoire des sessions de génération actives
+# { session_id: { total, done, errors, results, status, created_at } }
+_job_sessions = {}
+_job_sessions_lock = threading.Lock()
+
+# Nombre de workers parallèles pour la génération
+WORKER_COUNT = 30
+
+def _get_or_create_session(session_id, total):
+    with _job_sessions_lock:
+        if session_id not in _job_sessions:
+            _job_sessions[session_id] = {
+                "total": total,
+                "done": 0,
+                "errors": 0,
+                "results": [],
+                "status": "running",
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "tiktoks_created": [],
+            }
+        return _job_sessions[session_id]
+
+def _update_session(session_id, success, image_b64=None, floc=None, error=None):
+    with _job_sessions_lock:
+        s = _job_sessions.get(session_id)
+        if not s:
+            return
+        s["done"] += 1
+        if success and image_b64:
+            s["results"].append({"image": image_b64, "floc": floc})
+        else:
+            s["errors"] += 1
+        if s["done"] >= s["total"]:
+            s["status"] = "done"
+
+def _finalize_session(session_id, user):
+    """Crée les TikToks depuis les résultats de la session"""
+    with _job_sessions_lock:
+        s = _job_sessions.get(session_id)
+        if not s:
+            return
+        results = s["results"]
+
+    if not results:
+        return
+
+    images_b64 = [r["image"] for r in results]
+    flocs = [r["floc"] for r in results]
+    try:
+        created, remaining = add_to_buffer_and_create_tiktoks(images_b64, flocs, user)
+        with _job_sessions_lock:
+            s = _job_sessions.get(session_id)
+            if s:
+                s["tiktoks_created"] = created
+                s["buffer_remaining"] = remaining
+    except Exception as e:
+        print(f"[SESSION] Erreur finalisation {session_id}: {e}")
+
+def _run_bulk_async(session_id, items, user, resolution):
+    """Lance la génération en background avec WORKER_COUNT workers"""
+    session = _get_or_create_session(session_id, len(items))
+
+    def process_one(item):
+        res = call_gemini(item["bytes"], item["mime"], item["name"], item["number"], item["name_below"], resolution=resolution)
+        log_generation(user, res["success"])
+        if res["success"]:
+            floc = f"{item['name']}/{item['number']}/{item.get('name_below','') or ''}"
+            _update_session(session_id, True, res["image"], floc)
+        else:
+            _update_session(session_id, False, error=res.get("error"))
+
+    with ThreadPoolExecutor(max_workers=WORKER_COUNT) as ex:
+        list(ex.map(process_one, items))
+
+    # Créer les TikToks une fois tout terminé
+    _finalize_session(session_id, user)
+
+    # Sauvegarder la session dans R2
+    with _job_sessions_lock:
+        s = _job_sessions.get(session_id)
+        success_count = s["done"] - s["errors"] if s else 0
+    r2_put_json(f"sessions/{session_id}.json", {
+        "id": session_id, "user": user,
+        "start": session["created_at"],
+        "end": datetime.now(timezone.utc).isoformat(),
+        "total": len(items), "success": success_count
+    })
+
 # ── Config ─────────────────────────────────────────────────────────────────
 API_KEY        = os.environ.get("GEMINI_API_KEY")
 MODEL_URL      = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-image:generateContent"
@@ -1450,98 +1539,74 @@ def generate_single():
         return jsonify({"image": result["image"]})
     return jsonify({"error": result["error"]}), 500
 
-# ── Generate bulk ───────────────────────────────────────────────────────────
+# ── Generate bulk (ASYNC — plus de timeout Railway) ─────────────────────────
 @app.route("/generate_bulk", methods=["POST"])
 def generate_bulk():
-    if not API_KEY: return jsonify({"error":"Clé API manquante"}),500
+    if not API_KEY: return jsonify({"error": "Clé API manquante"}), 500
 
     files = request.files.getlist("images")
-    flockages_raw = request.form.get("flockages","")
-    user = request.form.get("user","").strip()
+    flockages_raw = request.form.get("flockages", "")
+    user = request.form.get("user", "").strip()
     session_id = request.form.get("session_id", str(uuid.uuid4()))
-    parallel = min(int(request.form.get("parallel",5)), 10)
-    auto_queue = request.form.get("auto_queue","true").lower() == "true"
     resolution = request.form.get("resolution", "1k").strip()
 
     lines = [l.strip() for l in flockages_raw.splitlines() if l.strip()]
-    if not files: return jsonify({"error":"Aucune image"}),400
-    if not lines: return jsonify({"error":"Aucun flocage"}),400
-    if len(files) != len(lines): return jsonify({"error":f"{len(files)} images / {len(lines)} flocages"}),400
+    if not files: return jsonify({"error": "Aucune image"}), 400
+    if not lines: return jsonify({"error": "Aucun flocage"}), 400
+    if len(files) != len(lines): return jsonify({"error": f"{len(files)} images / {len(lines)} flocages"}), 400
 
     items = []
-    for f,line in zip(files, lines):
+    for f, line in zip(files, lines):
         p = line.split("/") if "/" in line else (line.split(",") if "," in line else [line])
         items.append({
             "bytes": f.read(), "mime": f.mimetype or "image/png",
             "name": p[0].strip() if p else "",
-            "number": p[1].strip() if len(p)>1 else "",
-            "name_below": p[2].strip() if len(p)>2 else None,
+            "number": p[1].strip() if len(p) > 1 else "",
+            "name_below": p[2].strip() if len(p) > 2 else None,
         })
 
-    session_start = datetime.now(timezone.utc).isoformat()
-    results_map = {}
+    # Initialiser la session immédiatement
+    _get_or_create_session(session_id, len(items))
 
-    def process(idx, item):
-        res = call_gemini(item["bytes"], item["mime"], item["name"], item["number"], item["name_below"], resolution=resolution)
-        log_generation(user, res["success"])
-        payload = {"index":idx,"total":len(items),"name":item["name"],"number":item["number"]}
-        if res["success"]: payload["image"] = res["image"]
-        else: payload["error"] = res["error"]
-        results_map[idx] = payload
+    # Lancer la génération en background — Railway ne coupe plus jamais la connexion
+    t = threading.Thread(target=_run_bulk_async, args=(session_id, items, user, resolution), daemon=True)
+    t.start()
 
-    new_b64 = []; new_floc = []
+    # Répondre immédiatement (< 100ms) — plus aucun timeout possible
+    return jsonify({
+        "session_id": session_id,
+        "total": len(items),
+        "status": "running",
+        "workers": WORKER_COUNT,
+    })
 
-    def stream():
-        sent = set(); nts = 0
-        with ThreadPoolExecutor(max_workers=parallel) as ex:
-            futures = {ex.submit(process,i,it): i for i,it in enumerate(items)}
-            while len(sent) < len(items):
-                for fut in list(futures):
-                    if fut.done() and futures[fut] not in sent:
-                        sent.add(futures[fut])
-                while nts in results_map:
-                    d = results_map[nts]
-                    yield json.dumps(d)+"\n"
-                    if auto_queue and d.get("image"):
-                        it = items[nts]
-                        new_b64.append(d["image"])
-                        new_floc.append(f"{it['name']}/{it['number']}/{it.get('name_below','') or ''}")
-                    nts += 1
-                if len(sent) < len(items): time.sleep(0.05)
+@app.route("/api/jobs/progress/<session_id>")
+def api_jobs_progress(session_id):
+    """Polling endpoint — appelé toutes les 2s par le frontend pour voir l'avancement"""
+    with _job_sessions_lock:
+        s = _job_sessions.get(session_id)
+    if not s:
+        return jsonify({"error": "Session introuvable"}), 404
+    return jsonify({
+        "session_id": session_id,
+        "total": s["total"],
+        "done": s["done"],
+        "errors": s["errors"],
+        "success": s["done"] - s["errors"],
+        "status": s["status"],
+        "tiktoks_created": s.get("tiktoks_created", []),
+        "buffer_remaining": s.get("buffer_remaining", 0),
+        "percent": round(s["done"] / s["total"] * 100) if s["total"] else 0,
+    })
 
-        while nts < len(items):
-            if nts in results_map:
-                d = results_map[nts]
-                yield json.dumps(d)+"\n"
-                if auto_queue and d.get("image"):
-                    it = items[nts]
-                    new_b64.append(d["image"])
-                    new_floc.append(f"{it['name']}/{it['number']}/{it.get('name_below','') or ''}")
-                nts += 1
-            else: time.sleep(0.05)
-
-        # Ajouter au buffer et créer TikToks directement
-        if auto_queue and new_b64:
-            try:
-                print(f"[BUFFER] Saving {len(new_b64)} images...")
-                created, remaining = add_to_buffer_and_create_tiktoks(new_b64, new_floc, user)
-                print(f"[BUFFER] Done — {len(created)} TikToks created, {remaining} pending")
-                for n in created:
-                    yield json.dumps({"tiktok_created": n}) + "\n"
-                if remaining > 0:
-                    yield json.dumps({"buffer_update": True, "pending": remaining, "needed": TIKTOK_SIZE - remaining}) + "\n"
-            except Exception as e:
-                print(f"[BUFFER ERROR] {e}")
-                import traceback; traceback.print_exc()
-
-        success_count = sum(1 for r in results_map.values() if "image" in r)
-        r2_put_json(f"sessions/{session_id}.json", {
-            "id":session_id,"user":user,
-            "start":session_start,"end":datetime.now(timezone.utc).isoformat(),
-            "total":len(items),"success":success_count
-        })
-
-    return Response(stream(), mimetype="application/x-ndjson")
+@app.route("/api/jobs/cancel/<session_id>", methods=["POST"])
+def api_jobs_cancel(session_id):
+    """Marque une session comme annulée (les workers en cours finissent leur image)"""
+    with _job_sessions_lock:
+        s = _job_sessions.get(session_id)
+        if s:
+            s["status"] = "cancelled"
+    return jsonify({"success": True})
 
 # ── API Templates ───────────────────────────────────────────────────────────
 @app.route("/api/templates")
