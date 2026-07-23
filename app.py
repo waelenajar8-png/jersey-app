@@ -1740,6 +1740,60 @@ def api_jobs_progress(session_id):
         "seen_count": last_seen + len(new_results),
     })
 
+@app.route("/monitor")
+def monitor_page():
+    return render_template("monitor.html")
+
+@app.route("/api/monitor/sessions")
+def api_monitor_sessions():
+    """Retourne toutes les sessions actives en RAM pour le monitoring en temps réel"""
+    active = []
+    with _job_sessions_lock:
+        for sid, s in _job_sessions.items():
+            active.append({
+                "session_id": sid,
+                "user": s.get("user", "Inconnu"),
+                "total": s["total"],
+                "done": s["done"],
+                "errors": s["errors"],
+                "status": s["status"],
+                "percent": round(s["done"] / s["total"] * 100) if s["total"] else 0,
+                "tiktoks_created": s.get("tiktoks_created", []),
+                "buffer_remaining": s.get("buffer_remaining", 0),
+                "created_at": s.get("created_at"),
+                "elapsed_seconds": s.get("elapsed_seconds", 0),
+            })
+    # Trier : en cours d'abord, puis par date
+    active.sort(key=lambda x: (x["status"] != "running", x.get("created_at","") or ""), reverse=False)
+    return jsonify({"active": active})
+
+@app.route("/api/sessions")
+def api_sessions():
+    """Retourne les sessions récentes avec leurs stats"""
+    session_keys = sorted(r2_list_keys("sessions/"), reverse=True)[:30]
+    sessions = []
+    for sk in session_keys:
+        s = r2_get_json(sk)
+        if s: sessions.append(s)
+    return jsonify({"sessions": sessions})
+
+@app.route("/api/session/stats", methods=["POST"])
+def api_session_stats():
+    """Sauvegarde les stats de durée d'une session de génération"""
+    data = request.json or {}
+    sid = data.get("session_id")
+    if not sid: return jsonify({"error": "session_id requis"}), 400
+    # Mettre à jour la session R2 avec la durée
+    key = f"sessions/{sid}.json"
+    session = r2_get_json(key) or {}
+    session["elapsed_seconds"] = data.get("elapsed_seconds", 0)
+    session["images_per_min"] = round(data.get("total", 0) / max(data.get("elapsed_seconds", 1) / 60, 0.01), 1)
+    session["total"] = data.get("total", session.get("total", 0))
+    session["success"] = data.get("success", session.get("success", 0))
+    session["user"] = data.get("user", session.get("user", ""))
+    r2_put_json(key, session)
+    return jsonify({"success": True})
+
 @app.route("/api/jobs/cancel/<session_id>", methods=["POST"])
 def api_jobs_cancel(session_id):
     """Marque une session comme annulée (les workers en cours finissent leur image)"""
