@@ -1255,6 +1255,16 @@ def api_schedule():
         "errors": errors
     })
 
+@app.route("/api/queue/images")
+def api_queue_images():
+    """Retourne toutes les URLs signées d'un TikTok — appelé seulement quand l'user clique pour voir tout"""
+    key = request.args.get("key")
+    if not key: return jsonify({"error": "key requis"}), 400
+    t = r2_get_json(key)
+    if not t: return jsonify({"error": "introuvable"}), 404
+    image_urls = [r2_presigned(k, expires=604800) for k in t.get("image_keys", [])]
+    return jsonify({"image_urls": image_urls})
+
 @app.route("/api/queue/reorder", methods=["POST"])
 def api_reorder_images():
     """Réordonne les images d'un TikTok"""
