@@ -778,6 +778,13 @@ _schedule_lock = threading.Lock()
 def get_buffer():
     data = r2_get_json(KEY_BUFFER)
     if data:
+        # Normaliser le format peu importe la version stockée
+        if "images_b64" not in data:
+            data["images_b64"] = []
+        if "flockages" not in data:
+            data["flockages"] = []
+        if "user" not in data:
+            data["user"] = None
         return data
     return {"images_b64": [], "flockages": [], "user": None}
 
