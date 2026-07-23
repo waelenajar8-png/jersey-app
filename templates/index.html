@@ -153,9 +153,39 @@ input[type=file]{display:none}
 .retry-btn{background:var(--bg-elevated);border:1px solid var(--border);color:var(--text-dim);padding:8px;border-radius:9px;font-size:11.5px;font-weight:600;cursor:pointer;text-align:center;transition:all .15s ease}
 .retry-btn:hover{color:var(--text);border-color:var(--border-strong)}
 .spinner{width:22px;height:22px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite}
+/* ── Login ──────────────────────────────────────────────────────────── */
+.login-overlay{position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:500;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px)}
+.login-box{background:var(--panel);border:1px solid var(--border);border-radius:20px;padding:32px;width:100%;max-width:380px;display:flex;flex-direction:column;gap:20px;box-shadow:var(--shadow-lg)}
+.login-title{font-size:20px;font-weight:800;text-align:center;letter-spacing:-0.02em}
+.login-field{display:flex;flex-direction:column;gap:8px}
+.login-field label{font-size:12px;font-weight:600;color:var(--text-dim)}
+.login-field input{width:100%;padding:12px 14px;background:var(--bg-elevated);border:1.5px solid var(--border);border-radius:10px;color:var(--text);font-size:14px;font-family:inherit;transition:all .15s ease}
+.login-field input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-dim)}
+.login-btn{padding:13px;background:var(--accent-grad);color:#06170d;border:none;border-radius:11px;font-size:14px;font-weight:700;cursor:pointer;box-shadow:var(--shadow-glow);transition:all .18s ease}
+.login-btn:hover{transform:translateY(-1px)}
+.login-err{color:var(--danger);font-size:12px;text-align:center;min-height:16px;font-weight:500}
+.user-chip{background:var(--accent-dim);border:1px solid rgba(74,222,128,.3);padding:5px 12px;border-radius:100px;font-size:12px;font-weight:700;color:var(--accent);cursor:pointer;display:flex;align-items:center;gap:6px}
+.user-chip:hover{background:var(--danger-dim);border-color:rgba(248,113,113,.3);color:var(--danger)}
 </style>
 </head>
 <body>
+<!-- Modal Login -->
+<div class="login-overlay" id="loginOverlay">
+    <div class="login-box">
+        <div class="login-title">🎨 Volakits Bot</div>
+        <div class="login-field">
+            <label>Prénom</label>
+            <input type="text" id="loginName" placeholder="ex: Moh" autocomplete="username">
+        </div>
+        <div class="login-field">
+            <label>Mot de passe</label>
+            <input type="password" id="loginPass" placeholder="••••••••" autocomplete="current-password">
+        </div>
+        <div class="login-err" id="loginErr"></div>
+        <button class="login-btn" id="loginBtn" onclick="doLogin()">Se connecter</button>
+    </div>
+</div>
+
 <div class="wrap">
 <div class="topbar">
     <h1><span class="h1-icon">🎨</span>Générateur de flocages</h1>
@@ -168,16 +198,15 @@ input[type=file]{display:none}
         <a href="/templates" class="nav-link">🗂️ Templates</a>
         <a href="/stats" class="nav-link">📈 Stats</a>
         <a href="/remove_box" class="nav-link">🗑️ Supprimer boîte</a>
+        <div class="user-chip" id="userChip" style="display:none" onclick="doLogout()" title="Cliquer pour se déconnecter">👤 <span id="userChipName"></span> ✕</div>
         <button class="theme-btn" id="themeBtn">☀️</button>
     </div>
 </div>
 <p class="subtitle">Format : <code>NOM/NUMERO/NOM_DESSOUS</code> — 3e champ optionnel</p>
 
-<div class="panel">
-    <label for="userName">Ton prénom <span class="req">*</span></label>
-    <input type="text" id="userName" placeholder="ex: Moh" autocomplete="off">
-    <div class="field-err" id="userErr">⚠️ Prénom obligatoire.</div>
-</div>
+<!-- Le prénom est géré par le login — plus besoin de ce panel -->
+<input type="hidden" id="userName">
+<div class="field-err" id="userErr" style="display:none">⚠️ Prénom obligatoire.</div>
 
 <div class="panel">
     <div class="grid2">
@@ -341,11 +370,68 @@ applyTheme(theme);
 function applyTheme(t){theme=t;html.setAttribute('data-theme',t);themeBtn.textContent=t==='dark'?'☀️':'🌙';localStorage.setItem('theme',t)}
 themeBtn.addEventListener('click',()=>applyTheme(theme==='dark'?'light':'dark'));
 
-// ── Prénom ─────────────────────────────────────────────────────────────────
+// ── Auth ───────────────────────────────────────────────────────────────────
 const userEl=document.getElementById('userName');
 const userErr=document.getElementById('userErr');
-userEl.value=localStorage.getItem('userName')||'';
-userEl.addEventListener('input',()=>{localStorage.setItem('userName',userEl.value.trim());if(userEl.value.trim()){userEl.classList.remove('err');userErr.style.display='none'}});
+const loginOverlay=document.getElementById('loginOverlay');
+
+function setLoggedInUser(name){
+    userEl.value=name;
+    loginOverlay.style.display='none';
+    document.getElementById('userChip').style.display='flex';
+    document.getElementById('userChipName').textContent=name;
+    localStorage.setItem('logged_user',name);
+}
+
+function doLogout(){
+    if(!confirm('Se déconnecter ?')) return;
+    localStorage.removeItem('logged_user');
+    localStorage.removeItem('logged_pass');
+    userEl.value='';
+    loginOverlay.style.display='flex';
+    document.getElementById('userChip').style.display='none';
+}
+
+async function doLogin(){
+    const name=document.getElementById('loginName').value.trim();
+    const pass=document.getElementById('loginPass').value.trim();
+    const errEl=document.getElementById('loginErr');
+    const btn=document.getElementById('loginBtn');
+    if(!name||!pass){errEl.textContent='Remplis tous les champs.';return}
+    btn.disabled=true;btn.textContent='Connexion...';
+    try{
+        const res=await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,password:pass})});
+        const d=await res.json();
+        if(d.success){
+            localStorage.setItem('logged_user',name);
+            localStorage.setItem('logged_pass',pass);
+            errEl.textContent='';
+            setLoggedInUser(name);
+        } else {
+            errEl.textContent=d.error||'Erreur de connexion';
+        }
+    }catch(e){errEl.textContent='Erreur réseau';}
+    btn.disabled=false;btn.textContent='Se connecter';
+}
+
+// Enter pour valider le login
+document.getElementById('loginPass').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin()});
+document.getElementById('loginName').addEventListener('keydown',e=>{if(e.key==='Enter')document.getElementById('loginPass').focus()});
+
+// Auto-login si session sauvegardée
+(async()=>{
+    const savedUser=localStorage.getItem('logged_user');
+    const savedPass=localStorage.getItem('logged_pass');
+    if(savedUser&&savedPass){
+        try{
+            const res=await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:savedUser,password:savedPass})});
+            const d=await res.json();
+            if(d.success){setLoggedInUser(savedUser);return;}
+        }catch(e){}
+        localStorage.removeItem('logged_user');localStorage.removeItem('logged_pass');
+    }
+    loginOverlay.style.display='flex';
+})();
 
 // ── RPD ────────────────────────────────────────────────────────────────────
 const rpdBadge=document.getElementById('rpdBadge');
