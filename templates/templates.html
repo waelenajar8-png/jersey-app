@@ -101,6 +101,10 @@ input[type=file]{display:none}
         <button class="btn-sec" id="shuffleBtn">🔀 Ordre aléatoire</button>
         <button class="btn-sec" id="selectAllBtn">☑️ Tout sélectionner</button>
         <button class="btn-sec" id="deselectBtn" style="display:none">✖️ Désélectionner</button>
+        <div style="display:flex;align-items:center;gap:6px">
+            <input type="number" id="randCount" placeholder="ex: 100" min="1" style="width:80px;padding:6px 8px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:12px">
+            <button class="btn-sec" id="randSelectBtn">🎲 Sélectionner aléatoirement</button>
+        </div>
         <button class="btn" id="useSelectedBtn" style="display:none">✅ Utiliser la sélection (0)</button>
         <span class="count" id="countLabel">Chargement...</span>
     </div>
@@ -199,6 +203,15 @@ document.getElementById('selectAllBtn').addEventListener('click', () => {
 
 document.getElementById('deselectBtn').addEventListener('click', () => {
     selected.clear();
+    renderGrid();
+});
+
+document.getElementById('randSelectBtn').addEventListener('click', () => {
+    const n = parseInt(document.getElementById('randCount').value);
+    if (!n || n < 1) { alert('Entre un nombre valide.'); return; }
+    selected.clear();
+    const shuffled = [...order].sort(() => Math.random() - 0.5);
+    shuffled.slice(0, Math.min(n, order.length)).forEach(k => selected.add(k));
     renderGrid();
 });
 
