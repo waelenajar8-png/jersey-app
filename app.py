@@ -670,25 +670,25 @@ def get_next_tiktok_number():
 # ── Logs persistants sur R2 ────────────────────────────────────────────────
 def log_generation(user, success):
     with _log_lock:
-     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-     key = f"{PFX_LOGS}{today}.jsonl"
-     entry = json.dumps({
-        "ts": datetime.now(timezone.utc).isoformat(),
-        "user": user or "Inconnu",
-        "success": success
-    }) + "\n"
-    r2 = get_r2()
-    if not r2: return
-    try:
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        key = f"{PFX_LOGS}{today}.jsonl"
+        entry = json.dumps({
+            "ts": datetime.now(timezone.utc).isoformat(),
+            "user": user or "Inconnu",
+            "success": success
+        }) + "\n"
+        r2 = get_r2()
+        if not r2: return
         try:
-            obj = r2.get_object(Bucket=R2_BUCKET, Key=key)
-            existing = obj["Body"].read().decode()
-        except Exception:
-            existing = ""
-        r2.put_object(Bucket=R2_BUCKET, Key=key,
-            Body=(existing + entry).encode(), ContentType="text/plain")
-    except Exception as e:
-        print(f"[log error] {e}")
+            try:
+                obj = r2.get_object(Bucket=R2_BUCKET, Key=key)
+                existing = obj["Body"].read().decode()
+            except Exception:
+                existing = ""
+            r2.put_object(Bucket=R2_BUCKET, Key=key,
+                Body=(existing + entry).encode(), ContentType="text/plain")
+        except Exception as e:
+            print(f"[log error] {e}")
 
 def read_logs(days=30):
     r2 = get_r2()
@@ -777,6 +777,7 @@ def _save_buffer(buf):
     return r2_put_json(KEY_BUFFER, buf)
 
 def add_to_buffer_and_create_tiktoks(new_images_b64, new_flockages, user):
+    # Phase 1 : mettre à jour le buffer sous lock (rapide)
     with _buffer_lock:
         buf = get_buffer()
         if not buf.get("user"):
@@ -784,21 +785,28 @@ def add_to_buffer_and_create_tiktoks(new_images_b64, new_flockages, user):
         buf["images_b64"].extend(new_images_b64)
         buf["flockages"].extend(new_flockages)
         print(f"[BUFFER] Now has {len(buf['images_b64'])} images")
-
-        created = []
+        # Extraire les batches à créer
+        batches = []
+        buf_user = buf["user"]
         while len(buf["images_b64"]) >= TIKTOK_SIZE:
             batch_b64  = buf["images_b64"][:TIKTOK_SIZE]
             batch_floc = buf["flockages"][:TIKTOK_SIZE]
             tiktok_num = get_next_tiktok_number()
-            print(f"[BUFFER] Creating TikTok {tiktok_num}...")
-            _save_tiktok(tiktok_num, batch_b64, buf["user"], batch_floc)
-            created.append(tiktok_num)
+            batches.append((tiktok_num, batch_b64, batch_floc))
             buf["images_b64"] = buf["images_b64"][TIKTOK_SIZE:]
             buf["flockages"]  = buf["flockages"][TIKTOK_SIZE:]
-
+        remaining = len(buf["images_b64"])
         _save_buffer(buf)
-        print(f"[BUFFER] Done — {len(created)} TikToks created, {len(buf['images_b64'])} pending")
-        return created, len(buf["images_b64"])
+
+    # Phase 2 : sauvegarder les TikToks HORS du lock (appels R2 lents)
+    created = []
+    for tiktok_num, batch_b64, batch_floc in batches:
+        print(f"[BUFFER] Creating TikTok {tiktok_num}...")
+        _save_tiktok(tiktok_num, batch_b64, buf_user, batch_floc)
+        created.append(tiktok_num)
+
+    print(f"[BUFFER] Done — {len(created)} TikToks created, {remaining} pending")
+    return created, remaining
 
 
 # ── TikTok queue ───────────────────────────────────────────────────────────
