@@ -41,7 +41,7 @@ def _get_or_create_session(session_id, total):
             }
         return _job_sessions[session_id]
 
-def _update_session(session_id, success, image_b64=None, floc=None, error=None, idx=None, user=None):
+def _update_session(session_id, success, image_b64=None, floc=None, error=None, idx=None, user=None, template_key=""):
     batch = None
     session_user = None
     with _job_sessions_lock:
@@ -51,8 +51,8 @@ def _update_session(session_id, success, image_b64=None, floc=None, error=None, 
         s["done"] += 1
         if success and image_b64:
             # Stocker seulement métadonnées en RAM (pas l'image) — évite OOM avec 210 images
-            s["results"].append({"image": image_b64, "floc": floc, "orig_index": idx})
-            s["pending_buffer"].append({"image": image_b64, "floc": floc})
+            s["results"].append({"image": image_b64, "floc": floc, "orig_index": idx, "template_key": template_key})
+            s["pending_buffer"].append({"image": image_b64, "floc": floc, "template_key": template_key})
         else:
             s["errors"] += 1
             s["results"].append({"image": None, "floc": floc or "", "orig_index": idx, "error": error or "Erreur inconnue"})
@@ -69,7 +69,8 @@ def _update_session(session_id, success, image_b64=None, floc=None, error=None, 
         try:
             imgs = [r["image"] for r in batch]
             flocs = [r["floc"] for r in batch]
-            created, remaining = add_to_buffer_and_create_tiktoks(imgs, flocs, session_user)
+            tkeys = [r.get("template_key","") for r in batch]
+            created, remaining = add_to_buffer_and_create_tiktoks(imgs, flocs, session_user, tkeys)
             # NE PAS nullifier r["image"] ici — results pointe vers les mêmes dicts
             # Le frontend a besoin de l'image pour l'afficher
             # La RAM sera libérée naturellement quand la session est nettoyée
@@ -103,8 +104,9 @@ def _finalize_session(session_id, user):
 
     imgs = [r["image"] for r in valid]
     flocs = [r["floc"] for r in valid]
+    tkeys = [r.get("template_key","") for r in valid]
     try:
-        created, remaining = add_to_buffer_and_create_tiktoks(imgs, flocs, session_user)
+        created, remaining = add_to_buffer_and_create_tiktoks(imgs, flocs, session_user, tkeys)
         with _job_sessions_lock:
             s = _job_sessions.get(session_id)
             if s:
@@ -131,7 +133,7 @@ def _run_bulk_async(session_id, items, user, resolution):
             log_generation(user, res["success"])
             if res["success"]:
                 floc = f"{item['name']}/{item['number']}/{item.get('name_below','') or ''}"
-                _update_session(session_id, True, res["image"], floc, idx=idx, user=user)
+                _update_session(session_id, True, res["image"], floc, idx=idx, user=user, template_key=item.get("template_key",""))
                 res["image"] = None
             else:
                 _update_session(session_id, False, error=res.get("error"), idx=idx)
@@ -848,7 +850,7 @@ def get_buffer():
 def _save_buffer(buf):
     return r2_put_json(KEY_BUFFER, buf)
 
-def add_to_buffer_and_create_tiktoks(new_images_b64, new_flockages, user):
+def add_to_buffer_and_create_tiktoks(new_images_b64, new_flockages, user, new_template_keys=None):
     # Phase 1 : mettre à jour le buffer sous lock (rapide)
     with _buffer_lock:
         buf = get_buffer()
@@ -856,6 +858,8 @@ def add_to_buffer_and_create_tiktoks(new_images_b64, new_flockages, user):
             buf["user"] = user
         buf["images_b64"].extend(new_images_b64)
         buf["flockages"].extend(new_flockages)
+        if "template_keys" not in buf: buf["template_keys"] = []
+        buf["template_keys"].extend(new_template_keys if new_template_keys else [""] * len(new_images_b64))
         print(f"[BUFFER] Now has {len(buf['images_b64'])} images")
         # Extraire les batches à créer
         batches = []
@@ -863,18 +867,20 @@ def add_to_buffer_and_create_tiktoks(new_images_b64, new_flockages, user):
         while len(buf["images_b64"]) >= TIKTOK_SIZE:
             batch_b64  = buf["images_b64"][:TIKTOK_SIZE]
             batch_floc = buf["flockages"][:TIKTOK_SIZE]
+            batch_tkeys = buf.get("template_keys", [])[:TIKTOK_SIZE]
             tiktok_num = get_next_tiktok_number()
-            batches.append((tiktok_num, batch_b64, batch_floc))
+            batches.append((tiktok_num, batch_b64, batch_floc, batch_tkeys))
             buf["images_b64"] = buf["images_b64"][TIKTOK_SIZE:]
             buf["flockages"]  = buf["flockages"][TIKTOK_SIZE:]
+            if "template_keys" in buf: buf["template_keys"] = buf["template_keys"][TIKTOK_SIZE:]
         remaining = len(buf["images_b64"])
         _save_buffer(buf)
 
     # Phase 2 : sauvegarder les TikToks HORS du lock (appels R2 lents)
     created = []
-    for tiktok_num, batch_b64, batch_floc in batches:
+    for tiktok_num, batch_b64, batch_floc, batch_tkeys in batches:
         print(f"[BUFFER] Creating TikTok {tiktok_num}...")
-        _save_tiktok(tiktok_num, batch_b64, buf_user, batch_floc)
+        _save_tiktok(tiktok_num, batch_b64, buf_user, batch_floc, batch_tkeys)
         created.append(tiktok_num)
 
     print(f"[BUFFER] Done — {len(created)} TikToks created, {remaining} pending")
@@ -882,7 +888,7 @@ def add_to_buffer_and_create_tiktoks(new_images_b64, new_flockages, user):
 
 
 # ── TikTok queue ───────────────────────────────────────────────────────────
-def _save_tiktok(num, images_b64, user, flockages):
+def _save_tiktok(num, images_b64, user, flockages, template_keys=None):
     r2 = get_r2()
     if not r2: return False
     image_keys = []
@@ -899,6 +905,7 @@ def _save_tiktok(num, images_b64, user, flockages):
         "user": user,
         "image_keys": image_keys,
         "flockages": flockages,
+        "template_keys": template_keys or [],
         "status": "pending",
         "account": None,
         "scheduled_at": None,
@@ -1422,6 +1429,34 @@ def _do_schedule():
         "errors": errors
     })
 
+@app.route("/api/queue/tiktok")
+def api_queue_tiktok():
+    """Retourne les métadonnées complètes d'un TikTok (flockages, template_keys...)"""
+    key = request.args.get("key")
+    if not key: return jsonify({"error": "key requis"}), 400
+    t = r2_get_json(key)
+    if not t: return jsonify({"error": "introuvable"}), 404
+    return jsonify(t)
+
+@app.route("/api/queue/replace_image", methods=["POST"])
+def api_replace_image():
+    """Remplace une image dans un TikTok par une nouvelle version régénérée"""
+    data = request.json or {}
+    key = data.get("key")
+    index = data.get("index")
+    image_b64 = data.get("image")
+    if not key or index is None or not image_b64: return jsonify({"error": "key, index et image requis"}), 400
+    t = r2_get_json(key)
+    if not t: return jsonify({"error": "introuvable"}), 404
+    img_keys = t.get("image_keys", [])
+    if index < 0 or index >= len(img_keys): return jsonify({"error": "index invalide"}), 400
+    # Remplacer l'image dans R2
+    try:
+        r2_put_image(img_keys[index], base64.b64decode(image_b64))
+        return jsonify({"success": True})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 @app.route("/api/queue/images")
 def api_queue_images():
     """Retourne toutes les URLs signées d'un TikTok — appelé seulement quand l'user clique pour voir tout"""
@@ -1728,14 +1763,19 @@ def generate_bulk():
     if not lines: return jsonify({"error": "Aucun flocage"}), 400
     if len(files) != len(lines): return jsonify({"error": f"{len(files)} images / {len(lines)} flocages"}), 400
 
+    template_keys_raw = request.form.get("template_keys", "[]")
+    try: template_keys = json.loads(template_keys_raw)
+    except: template_keys = []
+
     items = []
-    for f, line in zip(files, lines):
+    for i, (f, line) in enumerate(zip(files, lines)):
         p = line.split("/") if "/" in line else (line.split(",") if "," in line else [line])
         items.append({
             "bytes": f.read(), "mime": f.mimetype or "image/png",
             "name": p[0].strip() if p else "",
             "number": p[1].strip() if len(p) > 1 else "",
             "name_below": p[2].strip() if len(p) > 2 else None,
+            "template_key": template_keys[i] if i < len(template_keys) else "",
         })
 
     # Initialiser la session immédiatement
