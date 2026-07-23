@@ -153,6 +153,9 @@ input[type=file]{display:none}
 .retry-btn{background:var(--bg-elevated);border:1px solid var(--border);color:var(--text-dim);padding:8px;border-radius:9px;font-size:11.5px;font-weight:600;cursor:pointer;text-align:center;transition:all .15s ease}
 .retry-btn:hover{color:var(--text);border-color:var(--border-strong)}
 .spinner{width:22px;height:22px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite}
+.chrono-badge{background:var(--panel);border:1px solid var(--border);padding:5px 12px;border-radius:100px;font-size:12px;font-weight:700;color:var(--text-dim);display:none;font-family:'JetBrains Mono',monospace}
+.chrono-badge.running{color:var(--accent);border-color:rgba(74,222,128,.3);animation:pulse 1s infinite}
+.chrono-badge.done{color:var(--text)}
 /* ── Login ──────────────────────────────────────────────────────────── */
 .login-overlay{position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:500;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px)}
 .login-box{background:var(--panel);border:1px solid var(--border);border-radius:20px;padding:32px;width:100%;max-width:380px;display:flex;flex-direction:column;gap:20px;box-shadow:var(--shadow-lg)}
@@ -197,6 +200,7 @@ input[type=file]{display:none}
         <a href="/scheduled" class="nav-link">✅ Programmés</a>
         <a href="/templates" class="nav-link">🗂️ Templates</a>
         <a href="/stats" class="nav-link">📈 Stats</a>
+        <a href="/monitor" class="nav-link">👀 Monitor</a>
         <a href="/remove_box" class="nav-link">🗑️ Supprimer boîte</a>
         <div class="user-chip" id="userChip" style="display:none" onclick="doLogout()" title="Cliquer pour se déconnecter">👤 <span id="userChipName"></span> ✕</div>
         <button class="theme-btn" id="themeBtn">☀️</button>
@@ -247,9 +251,7 @@ input[type=file]{display:none}
         <button class="btn-sec" id="selectAllImgBtn" style="display:none" onclick="selectAllImages()">☑️ Tout sélectionner</button>
         <button class="btn-sec" id="dlSelBtn" style="display:none" onclick="dlSelected()">⬇️ Télécharger la sélection (<span id="selImgCount">0</span>)</button>
         <button class="btn-sec" id="zipBtn">📦 ZIP</button>
-        <div class="parallel-row">
-            ⚡ Parallèle : <input type="number" id="parallelInput" value="1" min="1" max="10"> images simultanées
-        </div>
+        <div class="chrono-badge" id="chronoBadge">⏱️ 00:00</div>
     </div>
     <div class="status" id="status"></div>
     <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
@@ -610,6 +612,34 @@ async function resumeSessionIfAny(){
 }
 resumeSessionIfAny();
 
+// ── Chrono ────────────────────────────────────────────────────────────────
+let _chronoInterval = null;
+let _chronoStart = 0;
+
+function chronoStart(){
+    _chronoStart = Date.now();
+    const badge = document.getElementById('chronoBadge');
+    badge.style.display = 'flex';
+    badge.className = 'chrono-badge running';
+    _chronoInterval = setInterval(()=>{
+        const elapsed = Math.floor((Date.now() - _chronoStart) / 1000);
+        const m = Math.floor(elapsed/60).toString().padStart(2,'0');
+        const s = (elapsed%60).toString().padStart(2,'0');
+        badge.textContent = `⏱️ ${m}:${s}`;
+    }, 1000);
+}
+
+function chronoStop(){
+    if(_chronoInterval){ clearInterval(_chronoInterval); _chronoInterval = null; }
+    const badge = document.getElementById('chronoBadge');
+    badge.className = 'chrono-badge done';
+    const elapsed = Math.floor((Date.now() - _chronoStart) / 1000);
+    const m = Math.floor(elapsed/60).toString().padStart(2,'0');
+    const s = (elapsed%60).toString().padStart(2,'0');
+    badge.textContent = `✅ ${m}:${s}`;
+    return elapsed;
+}
+
 testBtn.addEventListener('click',()=>launch(true));
 generateBtn.addEventListener('click',()=>launch(false));
 
@@ -634,6 +664,7 @@ async function launch(testMode=false){
     zipBtn.style.display='none';
     if(!testMode){resultsEl.innerHTML='';generatedImages={};sessionId=crypto.randomUUID()}
     progressFill.style.width='0%';
+    chronoStart();
 
     const origPreviews=await Promise.all(filesToUse.map(f=>new Promise(res=>{const r=new FileReader();r.onload=e=>res(e.target.result);r.readAsDataURL(f)})));
 
@@ -724,8 +755,14 @@ async function launch(testMode=false){
                             statusEl.textContent=`✅ ${success}/${total} images générées${errors>0?' — '+errors+' erreur(s)':''}`;
                         }
                         localStorage.removeItem('active_session');
+                        const elapsed = chronoStop();
                         updateBufferBadge();
                         notifyDone(total,testMode);
+                        // Sauvegarder les stats de session
+                        try{
+                            await fetch('/api/session/stats',{method:'POST',headers:{'Content-Type':'application/json'},
+                                body:JSON.stringify({session_id:sid,elapsed_seconds:elapsed,total,success,user:userEl.value})});
+                        }catch(e){}
                         resolve();
                     }
                 }catch(e){/* retry au prochain poll */}
