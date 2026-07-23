@@ -579,15 +579,30 @@ async function launch(testMode=false){
 
         // Polling toutes les 2s — plus jamais de timeout Railway
         const genStartTime=Date.now();
-        let lastDone=0;
+        let seenCount=0;
         await new Promise((resolve)=>{
             const poll=setInterval(async()=>{
                 try{
-                    const r=await fetch(`/api/jobs/progress/${sid}`);
+                    const r=await fetch(`/api/jobs/progress/${sid}?last_seen=${seenCount}`);
                     if(!r.ok){clearInterval(poll);resolve();return}
                     const d=await r.json();
                     const done=d.done; const errors=d.errors; const success=d.success;
                     progressFill.style.width=`${d.percent}%`;
+
+                    // Afficher les nouvelles images dès qu'elles arrivent
+                    if(d.new_results&&d.new_results.length>0){
+                        for(const res of d.new_results){
+                            const idx=res.index;
+                            const parts=res.floc.split('/');
+                            const item=currentItems[idx]||{name:parts[0]||'',number:parts[1]||'',name_below:parts[2]||'',orig:''};
+                            const src=`data:image/png;base64,${res.image}`;
+                            generatedImages[idx]={src,name:item.name,number:item.number};
+                            renderResult({index:idx,image:res.image});
+                            incrRPD();
+                        }
+                        seenCount=d.seen_count||seenCount;
+                    }
+
                     // Estimer le temps restant
                     if(done>0&&done<total){
                         const elapsed=(Date.now()-genStartTime)/1000;
@@ -596,9 +611,10 @@ async function launch(testMode=false){
                         const remainingText=remaining>60?`~${Math.round(remaining/60)} min`:`~${remaining}s`;
                         statusEl.textContent=`${done}/${total} traité(s)${errors>0?' ('+errors+' erreur(s))':''} — reste ${remainingText}`;
                     }
+
                     if(d.status==='done'||d.status==='cancelled'){
                         clearInterval(poll);
-                        // Remplacer tous les spinners par un message "dans la queue"
+                        // Remplacer les spinners restants par "dans la queue"
                         document.querySelectorAll('.card-ph').forEach(ph=>{
                             if(ph.querySelector('.spinner')){
                                 ph.innerHTML='✅ Dans la queue';
@@ -607,7 +623,6 @@ async function launch(testMode=false){
                                 ph.style.fontWeight='700';
                             }
                         });
-                        // Afficher résultat TikToks créés
                         if(d.tiktoks_created&&d.tiktoks_created.length>0){
                             statusEl.innerHTML=`✅ ${success}/${total} images générées — ${d.tiktoks_created.length} TikTok(s) créé(s) ! <a href="/queue" style="color:var(--accent);font-weight:700">Voir la file →</a>`;
                         } else {
