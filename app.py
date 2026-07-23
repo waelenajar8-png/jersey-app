@@ -1185,6 +1185,24 @@ def api_assign():
     r2_put_json(key, t)
     return jsonify({"success": True})
 
+@app.route("/api/queue/assign_batch", methods=["POST"])
+def api_assign_batch():
+    """Assigne plusieurs TikToks d'un coup — évite les 100 appels R2 séquentiels"""
+    data = request.json or {}
+    assignments = data.get("assignments", [])
+    if not assignments: return jsonify({"error": "assignments requis"}), 400
+    done = 0
+    for item in assignments:
+        key = item.get("key")
+        account = item.get("account")
+        if not key: continue
+        t = r2_get_json(key)
+        if not t: continue
+        t["account"] = account
+        r2_put_json(key, t)
+        done += 1
+    return jsonify({"success": True, "updated": done})
+
 @app.route("/api/queue/dispatch", methods=["POST"])
 def api_dispatch():
     data = request.json; accounts = data.get("accounts",[])
