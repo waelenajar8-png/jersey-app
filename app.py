@@ -1168,6 +1168,24 @@ def api_queue():
     tiktoks, total = get_queue(page=page, per_page=per_page)
     return jsonify({"tiktoks": tiktoks, "total": total, "page": page, "per_page": per_page})
 
+@app.route("/api/queue/all")
+def api_queue_all():
+    """Retourne tous les TikToks en une seule requête — pour le cache frontend"""
+    keys = sorted(r2_list_keys(PFX_QUEUE))
+    keys = [k for k in keys if "/imgs/" not in k]
+    result = []
+    for k in keys:
+        d = r2_get_json(k)
+        if d:
+            d["r2_key"] = k
+            # Retourner seulement la première image pour la thumbnail
+            img_keys = d.get("image_keys", [])
+            d["thumb_url"] = r2_presigned(img_keys[0], expires=604800) if img_keys else None
+            d["image_count"] = len(img_keys)
+            d["image_urls"] = []  # pas les URLs complètes — chargées à la demande
+            result.append(d)
+    return jsonify({"tiktoks": result, "total": len(result)})
+
 @app.route("/api/scheduled")
 def api_scheduled():
     page = int(request.args.get("page", 0))
