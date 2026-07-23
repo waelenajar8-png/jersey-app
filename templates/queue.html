@@ -143,6 +143,15 @@ h1{font-size:24px;margin:0;font-weight:800;letter-spacing:-0.02em}
 .lightbox-bg img{max-width:90vw;max-height:90vh;border-radius:12px;box-shadow:var(--shadow-lg)}
 .lightbox-close{position:absolute;top:20px;right:20px;background:rgba(255,255,255,.1);border:none;color:#fff;font-size:22px;width:42px;height:42px;border-radius:50%;cursor:pointer;transition:background .15s}
 .lightbox-close:hover{background:rgba(255,255,255,.2)}
+/* ── Modal sélecteur template pour régénération ───────────────── */
+.regen-modal-bg{position:fixed;inset:0;background:rgba(5,6,10,.9);backdrop-filter:blur(6px);z-index:300;display:none;align-items:center;justify-content:center;padding:24px;overflow-y:auto}
+.regen-modal-bg.open{display:flex}
+.regen-modal{background:var(--panel);border:1px solid var(--border);border-radius:20px;width:100%;max-width:760px;padding:24px;box-shadow:var(--shadow-lg);margin:auto}
+.regen-template-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:8px;max-height:60vh;overflow-y:auto;margin-top:16px;padding:4px}
+.regen-tpl{cursor:pointer;border-radius:10px;overflow:hidden;border:2px solid transparent;transition:all .15s}
+.regen-tpl:hover{border-color:var(--accent);transform:scale(1.03)}
+.regen-tpl img{width:100%;aspect-ratio:3/4;object-fit:cover;display:block}
+.regen-tpl-name{font-size:9px;color:var(--text-dim);padding:3px 4px;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 /* ── Modal éditeur images ─────────────────────────────────────── */
 .img-editor-bg{position:fixed;inset:0;background:rgba(5,6,10,.88);backdrop-filter:blur(6px);z-index:200;display:none;align-items:flex-start;justify-content:center;padding:24px;overflow-y:auto}
 .img-editor-bg.open{display:flex}
@@ -250,6 +259,20 @@ h1{font-size:24px;margin:0;font-weight:800;letter-spacing:-0.02em}
 <div class="lightbox-bg" id="lightbox" onclick="closeLightbox()">
     <button class="lightbox-close" onclick="closeLightbox()">✕</button>
     <img id="lightboxImg" src="" onclick="event.stopPropagation()">
+</div>
+
+<!-- Modal sélecteur template pour régénération -->
+<div class="regen-modal-bg" id="regenModal" onclick="if(event.target===this)this.classList.remove('open')">
+    <div class="regen-modal">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+            <div style="font-size:16px;font-weight:800">🔄 Choisir un template</div>
+            <button style="background:var(--bg-elevated);border:1px solid var(--border);color:var(--text);width:34px;height:34px;border-radius:50%;cursor:pointer;font-size:16px" onclick="document.getElementById('regenModal').classList.remove('open')">✕</button>
+        </div>
+        <div style="font-size:12px;color:var(--text-dim)">Flocage : <strong id="regenFloc" style="color:var(--text)">—</strong></div>
+        <div class="regen-template-grid" id="regenTemplateGrid">
+            <div style="grid-column:1/-1;text-align:center;padding:20px;color:var(--text-dim)"><div class="spinner"></div></div>
+        </div>
+    </div>
 </div>
 
 <!-- Modal éditeur images -->
@@ -613,6 +636,7 @@ function renderIeGrid(){
                 <button class="ie-btn ie-btn-zoom" onclick="openLightbox('${url}')">🔍 Agrandir</button>
                 ${i>0?`<button class="ie-btn ie-btn-up" onclick="ieMoveUp(${i})">↑ Monter</button>`:''}
                 ${i<_ieUrls.length-1?`<button class="ie-btn ie-btn-down" onclick="ieMoveDown(${i})">↓ Descendre</button>`:''}
+                <button class="ie-btn" style="background:rgba(251,191,36,.3);color:#fbbf24" onclick="ieRegenerate(${i})">🔄 Régénérer</button>
                 <button class="ie-btn ie-btn-del" onclick="ieDelete(${i})">🗑️ Supprimer</button>
             </div>
         </div>`).join('');
@@ -641,6 +665,71 @@ async function ieDelete(i){
         const imgsGrid=document.getElementById(`imgs-${_ieCurrentId}`);
         if(imgsGrid&&t) imgsGrid.innerHTML=renderImgsGridHtml(t);
     }catch(e){showStatus('❌ Erreur lors de la suppression');}
+}
+
+let _regenIndex=null;
+let _ieTemplates=[];
+
+async function ieRegenerate(i){
+    _regenIndex=i;
+    // Récupérer le flocage de cette image
+    const tiktokData=await fetch(`/api/queue/tiktok?key=${encodeURIComponent(_ieCurrentKey)}`).then(r=>r.json());
+    const floc=(tiktokData.flockages||[])[i]||'';
+    // Ouvrir le sélecteur de template
+    document.getElementById('regenFloc').textContent=floc||'—';
+    document.getElementById('regenModal').classList.add('open');
+    // Charger les templates si pas encore fait
+    if(!_ieTemplates.length){
+        const res=await fetch('/api/templates');
+        const d=await res.json();
+        _ieTemplates=d.templates||[];
+    }
+    const grid=document.getElementById('regenTemplateGrid');
+    grid.innerHTML=_ieTemplates.map(t=>`
+        <div class="regen-tpl" onclick="selectRegenTemplate('${t.key}')" title="${t.name}">
+            <img src="${t.url}" loading="lazy" onerror="this.style.opacity='.2'">
+            <div class="regen-tpl-name">${t.name}</div>
+        </div>`).join('');
+}
+
+async function selectRegenTemplate(templateKey){
+    document.getElementById('regenModal').classList.remove('open');
+    const i=_regenIndex;
+    if(i===null) return;
+    // Récupérer flocage
+    const tiktokData=await fetch(`/api/queue/tiktok?key=${encodeURIComponent(_ieCurrentKey)}`).then(r=>r.json());
+    const floc=(tiktokData.flockages||[])[i]||'';
+    const parts=floc.split('/').map(p=>p.trim());
+    // Spinner sur l'image
+    const grid=document.getElementById('ieGrid');
+    const items=[...grid.querySelectorAll('.ie-item')];
+    if(items[i]) items[i].innerHTML=`<div style="display:flex;align-items:center;justify-content:center;aspect-ratio:3/4;background:var(--bg-elevated)"><div class="spinner"></div></div>`;
+    try{
+        // Récupérer le template
+        const tplRes=await fetch(`/api/template_image?key=${encodeURIComponent(templateKey)}`);
+        const tplData=await tplRes.json();
+        if(!tplData.image){showStatus('❌ Template introuvable');renderIeGrid();return}
+        const bin=atob(tplData.image);
+        const arr=new Uint8Array(bin.length);
+        for(let j=0;j<bin.length;j++)arr[j]=bin.charCodeAt(j);
+        const blob=new Blob([arr],{type:tplData.mime||'image/png'});
+        const file=new File([blob],templateKey,{type:tplData.mime||'image/png'});
+        const fd=new FormData();
+        fd.append('image',file);
+        fd.append('name',parts[0]||'');
+        fd.append('number',parts[1]||'');
+        fd.append('name_below',parts[2]||'');
+        fd.append('user',document.querySelector('#userChipName')?.textContent||'');
+        fd.append('skip_buffer','true');
+        const res=await fetch('/generate_single',{method:'POST',body:fd});
+        const d=await res.json();
+        if(!res.ok||d.error){showStatus(`❌ Erreur: ${d.error}`);renderIeGrid();return}
+        _ieUrls[i]=`data:image/png;base64,${d.image}`;
+        await fetch('/api/queue/replace_image',{method:'POST',headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({key:_ieCurrentKey,index:i,image:d.image})});
+        showStatus('✅ Image régénérée !');
+        renderIeGrid();
+    }catch(e){showStatus(`❌ Erreur: ${e.message}`);renderIeGrid();}
 }
 
 async function saveImgOrder(){
