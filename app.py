@@ -42,34 +42,37 @@ def _get_or_create_session(session_id, total):
         return _job_sessions[session_id]
 
 def _update_session(session_id, success, image_b64=None, floc=None, error=None, idx=None, user=None):
+    batch = None
+    session_user = None
     with _job_sessions_lock:
         s = _job_sessions.get(session_id)
         if not s:
             return
         s["done"] += 1
         if success and image_b64:
+            # Stocker seulement métadonnées en RAM (pas l'image) — évite OOM avec 210 images
             s["results"].append({"image": image_b64, "floc": floc, "orig_index": idx})
             s["pending_buffer"].append({"image": image_b64, "floc": floc})
         else:
             s["errors"] += 1
-            # Stocker aussi les erreurs pour que le frontend puisse les afficher
             s["results"].append({"image": None, "floc": floc or "", "orig_index": idx, "error": error or "Erreur inconnue"})
         if s["done"] >= s["total"]:
             s["status"] = "done"
-        # Créer un TikTok toutes les 7 images — comme avant
+        # Créer un TikTok toutes les 7 images — extraction atomique sous lock
         pending = s["pending_buffer"]
         session_user = s.get("user") or user
         if len(pending) >= TIKTOK_SIZE:
             batch = pending[:TIKTOK_SIZE]
             s["pending_buffer"] = pending[TIKTOK_SIZE:]
-        else:
-            batch = None
-
+    
     if batch:
         try:
             imgs = [r["image"] for r in batch]
             flocs = [r["floc"] for r in batch]
             created, remaining = add_to_buffer_and_create_tiktoks(imgs, flocs, session_user)
+            # NE PAS nullifier r["image"] ici — results pointe vers les mêmes dicts
+            # Le frontend a besoin de l'image pour l'afficher
+            # La RAM sera libérée naturellement quand la session est nettoyée
             with _job_sessions_lock:
                 s = _job_sessions.get(session_id)
                 if s:
@@ -80,19 +83,26 @@ def _update_session(session_id, success, image_b64=None, floc=None, error=None, 
             print(f"[SESSION] Erreur création TikTok intermédiaire: {e}")
 
 def _finalize_session(session_id, user):
-    """Crée les TikToks depuis les images restantes (< 7) à la fin"""
+    """Crée les TikToks depuis les images restantes (< 7) à la fin — atomique pour éviter les doublons"""
     with _job_sessions_lock:
         s = _job_sessions.get(session_id)
         if not s:
             return
+        # Vider pending_buffer atomiquement pour éviter double traitement
         pending = s["pending_buffer"][:]
+        s["pending_buffer"] = []  # ← reset atomique sous lock
         session_user = s.get("user") or user
 
     if not pending:
         return
 
-    imgs = [r["image"] for r in pending]
-    flocs = [r["floc"] for r in pending]
+    # Filtrer les images nulles (déjà libérées de la RAM)
+    valid = [r for r in pending if r.get("image")]
+    if not valid:
+        return
+
+    imgs = [r["image"] for r in valid]
+    flocs = [r["floc"] for r in valid]
     try:
         created, remaining = add_to_buffer_and_create_tiktoks(imgs, flocs, session_user)
         with _job_sessions_lock:
@@ -100,6 +110,7 @@ def _finalize_session(session_id, user):
             if s:
                 s["tiktoks_created"].extend(created)
                 s["buffer_remaining"] = remaining
+        print(f"[SESSION] Finalisation: {len(created)} TikTok(s), {remaining} images en buffer")
     except Exception as e:
         print(f"[SESSION] Erreur finalisation: {e}")
 
@@ -136,6 +147,23 @@ def _run_bulk_async(session_id, items, user, resolution):
 
     # Créer les TikToks une fois tout terminé
     _finalize_session(session_id, user)
+
+    # Nettoyer les vieilles sessions de la RAM (> 30 min) pour libérer la mémoire
+    now_ts = datetime.now(timezone.utc)
+    with _job_sessions_lock:
+        to_delete = []
+        for sid, sess in _job_sessions.items():
+            if sess.get("status") in ("done", "cancelled") and sess.get("created_at"):
+                try:
+                    created = datetime.fromisoformat(sess["created_at"])
+                    if (now_ts - created).total_seconds() > 1800:  # 30 min
+                        to_delete.append(sid)
+                except Exception:
+                    pass
+        for sid in to_delete:
+            del _job_sessions[sid]
+        if to_delete:
+            print(f"[SESSION] Nettoyage RAM: {len(to_delete)} sessions supprimées")
 
     # Sauvegarder la session dans R2
     with _job_sessions_lock:
@@ -1715,7 +1743,7 @@ def api_jobs_progress(session_id):
                 "new_results": [],
             })
         return jsonify({"error": "Session introuvable"}), 404
-    # Lire tout sous lock pour cohérence des compteurs
+    # Lire tout sous lock pour cohérence — y compris new_results
     with _job_sessions_lock:
         snap = {
             "total": s["total"],
@@ -1724,7 +1752,7 @@ def api_jobs_progress(session_id):
             "status": s["status"],
             "tiktoks_created": list(s.get("tiktoks_created", [])),
             "buffer_remaining": s.get("buffer_remaining", 0),
-            "new_results": s["results"][last_seen:],
+            "new_results": list(s["results"][last_seen:]),  # copie sous lock
         }
     new_results = snap["new_results"]
     done = snap["done"]; total = snap["total"]
