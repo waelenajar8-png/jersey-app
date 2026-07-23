@@ -358,22 +358,47 @@ async function clearBuffer(){
 
 function renderImgsGridHtml(t){
     const imgs=t.image_urls||[];
-    const show=imgs.slice(0,3);
+    const thumb=imgs[0]||'';
+    const total=t.image_keys?.length||imgs.length;
+    return `<div class="img-item" data-index="0">
+                <img src="${thumb}" loading="lazy" onerror="this.style.opacity='.15'" onclick="openLightbox('${thumb}')">
+                <div class="img-overlay">
+                    <button class="img-del" onclick="deleteImage(event,'${t.r2_key}',0,'${t.id}')">✕</button>
+                </div>
+                <div class="img-num">1/${total}</div>
+            </div>
+            ${total>1?`<div class="more-imgs" style="cursor:pointer;font-size:12px" onclick="loadAllImgs('${t.r2_key}','${t.id}')">+${total-1}<br><span style="font-size:9px">voir tout</span></div>`:''}`;
+}
+
+async function loadAllImgs(r2Key, tiktokId){
+    const t=allTiktoks.find(t=>t.id===tiktokId);
+    if(!t) return;
+    const res=await fetch(`/api/queue/images?key=${encodeURIComponent(r2Key)}`);
+    const d=await res.json();
+    if(d.image_urls) {
+        t.image_urls=d.image_urls;
+        const imgsGridEl=document.getElementById(`imgs-${tiktokId}`);
+        if(imgsGridEl) imgsGridEl.innerHTML=renderAllImgsHtml(t);
+    }
+}
+
+function renderAllImgsHtml(t){
+    const imgs=t.image_urls||[];
     const rem=imgs.length-3;
-    return `${show.map((u,i)=>`
-                <div class="img-item" draggable="true" data-index="${i}"
-                     ondragstart="imgDragStart(event,'${t.id}')"
-                     ondragover="event.preventDefault()"
-                     ondrop="imgDrop(event,'${t.id}','${t.r2_key}')">
-                    <img src="${u||''}" loading="lazy" onerror="this.style.opacity='.15'" onclick="openLightbox('${u}')">
-                    <div class="img-overlay">
-                        ${i>0?`<button class="img-arrow" onclick="moveImg(event,'${t.r2_key}',${i},${i-1})">←</button>`:''}
-                        <button class="img-del" onclick="deleteImage(event,'${t.r2_key}',${i},'${t.id}')">✕</button>
-                        ${i<imgs.length-1?`<button class="img-arrow" onclick="moveImg(event,'${t.r2_key}',${i},${i+1})">→</button>`:''}
-                    </div>
-                    <div class="img-num">${i+1}</div>
-                </div>`).join('')}
-                ${rem>0?`<div class="more-imgs">+${rem}</div>`:''}`;
+    return imgs.slice(0,3).map((u,i)=>`
+        <div class="img-item" draggable="true" data-index="${i}"
+             ondragstart="imgDragStart(event,'${t.id}')"
+             ondragover="event.preventDefault()"
+             ondrop="imgDrop(event,'${t.id}','${t.r2_key}')">
+            <img src="${u||''}" loading="lazy" onerror="this.style.opacity='.15'" onclick="openLightbox('${u}')">
+            <div class="img-overlay">
+                ${i>0?`<button class="img-arrow" onclick="moveImg(event,'${t.r2_key}',${i},${i-1})">←</button>`:''}
+                <button class="img-del" onclick="deleteImage(event,'${t.r2_key}',${i},'${t.id}')">✕</button>
+                ${i<imgs.length-1?`<button class="img-arrow" onclick="moveImg(event,'${t.r2_key}',${i},${i+1})">→</button>`:''}
+            </div>
+            <div class="img-num">${i+1}</div>
+        </div>`).join('')+
+    (rem>0?`<div class="more-imgs">+${rem}</div>`:'');
 }
 
 function render(){
