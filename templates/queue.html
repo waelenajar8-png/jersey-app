@@ -630,56 +630,31 @@ async function scheduleAll(){
     const startDate=document.getElementById('startDate').value;
     document.getElementById('scheduleBtn').disabled=true;
 
-    // Afficher la barre de progression
     const progWrap=document.getElementById('progWrap');
     const progFill=document.getElementById('progFill');
     progWrap.classList.add('show');
-    progFill.style.width='0%';
+    progFill.style.width='10%';
+    showStatus(`🚀 Programmation de ${total} TikTok(s) en cours...`);
 
-    let done=0; let errors=0;
+    // UN SEUL appel backend — évite les doublons de créneaux
+    const res=await fetch('/api/queue/schedule',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({start_date: startDate||null, custom_slots: customSlots})
+    });
+    const d=await res.json();
 
-    // Programmer TikTok par TikTok — on voit la progression en temps réel
-    for(const t of assigned){
-        showStatus(`⏳ Programmation ${done+1}/${total} — TikTok ${t.number}...`);
-        try{
-            const res=await fetch('/api/queue/schedule',{
-                method:'POST',
-                headers:{'Content-Type':'application/json'},
-                body:JSON.stringify({
-                    start_date: startDate||null,
-                    custom_slots: customSlots[t.r2_key]?{[t.r2_key]:customSlots[t.r2_key]}:{},
-                    single_key: t.r2_key
-                })
-            });
-            const d=await res.json();
-            if(d.scheduled>0){
-                // Retirer la carte immédiatement de la liste
-                allTiktoks=allTiktoks.filter(x=>x.r2_key!==t.r2_key);
-                selectedForMain.delete(t.r2_key);
-                checkedForDelete.delete(t.r2_key);
-                delete customSlots[t.r2_key];
-                totalCount=Math.max(0,totalCount-1);
-                // Retirer visuellement la carte
-                const card=document.getElementById(`c-${t.id}`);
-                if(card){card.style.opacity='0.3';card.style.pointerEvents='none';}
-            } else {
-                errors++;
-            }
-        }catch(e){ errors++; }
-        done++;
-        progFill.style.width=`${Math.round(done/total*100)}%`;
-    }
-
-    progWrap.classList.remove('show');
+    progFill.style.width='100%';
+    setTimeout(()=>progWrap.classList.remove('show'),600);
     document.getElementById('scheduleBtn').disabled=false;
     customSlots={};
-    updateCounters();
 
-    if(errors>0){
-        showStatus(`✅ ${done-errors}/${total} programmés — ⚠️ ${errors} erreur(s)`);
+    if(d.errors?.length){
+        showStatus(`✅ ${d.scheduled}/${total} programmés — ⚠️ ${d.errors.length} erreur(s) : ${d.errors[0]}`);
     } else {
-        showStatus(`✅ ${done} TikTok(s) programmés avec succès !`);
+        showStatus(`✅ ${d.scheduled} TikTok(s) programmés avec succès !`);
     }
+    updateCounters();
     await loadPage(currentPage);
 }
 
