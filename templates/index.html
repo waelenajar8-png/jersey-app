@@ -657,7 +657,7 @@ async function launch(testMode=false){
         alert(`${filesToUse.length} images mais ${linesToUse.length} flocages.`);return
     }
 
-    const parallel=parseInt(document.getElementById('parallelInput').value)||5;
+    const parallel=50; // workers gérés côté serveur
     generationInProgress=true;
     generateBtn.disabled=true;testBtn.disabled=true;
     generateBtn.textContent='En cours...';
