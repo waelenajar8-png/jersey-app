@@ -517,35 +517,50 @@ async function launch(testMode=false){
     formData.append('flockages',linesToUse.join('\n'));
     formData.append('user',userName);
     formData.append('session_id',sessionId);
-    formData.append('parallel',parallel);
+    formData.append('resolution','4k');
 
     try{
+        // Lance la génération — Railway répond en <1s, génération en background
         const res=await fetch('/generate_bulk',{method:'POST',body:formData});
         if(!res.ok){const d=await res.json();statusEl.textContent='Erreur: '+(d.error||'inconnue');return}
-        const reader=res.body.getReader();const decoder=new TextDecoder();
-        let buffer='';let done=0;const total=filesToUse.length;
+        const {session_id:sid, total, workers}=await res.json();
+        statusEl.textContent=`⚡ Génération lancée avec ${workers} workers parallèles...`;
+
+        // Polling toutes les 2s — plus jamais de timeout Railway
         const genStartTime=Date.now();
-        while(true){
-            const{value,done:sd}=await reader.read();if(sd)break;
-            buffer+=decoder.decode(value,{stream:true});
-            let lines2=buffer.split('\n');buffer=lines2.pop();
-            for(const line of lines2){
-                if(!line.trim())continue;
-                const data=JSON.parse(line);
-                if(data.tiktok_created){statusEl.innerHTML=`✅ TikTok ${data.tiktok_created} créé ! <a href="/queue" style="color:var(--accent);font-weight:700">Voir la file d'attente →</a>`;updateBufferBadge();continue;}
-                if(data.buffer_update){statusEl.innerHTML=`⏳ ${data.pending}/7 images en buffer — encore ${data.needed} avant le prochain TikTok`;updateBufferBadge();continue;}
-                renderResult(data);incrRPD();done++;
-                progressFill.style.width=`${Math.round(done/total*100)}%`;
-                if(done<total){
-                    const elapsed=(Date.now()-genStartTime)/1000;
-                    const avgPerImg=elapsed/done;
-                    const remaining=Math.round(avgPerImg*(total-done));
-                    const remainingText=remaining>60?`~${Math.round(remaining/60)} min`:`~${remaining}s`;
-                    statusEl.textContent=`${done}/${total} traité(s) — temps restant estimé : ${remainingText}`;
-                }
-            }
-        }
-        notifyDone(total,testMode);
+        let lastDone=0;
+        await new Promise((resolve)=>{
+            const poll=setInterval(async()=>{
+                try{
+                    const r=await fetch(`/api/jobs/progress/${sid}`);
+                    if(!r.ok){clearInterval(poll);resolve();return}
+                    const d=await r.json();
+                    const done=d.done; const errors=d.errors; const success=d.success;
+                    progressFill.style.width=`${d.percent}%`;
+                    // Estimer le temps restant
+                    if(done>0&&done<total){
+                        const elapsed=(Date.now()-genStartTime)/1000;
+                        const avgPerImg=elapsed/done;
+                        const remaining=Math.round(avgPerImg*(total-done));
+                        const remainingText=remaining>60?`~${Math.round(remaining/60)} min`:`~${remaining}s`;
+                        statusEl.textContent=`${done}/${total} traité(s)${errors>0?' ('+errors+' erreur(s))':''} — reste ${remainingText}`;
+                    }
+                    if(d.status==='done'||d.status==='cancelled'){
+                        clearInterval(poll);
+                        // Afficher résultat TikToks créés
+                        if(d.tiktoks_created&&d.tiktoks_created.length>0){
+                            statusEl.innerHTML=`✅ ${success}/${total} images générées — ${d.tiktoks_created.length} TikTok(s) créé(s) ! <a href="/queue" style="color:var(--accent);font-weight:700">Voir la file →</a>`;
+                        } else {
+                            statusEl.textContent=`✅ ${success}/${total} images générées${errors>0?' — '+errors+' erreur(s)':''}`;
+                        }
+                        updateBufferBadge();
+                        notifyDone(total,testMode);
+                        resolve();
+                    }
+                }catch(e){/* retry au prochain poll */}
+            },2000);
+        });
+
         if(Object.keys(generatedImages).length>0){zipBtn.style.display='inline-block';document.getElementById('selectAllImgBtn').style.display='inline-block';}
     }catch(err){statusEl.textContent='Erreur: '+err.message}
     finally{generationInProgress=false;generateBtn.disabled=false;testBtn.disabled=false;generateBtn.textContent='Lancer la génération'}
