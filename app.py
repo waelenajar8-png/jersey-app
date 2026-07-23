@@ -828,8 +828,11 @@ def get_scheduled(page=0, per_page=20):
     return result, total
 
 def move_to_scheduled(queue_key, account, dt_str, robinreach_post_id=None):
+    print(f"[MOVE] Moving {queue_key} -> scheduled, account={account}, dt={dt_str}")
     data = r2_get_json(queue_key)
-    if not data: return False
+    if not data:
+        print(f"[MOVE] ❌ TikTok introuvable: {queue_key}")
+        return False
     data["status"] = "scheduled"
     data["account"] = account
     data["scheduled_at"] = dt_str
@@ -1226,7 +1229,11 @@ def api_schedule():
                     errors.append(f"TikTok {tiktok.get('number','')}: {str(e)}")
                     continue
 
-            move_to_scheduled(tiktok["r2_key"], account, dt_str, tiktok_data.get("robinreach_post_id"))
+            try:
+                move_to_scheduled(tiktok["r2_key"], account, dt_str, tiktok_data.get("robinreach_post_id"))
+            except Exception as e:
+                print(f"[SCHEDULE] Erreur move_to_scheduled TikTok {tiktok.get('number','')}: {e}")
+                # On continue quand même — RobinReach a déjà programmé, on note juste l'erreur
             used_slots.add(dt_str)
             add_used_slot(account, dt_str)
             scheduled_count += 1
