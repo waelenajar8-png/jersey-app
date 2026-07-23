@@ -1,872 +1,1960 @@
-<!DOCTYPE html>
-<html lang="fr" data-theme="dark">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Générateur de flocages</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-<style>
-/* ══════════════════════════════════════════════════════════════════════
-   DESIGN SYSTEM — tokens
-   ══════════════════════════════════════════════════════════════════════ */
-:root[data-theme="dark"]{
-    --bg:#0a0b0f; --bg-elevated:#0f1117;
-    --panel:#15171e; --panel-hover:#1a1d26;
-    --border:#242832; --border-strong:#323847;
-    --accent:#4ade80; --accent-hover:#5eead4; --accent-dim:rgba(74,222,128,.12);
-    --accent-grad:linear-gradient(135deg,#4ade80,#22d3ee);
-    --text:#f1f3f6; --text-dim:#8b93a3; --text-faint:#5b6373;
-    --danger:#f87171; --danger-dim:rgba(248,113,113,.12);
-    --warn:#fbbf24; --warn-dim:rgba(251,191,36,.12);
-    --purple:#a78bfa; --purple-dim:rgba(167,139,250,.12);
-    --orig:#1c1f28;
-    --shadow-sm:0 1px 2px rgba(0,0,0,.3);
-    --shadow-md:0 4px 12px rgba(0,0,0,.35), 0 1px 3px rgba(0,0,0,.3);
-    --shadow-lg:0 12px 32px rgba(0,0,0,.45), 0 2px 8px rgba(0,0,0,.3);
-    --shadow-glow:0 0 0 1px rgba(74,222,128,.15), 0 4px 16px rgba(74,222,128,.08);
+import os
+import base64
+import json
+import time
+import uuid
+import threading
+import requests
+import boto3
+
+REPLICATE_API_KEY = os.environ.get("REPLICATE_API_KEY")
+from datetime import datetime, timezone, timedelta
+from concurrent.futures import ThreadPoolExecutor
+from flask import Flask, render_template, request, Response, jsonify
+from botocore.config import Config
+
+app = Flask(__name__)
+
+# ── Job Queue Asynchrone ────────────────────────────────────────────────────
+# Stockage en mémoire des sessions de génération actives
+# { session_id: { total, done, errors, results, status, created_at } }
+_job_sessions = {}
+_job_sessions_lock = threading.Lock()
+
+# Nombre de workers parallèles pour la génération
+WORKER_COUNT = 50
+
+def _get_or_create_session(session_id, total):
+    with _job_sessions_lock:
+        if session_id not in _job_sessions:
+            _job_sessions[session_id] = {
+                "total": total,
+                "done": 0,
+                "errors": 0,
+                "results": [],
+                "pending_buffer": [],
+                "status": "running",
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "tiktoks_created": [],
+                "buffer_remaining": 0,
+                "user": None,
+            }
+        return _job_sessions[session_id]
+
+def _update_session(session_id, success, image_b64=None, floc=None, error=None, idx=None, user=None):
+    batch = None
+    session_user = None
+    with _job_sessions_lock:
+        s = _job_sessions.get(session_id)
+        if not s:
+            return
+        s["done"] += 1
+        if success and image_b64:
+            # Stocker seulement métadonnées en RAM (pas l'image) — évite OOM avec 210 images
+            s["results"].append({"image": image_b64, "floc": floc, "orig_index": idx})
+            s["pending_buffer"].append({"image": image_b64, "floc": floc})
+        else:
+            s["errors"] += 1
+            s["results"].append({"image": None, "floc": floc or "", "orig_index": idx, "error": error or "Erreur inconnue"})
+        if s["done"] >= s["total"]:
+            s["status"] = "done"
+        # Créer un TikTok toutes les 7 images — extraction atomique sous lock
+        pending = s["pending_buffer"]
+        session_user = s.get("user") or user
+        if len(pending) >= TIKTOK_SIZE:
+            batch = pending[:TIKTOK_SIZE]
+            s["pending_buffer"] = pending[TIKTOK_SIZE:]
+    
+    if batch:
+        try:
+            imgs = [r["image"] for r in batch]
+            flocs = [r["floc"] for r in batch]
+            created, remaining = add_to_buffer_and_create_tiktoks(imgs, flocs, session_user)
+            # NE PAS nullifier r["image"] ici — results pointe vers les mêmes dicts
+            # Le frontend a besoin de l'image pour l'afficher
+            # La RAM sera libérée naturellement quand la session est nettoyée
+            with _job_sessions_lock:
+                s = _job_sessions.get(session_id)
+                if s:
+                    s["tiktoks_created"].extend(created)
+                    s["buffer_remaining"] = remaining
+            print(f"[SESSION] ✅ {len(created)} TikTok(s) créé(s) en cours de génération")
+        except Exception as e:
+            print(f"[SESSION] Erreur création TikTok intermédiaire: {e}")
+
+def _finalize_session(session_id, user):
+    """Crée les TikToks depuis les images restantes (< 7) à la fin — atomique pour éviter les doublons"""
+    with _job_sessions_lock:
+        s = _job_sessions.get(session_id)
+        if not s:
+            return
+        # Vider pending_buffer atomiquement pour éviter double traitement
+        pending = s["pending_buffer"][:]
+        s["pending_buffer"] = []  # ← reset atomique sous lock
+        session_user = s.get("user") or user
+
+    if not pending:
+        return
+
+    # Filtrer les images nulles (déjà libérées de la RAM)
+    valid = [r for r in pending if r.get("image")]
+    if not valid:
+        return
+
+    imgs = [r["image"] for r in valid]
+    flocs = [r["floc"] for r in valid]
+    try:
+        created, remaining = add_to_buffer_and_create_tiktoks(imgs, flocs, session_user)
+        with _job_sessions_lock:
+            s = _job_sessions.get(session_id)
+            if s:
+                s["tiktoks_created"].extend(created)
+                s["buffer_remaining"] = remaining
+        print(f"[SESSION] Finalisation: {len(created)} TikTok(s), {remaining} images en buffer")
+    except Exception as e:
+        print(f"[SESSION] Erreur finalisation: {e}")
+
+def _run_bulk_async(session_id, items, user, resolution):
+    """Lance la génération en background avec WORKER_COUNT workers"""
+    import gc
+    session = _get_or_create_session(session_id, len(items))
+
+    # Attacher l'index original à chaque item pour garder l'ordre
+    for i, item in enumerate(items):
+        item["_index"] = i
+
+    def process_one(item):
+        idx = item["_index"]
+        try:
+            img_bytes = item["bytes"]
+            res = call_gemini(img_bytes, item["mime"], item["name"], item["number"], item["name_below"], resolution=resolution)
+            log_generation(user, res["success"])
+            if res["success"]:
+                floc = f"{item['name']}/{item['number']}/{item.get('name_below','') or ''}"
+                _update_session(session_id, True, res["image"], floc, idx=idx, user=user)
+                res["image"] = None
+            else:
+                _update_session(session_id, False, error=res.get("error"), idx=idx)
+        except Exception as e:
+            print(f"[WORKER] Erreur inattendue image {idx}: {e}")
+            _update_session(session_id, False, error=str(e), idx=idx)
+        finally:
+            item["bytes"] = None
+            gc.collect()
+
+    with ThreadPoolExecutor(max_workers=WORKER_COUNT) as ex:
+        list(ex.map(process_one, items))
+
+    # Créer les TikToks une fois tout terminé
+    _finalize_session(session_id, user)
+
+    # Nettoyer les vieilles sessions de la RAM (> 30 min) pour libérer la mémoire
+    now_ts = datetime.now(timezone.utc)
+    with _job_sessions_lock:
+        to_delete = []
+        for sid, sess in _job_sessions.items():
+            if sess.get("status") in ("done", "cancelled") and sess.get("created_at"):
+                try:
+                    created = datetime.fromisoformat(sess["created_at"])
+                    if (now_ts - created).total_seconds() > 1800:  # 30 min
+                        to_delete.append(sid)
+                except Exception:
+                    pass
+        for sid in to_delete:
+            del _job_sessions[sid]
+        if to_delete:
+            print(f"[SESSION] Nettoyage RAM: {len(to_delete)} sessions supprimées")
+
+    # Sauvegarder la session dans R2
+    with _job_sessions_lock:
+        s = _job_sessions.get(session_id)
+        success_count = s["done"] - s["errors"] if s else 0
+    r2_put_json(f"sessions/{session_id}.json", {
+        "id": session_id, "user": user,
+        "start": session["created_at"],
+        "end": datetime.now(timezone.utc).isoformat(),
+        "total": len(items), "success": success_count
+    })
+
+# ── Config ─────────────────────────────────────────────────────────────────
+API_KEY        = os.environ.get("GEMINI_API_KEY")
+MODEL_URL      = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-image:generateContent"
+COST_PER_IMAGE = 0.069
+TIKTOK_SIZE    = 7
+FIXED_CAPTION  = "3 Maillot Acheté 1 Offert 🎁 #volakits #ete #foot"
+# Créneaux de publication en UTC, PAR COMPTE (le principal poste plus souvent que les autres)
+# Conversion heure française (UTC+2 été) → UTC : soustraire 2h
+SCHEDULE_TIMES_BY_ACCOUNT = {
+    "Volakits Principal": ["07:00", "10:30", "14:00", "17:30", "19:30"],  # 9h/12h30/16h/19h30/21h30 Paris — 5x/jour
 }
-:root[data-theme="light"]{
-    --bg:#f7f8fa; --bg-elevated:#ffffff;
-    --panel:#ffffff; --panel-hover:#f9fafb;
-    --border:#e5e7eb; --border-strong:#d1d5db;
-    --accent:#16a34a; --accent-hover:#15803d; --accent-dim:rgba(22,163,74,.08);
-    --accent-grad:linear-gradient(135deg,#16a34a,#0891b2);
-    --text:#0f172a; --text-dim:#64748b; --text-faint:#94a3b8;
-    --danger:#dc2626; --danger-dim:rgba(220,38,38,.08);
-    --warn:#d97706; --warn-dim:rgba(217,119,6,.08);
-    --purple:#7c3aed; --purple-dim:rgba(124,58,237,.08);
-    --orig:#eef0f3;
-    --shadow-sm:0 1px 2px rgba(15,23,42,.06);
-    --shadow-md:0 4px 12px rgba(15,23,42,.08), 0 1px 3px rgba(15,23,42,.06);
-    --shadow-lg:0 12px 32px rgba(15,23,42,.12), 0 2px 8px rgba(15,23,42,.06);
-    --shadow-glow:0 0 0 1px rgba(22,163,74,.12), 0 4px 16px rgba(22,163,74,.06);
+SCHEDULE_TIMES_DEFAULT = ["10:30", "17:30"]  # 12h30/19h30 Paris — 2x/jour pour les autres comptes
+
+def get_schedule_times_for_account(account):
+    """Retourne les créneaux horaires (UTC) pour un compte donné"""
+    return SCHEDULE_TIMES_BY_ACCOUNT.get(account, SCHEDULE_TIMES_DEFAULT)
+
+R2_ENDPOINT   = os.environ.get("R2_ENDPOINT")
+R2_ACCESS_KEY = os.environ.get("R2_ACCESS_KEY_ID")
+R2_SECRET_KEY = os.environ.get("R2_SECRET_ACCESS_KEY")
+R2_BUCKET     = os.environ.get("R2_BUCKET", "jersey-templates")
+
+ROBINREACH_API_KEY  = os.environ.get("ROBINREACH_API_KEY")
+ROBINREACH_BRAND_ID = os.environ.get("ROBINREACH_BRAND_ID")
+
+# ── Auth utilisateurs ──────────────────────────────────────────────────────
+# Format: { "prenom": "mot_de_passe" }
+# Change les mots de passe dans les variables Railway (AUTH_USERS en JSON)
+_DEFAULT_USERS = {
+    "Wael": os.environ.get("AUTH_PASS_WAEL", "wael2024"),
+    "Moh": os.environ.get("AUTH_PASS_MOH", "moh2024"),
+    "Wassim": os.environ.get("AUTH_PASS_WASSIM", "wassim2024"),
+    "Seik": os.environ.get("AUTH_PASS_SEIK", "seik2024"),
 }
-*{box-sizing:border-box}
-::selection{background:var(--accent);color:#0a0b0f}
-body{
-    margin:0;font-family:'Inter',-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
-    background:var(--bg);color:var(--text);min-height:100vh;padding:32px 24px;
-    transition:background .25s ease,color .25s ease;
-    -webkit-font-smoothing:antialiased;
-    letter-spacing:-0.01em;
+
+def get_auth_users():
+    raw = os.environ.get("AUTH_USERS")
+    if raw:
+        try: return json.loads(raw)
+        except: pass
+    return _DEFAULT_USERS
+
+@app.route("/api/auth/login", methods=["POST"])
+def api_auth_login():
+    data = request.json or {}
+    name = data.get("name", "").strip()
+    password = data.get("password", "").strip()
+    users = get_auth_users()
+    if name in users and users[name] == password:
+        return jsonify({"success": True, "user": name})
+    return jsonify({"success": False, "error": "Prénom ou mot de passe incorrect"}), 401
+
+# Préfixes R2
+PFX_QUEUE     = "queue/"
+PFX_SCHEDULED = "scheduled/"
+PFX_TEMPLATES = "templates/"
+PFX_LOGS      = "logs/"
+KEY_BUFFER    = "buffer/pending.json"
+KEY_COUNTER   = "meta/tiktok_counter.json"
+KEY_ACCOUNTS  = "meta/accounts.json"
+KEY_USED_SLOTS = "meta/used_slots.json"
+
+# Lock pour éviter race conditions sur le compteur/buffer
+_r2_lock = threading.Lock()
+_log_lock = threading.Lock()
+_r2_client = None
+_r2_client_lock = threading.Lock()
+
+def get_r2():
+    global _r2_client
+    if not R2_ENDPOINT:
+        return None
+    with _r2_client_lock:
+        if _r2_client is None:
+            _r2_client = boto3.client(
+                "s3",
+                endpoint_url=R2_ENDPOINT,
+                aws_access_key_id=R2_ACCESS_KEY,
+                aws_secret_access_key=R2_SECRET_KEY,
+                config=Config(signature_version="s3v4", max_pool_connections=100),
+                region_name="auto",
+            )
+        return _r2_client
+
+DEFAULT_FLOCAGES = [
+    'UN PEU / 2 / LIMONADE',
+    'UN PEU / 2 / GAZOUZ',
+    'Me3endish / 38 / Lwaqt',
+    'Bodycount / 00',
+    'Juste / 1 / Mec chill',
+    'Lover / 2 / Blonde',
+    'Jolie / 2 / moiselle',
+    'Histoire / 2 / Love',
+    'MENTALITÉ / 2 / PIRATE',
+    'Je suis / 1 / Charo',
+    "J'veux vos / 7 / snaps",
+    'PAYE / 1 / COUP',
+    "J'ai / 1 / P'tit Zgeg",
+    'ARRACHEUR / 2 / LATINAS',
+    'TA PAS / 1 / SNAP',
+    'MET / 2 / LA CREME',
+    'MEC / 2 / PANAME',
+    'Cousine / 7 / Ma came',
+    'Skinny / 2 / Quoi',
+    'Fan / 2 / Moi',
+    'MAX / 70 / KG',
+    "L'HOMME / 2 / TA VIE",
+    'CHASSEUR / 2 / LATINA',
+    'Le mec / 2 / Mon bâtiment',
+    'Sans plomb / 98',
+    'Pas / 2 / Mariage',
+    'QUE MA BFF / 0 / TANA',
+    'Pas / 2 / Love',
+    'BAISEUR / 2 / MILF',
+    'Mec / 2 / Djerba',
+    'PAS / 2 / SALAM',
+    'Ma copine / 7 / mon combat',
+    'Arracheur / 2 / String',
+    'Enfant / 2 / Gaza',
+    'Love / 02 / Blonde',
+    "J'ai Déjà / 1 / MEUF",
+    'Fan / 2 / Merveille',
+    'Arracheuse / 2 / Grec',
+    'Minimum / 27 / Ans',
+    'Envoie ton / 06 / Princesse',
+    'Elle veut / 2 / Fou',
+    'Elle veut / 2 / Malade',
+    "J'veux vos / 4 / Snaps",
+    'Pas / 2 / Comme moi',
+    'Love / 2 / Moha',
+    'Voleuse / 2 / Brainrot',
+    'Voleur / 2 / Brainrot',
+    'Frère / 2 / Sang',
+    'REMPLI / 2 / MOSSEBA',
+    'Loveur / 2 / Blonde',
+    'Loveur / 2 / Brune',
+    'Pilote / 2 / ton coeur',
+    'PAS / 2 / TAL',
+    'MIEUX / 100 / TOI',
+    "J'AI / 4 / FEMMES",
+    'JE VEUX / 4 / FEMMES',
+    'Fémur / 2 / Acier',
+    'Salopard / 100 / Baaraka',
+    'CALE / 1 / SNUS',
+    'Arabe / 100 / Papier',
+    'BUVEUR / 2 / CYPRINE',
+    'DEFOURAILLEUR / 2 / MILF',
+    'Cherche / 1 / Snap',
+    'Mec / 100 / Papier',
+    'jamais / 100 / elle',
+    'bbl / 2 / malade',
+    'pas / 2 / ralentir',
+    'BBL / 2 / TANA',
+    "Crois pas t'es / 1 / Jamal",
+    'Jamais / 100 / Ma blonde',
+    'Jamais djadja / 100 / Dinaz',
+    '3ARBI / 100 / BARAKA',
+    'IN LOVE / 2 / BLONDES',
+    'LOVEUR / 2 / BLONDES',
+    'Tié / 1 / Tigre',
+    'en pétard / 2 / ouf',
+    'Bourré / 2 / Talent',
+    'Scammer / 2 / Daronnes',
+    'Je veux / 1 / Femme',
+    'Mangeur / 2 / Cavu',
+    'BANDEUR / 2 / BRUNE',
+    "L'homme / 2 / La situation",
+    'Kiffeur / 2 / Cavu',
+    'Tete / 2 / Kiwi',
+    'G PAS / 2 / SOUS',
+    'Duo / 2 / Charo',
+    'Jamais / 2 / Sans 12',
+    'Jamais / 2 / Sans 13',
+    'Jamais / 2 / Sans 16',
+    'Jamais / 2 / Sans 3',
+    'LOVEUSE / 2 / MON BRUN',
+    'LIVREUR / 2 / QUALITÉ',
+    'FUCK LE / 17',
+    'love / 2 / mon ex',
+    "t'as pas / 1 / snap",
+    "Reine / 2 / l'apéro",
+    "Roi / 2 / l'apéro",
+    'JAMAIS / 100 / FEMMES',
+    "J'AI DÉJÀ MA / 011 / BOOSTER",
+    "J'AI DÉJÀ MA / 016 / BOOSTER",
+    "J'AI DÉJÀ MA / 015 / BOOSTER",
+    'Mangeur / 2 / Brunes',
+    "T'as / 1 / snap",
+    'Homme / 2 / ta vie',
+    'amoureuse / 2 / mon copain',
+    'Love / 2 / Ma copine',
+    'Love / 2 / Mon copain',
+    "J'AI DÉJÀ / 1 / FEMME",
+    'AIGRI / 2 / NATURE',
+    'AIGRI / 2 / BASE',
+    'Collectionneur / 2 / MST',
+    'DONNEUR / 2 / MST',
+    'CHERCHE PLAN A / 4',
+    'Cherche / 1 / Meuf',
+    'CONGOLAISE / 2 / KINSHASA',
+    'Italien / 2 / Napoli',
+    'Kabyle / 100 / Vice',
+    'COPINE / 100 / Vice',
+    'Fan / 2 / Tana',
+    'Bandeur / 2 / States',
+    'OH TIÉ / 13 / SÉDUISANTE',
+    'LÂCHE / 1 / SEIN',
+    'BBL / 2 / STAR',
+    'CHIENNE / 2 / GUERRE',
+    'JE BANDE / 13 / VITE',
+    'BANDE / 13 / VITE',
+    'tigresse / 2 / OUF',
+    'Enfants / 2 / LA CAF',
+    'Chasseur / 2 / Brunette',
+    'Chasseur / 2 / Pétasse',
+    'Jamais / 100 / MA SOEUR',
+    'Fils / 2 / Stup',
+    'Fils / 2 / PUTE',
+    'DU RSA / 0 / RS3',
+    'Pétase / 100 / Vice',
+    'BAISE / 100 / CAPOTE',
+    'ARRACHEUR / 2 / CHATTE',
+    'LÂCHE / 2 / SEIN',
+    'BODYCOUNT / 00 / MEC BIEN',
+    'BESOIN / 2 / TON SNAP',
+    'Je suis / 1 / Homme simple',
+    'Love / 2 / Ma Go',
+    'Cherche / 1 / Blonde',
+    'Cherche / 1 / Plan Cul',
+    'Sénégalais / 100 / Papier',
+    'Gattouz / 2 / Partouz',
+    'MENTAL / 2 / CHARO',
+    'Amoureuse / 2 / Toi',
+    'ARRACHEUR / 2 / CAVU',
+    'JUSTE / 1 / MEUF CHILL',
+    'Chien / 100 / Laisse',
+    'croqueur / 2 / cavu',
+    'Duo / 100 / Vice',
+    'Inshallah / 4 / Femmes',
+    'ARRÊTE / 2 / KHLE3',
+    'TRAIN2VIE / 2 / HAYAWEN',
+    'GRATTEUR / 2 / LA CAF',
+    'A LA RECHERCHE / 2 / JUMELLES',
+    'EN MANQUE / 2 / SEXE',
+    "L'amour / 2 / Ma vie",
+    'FAN / 2 / MADAME',
+    'FAN / 2 / MONSIEUR',
+    'FAN / 2 / BLONDE',
+    "J'ai que / 1 / frère",
+    'Non / 1 / Posable',
+    'Mangeur / 2 / Tacos',
+    'Roule / 13 / Vite',
+    'Récolteur / 2 / Snap',
+    'BBL / 2 / FOU',
+    'CHUIS / 1 / MEC BIEN',
+    'Kiffeur / 2 / Batata',
+    'Bouffeur / 2 / Cul',
+    'ANTI SUCEUR / 2 / BITE',
+    'zgeg / 10 / proportionné',
+    'Dévoreur / 2 / clitos',
+    'Homme / 2 / Sa vie',
+    'Femme / N°2 / Sa vie',
+    'ARRACHEUR / 2 / brunes',
+    'Briseuse / 2 / Coeur',
+    'CHEF / 2 / BANDE',
+    'Baiseur / 2 / Petasse',
+    'jamais / 100 / lui',
+    'Décaleur / 2 / strings',
+    'À / 4 / PATTES',
+    'attrapeur / 2 / brunes',
+    'BOIS / 100 / MODERATION',
+    'Kiffeur / 2 / Brunes',
+    'DONNE TON / 06 / BEAUTÉ',
+    'Chasseur / 2 / Brune',
+    'PAS / 2 / COMME NOUS',
+    'LE BOULET / 2 / LA BANDE',
+    'Mec / 13 / Haram',
+    'Mec / 13 / Halal',
+    'Langue / 2 / Molière',
+    "C'est l' / 69 / Pelo",
+    'MEC / 100 / TITULAIRE',
+    'PINEUR / 2 / CHEVRE',
+    'VOLEUR / 2 / SNAP',
+    'Arracheur / 2 / Tysmé',
+    'Briseur / 2 / Coeurs',
+    "J'ai / 1 / Meuf",
+    'Projet / 4 / Femmes',
+    'Love / 2 / Ma femme',
+    'PÊCHEUR / 2 / MILF',
+    'ARRACHEUR / 2 / SNAP',
+    'PAS / 2 / SELEM',
+    'Buveur / 2 / Vovo',
+    "La Dame / 2 / Quelqu'un",
+    'Recolteur / 2 / Snap',
+    'Footballeur / 2 / Qualité',
+    'Toujours / 100 / Meuf',
+    'Nous / 2 / Je le sens',
+    'JAMAIS / 2 / PRESSION',
+    'ARRACHEUR / 2 / STRINGS',
+    "J'ai déjà / 5 / Mecs",
+    'Charger / 2 / Malade',
+    'Kiffeur / 2 / Binouz',
+    'Meuf / 100 / Vice',
+    'CHERCHE / 1 / MILF',
+    'Aigrie / 2 / Ouf',
+    '3arbia / 100 / Vice',
+    'VIENS / 2 / SECONDE',
+    'SANS PRISE / 2 / TETE',
+    '3arbia / 100 / papier',
+    'MENTAL / 2 / GRANDO',
+    'Groupe / 2 / Vicieux',
+    'CONSOMMATRICE / 2 / PAIN',
+    'Croqueuse / 2 / Diamant',
+    'love / 2 / Ma parisienne',
+    'Train / 2 / Vie',
+    'Aigrie / 2 / Nature',
+    'PAS / 2 / MEUF',
+    "j'bande / 13 / vite",
+    'CASHFLOW / 13 / POSITIF',
+    'ARRÊTE / 2 / PISTER',
+    'et tié / 13 / séduisante',
+    'Loveur / 2 / Femme',
+    'ARRACHEUR / 2 / BAR',
+    'Ta pas rêver / 2 / Moi',
+    'Ta rêver / 2 / Moi',
+    'Chouchou / 2 / Madame',
+    'Tête / 2 / Turc',
+    'Tête / 2 / Noir',
+    'Tête / 2 / Arabe',
+    'Tête / 2 / Blanc',
+    'Briseuse / 2 / Foyer',
+    'VIE / 100 / STRESS',
+    '1/ Fille / 2 / La hess',
+    'Remplie / 2 / Vices',
+    'Alcoolique / 2 / Qualité',
+    'Caleur / 2 / Snus',
+    'Kaleur / 2 / Snus',
+    'CHIBRE / 10 / PROPORTIONNEL',
+    'CALVITIE / 13 / AVANCÉE',
+    'Roi / 2 / Labécane',
+    'Fan / 2 / Toi',
+    "J'ai pas / 2 / Meufs",
+    "T'as / 1 / Snap ?",
+    'FAN / 2 / DAMSO',
+    'LÈCHEUR / 2 / TÉTON',
+    "j'ai plus / 1 / EURO",
+    'MÉLANGEUSE / 2 / MEC',
+    "j'ai plus / 1 / ROND",
+    'DÉREGLEUSE / 2 / MARCHÉ',
+    'PAS / 2 / LEASING',
+    'ARRACHEUR / 2 / LATINA',
+    'BAISEUR / 2 / LATINA',
+    'ALCOOLIQUE / 2 / FOU',
+    'TOUJOURS / 100 / BATTERIE',
+    'JAMAIS / 100 / BATTERIE',
+    'Lécheur / 2 / Chatte',
+    'Baiseur / 2 / Chatte',
+    'Top / 1 / Remplaçant',
+    'MADAME / 2 / MONSIEUR',
+    'MONSIEUR / 2 / MADAME',
+    'Fan / 2 / Lacrim',
+    'JAMAIS / 100 / TAC',
+    'Jamais / 100 / TIC',
+    'Déjà / 1 / Femme',
+    'Tranquilo / 2 / Quoi',
+    'Mec clean / 100 / bodycount',
+    'Donneuse / 2 / Go',
+    'Nain / 2 / Jardin',
+    'Tacos / 3 / Viande',
+    'Calvitie / 2 / Malade',
+    'Calvitie / 2 / Barbare',
+    '3arbia / 2 / Luxe',
+    'Fan / 2 / Mon ex',
+    'Remplis / 2 / Mosseba',
+    'LECHEUR / 2 / TEUCH',
+    'Femme / 2 / Ta vie',
+    'Envois / 1 / Snap',
+    'Briseur / 2 / Cœur',
+    'MEC / 100 / LIMITES',
+    'chercheur / 2 / snap',
+    'Donneur / 2 / Snap',
+    "Uniquement / 2 / L'authentique",
+    'VIE / 2 / CAMPAGNE',
+    'Sirop / 2 / fraise',
+    'J ai pas / 1 / Sous',
+    'Buveur / 2 / Flash',
+    'CLAQUE / 2 / FESSES',
+    'Bande / 2 / Zgegs',
+    'Comorien / 100 / Papier',
+    'Je mérite / 1 / Bisous',
+    'Baise / 100 / Capotes',
+    'Lécheur / 2 / Teuch',
+    'BBL / 2 / TASPÉ',
+    'Baiseur / 100 / Capotes',
+    'PAS / 2 / TALES',
+    'TIE / 1 / TIGRE',
+    'MBAPPE / 10',
+    'OLISE / 11',
+    'Bandeur / 2 / Blondes',
+    'TOUS FANS / 2 / MOI',
+    'INCHALLAH / 1 / HOMME RICHE',
+    'Arracheuse / 2 / Strings',
+    'Chasseur / 2 / Blonde',
+    "J'VEUX VOS / 4 / SNAP",
+    'Neymar jr / 10',
+    'Lamine Yamal / 19',
+    'Mangeur / 2 / Bouzelouf',
+    "T'AS PAS / 1 / SNAP BEAUTÉ ?",
+    'Boit / 100 / Modération',
+    'KIFFEUR / 2 / HARR',
+    'Gitan / 100 / Camping',
+    'Buveuse / 100 / Modération',
+    'Fan / 2 / Morgane',
+    'DORA / 100 / BABOUCHE',
+    'FILS / 2 / POULPE',
+    'EN AMONT / 69 / LA TRICK',
+    'Dune / 2 / Sable',
+    'Love / 2 / Toi',
+    "J'ai pas / 2 / Daron",
+    'Mentalidade / 2 / Tuga',
+    'Loveur / 2 / Brunes',
+    'Kiffeuse / 2 / Vovo',
+    'Bandeuse / 2 / Brun',
+    'AMOUREUX / 2 / MA FEMME',
+    'Doue / 20',
+    'InshaaAllah / 1 / RS6',
+    'CHIANT / 2 / OUF',
+    'Je mérite / 1 / Bisous ?',
+    "Baks' / 32",
+    'RESPONSABLE / 2 / LAV CAR',
+    'Elle a mal / 0 / Reins',
+    'Trou / 2 / Balle',
+    'O.DEMBÉLÉ / 10',
+    "j'veux / 1 / sushi",
+    'RAPHINIA / 11',
+    'Cherki / 24',
+    'Pro / 2 / DoroParty',
+    'Back / 2 / Back',
+    '3rbia / 2 / France',
+    'OLISE / 17',
+    'MANDA / 30 / ANS',
+    'Juste / 1 / Meuf dégénérée',
+    'RONALDO / 7 / LE GOAT',
+    'RONALDO / 7',
+    'jamais / 100 / le y',
+    'jamais / 100 / le c',
+    'Djadja / 67',
+    'Griezmann / 7',
+    'Le R / 13 / Cpasdesehehehe',
+    "L'ex préfère / 2 / ta copine",
+    'PSG / 2 / LDC',
+    "AMOUREUSE / 2 / L'ARGENT",
+    'ATTITUDE / 2 / BADIES',
+    'TUNNEL / 2 / OUF',
+    'addict / 0 / locksé',
+    "J'veux marier / 2 / Portugaise",
+    "J'veux / 1 / Portugaise",
+    'Accro / 0 / Portugaise',
+    'Fan / 2 / Sa copine',
+    'Montre / 1 / Sein',
+    'JAMAIS / 100 / MON RICARD',
+    'JAMAIS / 100 / MON FLASH',
+    'WALLAH / 7 / LOURD',
+    'Kiffeuse / 2 / Fessées',
+    'TONTON.H / 3945',
+    'Décaleur / 2 / String',
+    'DEMBELE / 7',
+    'BESOINS / 2 / TON SNAP',
+    "C'EST HARR / 2 / DINGUE",
+    'Casse / 1 / Tour',
+    'FAIS PLUS / 2 / TIRAMISUS',
+    "C'EST / 1 / BATARD",
+    'Envoies ton / 06 / Princesse',
+    'PREPARATEUR / 2 / FLASH',
+    'CHIBRE / 10 / PROPORTIONNE',
+    "ALC'OLISE / 51",
+    'UN PEU / 2 / GAZZOUZ',
+]
+
+
+
+def r2_put_json(key, data):
+    r2 = get_r2()
+    if not r2: return False
+    try:
+        r2.put_object(Bucket=R2_BUCKET, Key=key,
+            Body=json.dumps(data, ensure_ascii=False).encode(),
+            ContentType="application/json")
+        return True
+    except Exception as e:
+        print(f"[R2 put_json error] {key}: {e}")
+        return False
+
+def r2_get_json(key):
+    r2 = get_r2()
+    if not r2: return None
+    try:
+        obj = r2.get_object(Bucket=R2_BUCKET, Key=key)
+        return json.loads(obj["Body"].read().decode())
+    except Exception:
+        return None
+
+def r2_list_keys(prefix, suffix=".json"):
+    """Liste les clés R2 avec pagination complète"""
+    r2 = get_r2()
+    if not r2: return []
+    keys = []
+    kwargs = {"Bucket": R2_BUCKET, "Prefix": prefix}
+    while True:
+        resp = r2.list_objects_v2(**kwargs)
+        for obj in resp.get("Contents", []):
+            if obj["Key"].endswith(suffix):
+                keys.append(obj["Key"])
+        if not resp.get("IsTruncated"):
+            break
+        kwargs["ContinuationToken"] = resp["NextContinuationToken"]
+    return keys
+
+def r2_delete(key):
+    r2 = get_r2()
+    if not r2: return False
+    try:
+        r2.delete_object(Bucket=R2_BUCKET, Key=key)
+        return True
+    except Exception:
+        return False
+
+def r2_put_image(key, img_bytes, mime="image/png"):
+    r2 = get_r2()
+    if not r2: return False
+    try:
+        r2.put_object(Bucket=R2_BUCKET, Key=key, Body=img_bytes, ContentType=mime)
+        return True
+    except Exception as e:
+        print(f"[R2 put_image error] {key}: {e}")
+        return False
+
+def r2_presigned(key, expires=86400):  # 24h
+    r2 = get_r2()
+    if not r2: return None
+    try:
+        return r2.generate_presigned_url("get_object",
+            Params={"Bucket": R2_BUCKET, "Key": key}, ExpiresIn=expires)
+    except Exception:
+        return None
+
+# ── Compteur TikTok (atomique via R2) ─────────────────────────────────────
+def get_next_tiktok_number():
+    """Incrémente et retourne le prochain numéro de TikTok (thread-safe via lock)"""
+    with _r2_lock:
+        data = r2_get_json(KEY_COUNTER) or {"next": 1}
+        num = data["next"]
+        data["next"] = num + 1
+        r2_put_json(KEY_COUNTER, data)
+        return num
+
+# ── Logs persistants sur R2 ────────────────────────────────────────────────
+def log_generation(user, success):
+    with _log_lock:
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        key = f"{PFX_LOGS}{today}.jsonl"
+        entry = json.dumps({
+            "ts": datetime.now(timezone.utc).isoformat(),
+            "user": user or "Inconnu",
+            "success": success
+        }) + "\n"
+        r2 = get_r2()
+        if not r2: return
+        try:
+            try:
+                obj = r2.get_object(Bucket=R2_BUCKET, Key=key)
+                existing = obj["Body"].read().decode()
+            except Exception:
+                existing = ""
+            r2.put_object(Bucket=R2_BUCKET, Key=key,
+                Body=(existing + entry).encode(), ContentType="text/plain")
+        except Exception as e:
+            print(f"[log error] {e}")
+
+def read_logs(days=30):
+    r2 = get_r2()
+    if not r2: return []
+    entries = []
+    keys = r2_list_keys(PFX_LOGS, suffix=".jsonl")
+    for key in sorted(keys)[-days:]:
+        try:
+            obj = r2.get_object(Bucket=R2_BUCKET, Key=key)
+            for line in obj["Body"].read().decode().splitlines():
+                if line.strip():
+                    try: entries.append(json.loads(line))
+                    except: pass
+        except Exception:
+            pass
+    return entries
+
+# ── Comptes TikTok (stockés sur R2) ───────────────────────────────────────
+# ── Comptes TikTok RobinReach (IDs réels) ──────────────────────────────────
+ROBINREACH_ACCOUNTS = {
+    "Volakits Principal": 11739,   # compte principal, wael
+    "Volakits2": 11848,
+    "Volakits (wassim)": 11846,
+    "Volakits (seik)": 11847,
 }
-.wrap{max-width:1180px;margin:0 auto}
-code{font-family:'JetBrains Mono',monospace;background:var(--accent-dim);color:var(--accent);padding:2px 6px;border-radius:4px;font-size:.9em}
+DEFAULT_MAIN_ACCOUNT = "Volakits Principal"
 
-/* ── Animations ─────────────────────────────────────────────────────── */
-@keyframes fadeInUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
-@keyframes spin{to{transform:rotate(360deg)}}
-@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
-@keyframes shimmer{0%{background-position:-200% 0}100%{background-position:200% 0}}
-.card{animation:fadeInUp .35s cubic-bezier(.16,1,.3,1) both}
-
-/* ── Topbar ─────────────────────────────────────────────────────────── */
-.topbar{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:6px;flex-wrap:wrap;gap:12px}
-h1{font-size:24px;margin:0;font-weight:800;letter-spacing:-0.02em;display:flex;align-items:center;gap:10px}
-h1 .h1-icon{font-size:22px;filter:drop-shadow(0 2px 8px rgba(74,222,128,.3))}
-.topbar-right{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-@media(max-width:640px){
-    .topbar{flex-direction:column;align-items:stretch}
-    .topbar-right{flex-wrap:nowrap;overflow-x:auto;padding-bottom:4px;-webkit-overflow-scrolling:touch;scrollbar-width:none}
-    .topbar-right::-webkit-scrollbar{display:none}
-    .nav-link,.theme-btn,.rpd-badge{flex-shrink:0}
-}
-.rpd-badge{background:var(--panel);border:1px solid var(--border);padding:6px 12px;border-radius:100px;font-size:12px;font-weight:600;color:var(--accent);display:flex;align-items:center;gap:5px;box-shadow:var(--shadow-sm)}
-.rpd-badge.warn{color:var(--warn);border-color:rgba(251,191,36,.3)}
-.rpd-badge.danger{color:var(--danger);border-color:rgba(248,113,113,.3)}
-.nav-link{color:var(--text-dim);text-decoration:none;font-size:13px;font-weight:600;padding:6px 10px;border-radius:8px;transition:all .15s ease}
-.nav-link:hover{color:var(--text);background:var(--panel-hover)}
-.theme-btn{background:var(--panel);border:1px solid var(--border);color:var(--text);padding:6px 11px;border-radius:100px;cursor:pointer;font-size:13px;font-weight:600;box-shadow:var(--shadow-sm);transition:all .15s ease}
-.theme-btn:hover{border-color:var(--border-strong);transform:translateY(-1px)}
-.subtitle{color:var(--text-dim);font-size:13px;margin:0 0 24px;font-weight:500}
-
-/* ── Panels ─────────────────────────────────────────────────────────── */
-.panel{background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:22px;margin-bottom:18px;box-shadow:var(--shadow-sm);transition:border-color .2s ease}
-.grid2{display:grid;grid-template-columns:1fr 1fr;gap:22px}
-@media(max-width:800px){.grid2{grid-template-columns:1fr}}
-
-/* ── Forms ──────────────────────────────────────────────────────────── */
-label{display:block;font-size:12.5px;font-weight:600;margin-bottom:7px;color:var(--text-dim);letter-spacing:-0.01em}
-.req{color:var(--danger);margin-left:2px}
-input[type=text]{width:100%;padding:11px 13px;background:var(--bg-elevated);border:1.5px solid var(--border);border-radius:10px;color:var(--text);font-size:13.5px;font-family:inherit;transition:all .15s ease}
-input[type=text]:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-dim)}
-input[type=text].err{border-color:var(--danger)}
-input[type=text].err:focus{box-shadow:0 0 0 3px var(--danger-dim)}
-.field-err{color:var(--danger);font-size:11.5px;margin-top:5px;display:none;font-weight:500}
-textarea{width:100%;padding:12px 13px;background:var(--bg-elevated);border:1.5px solid var(--border);border-radius:10px;color:var(--text);font-size:13px;font-family:'JetBrains Mono',monospace;min-height:160px;resize:vertical;transition:all .15s ease;line-height:1.6}
-textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-dim)}
-
-/* ── Dropzone ───────────────────────────────────────────────────────── */
-.dropzone{border:1.5px dashed var(--border-strong);border-radius:14px;padding:24px;text-align:center;cursor:pointer;font-size:13.5px;color:var(--text-dim);min-height:160px;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:8px;transition:all .2s ease;background:var(--bg-elevated)}
-.dropzone:hover{border-color:var(--accent);color:var(--text);background:var(--accent-dim)}
-.dropzone.drag{border-color:var(--accent);background:var(--accent-dim);transform:scale(1.01)}
-input[type=file]{display:none}
-.file-count{font-weight:700;color:var(--accent);font-size:12.5px}
-.hint{font-size:11.5px;color:var(--text-faint);margin-top:6px}
-
-/* ── Buttons ────────────────────────────────────────────────────────── */
-.shuffle-row{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
-.btn-xs{padding:6px 12px;background:var(--panel);border:1px solid var(--border);color:var(--text-dim);border-radius:8px;font-size:11.5px;font-weight:600;cursor:pointer;transition:all .15s ease}
-.btn-xs:hover{color:var(--text);border-color:var(--border-strong);transform:translateY(-1px);box-shadow:var(--shadow-sm)}
-.btn-row{display:flex;gap:10px;margin-top:16px;flex-wrap:wrap;align-items:center}
-.btn-main{padding:13px 26px;background:var(--accent-grad);color:#06170d;border:none;border-radius:11px;font-size:14px;font-weight:700;cursor:pointer;box-shadow:var(--shadow-glow);transition:all .18s cubic-bezier(.16,1,.3,1);letter-spacing:-0.01em}
-.btn-main:hover:not(:disabled){transform:translateY(-1.5px);box-shadow:0 6px 20px rgba(74,222,128,.25),var(--shadow-glow)}
-.btn-main:active:not(:disabled){transform:translateY(0)}
-.btn-main:disabled{opacity:.4;cursor:not-allowed;box-shadow:none}
-.btn-sec{padding:10px 18px;background:var(--panel);border:1px solid var(--border);color:var(--text);border-radius:10px;font-size:12.5px;font-weight:600;cursor:pointer;display:none;transition:all .15s ease}
-.btn-sec:hover{border-color:var(--border-strong);transform:translateY(-1px);box-shadow:var(--shadow-sm)}
-.parallel-row{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text-dim);font-weight:500}
-.parallel-row input{width:56px;padding:6px 8px;background:var(--bg-elevated);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:12px;text-align:center;font-family:inherit}
-.status{color:var(--text-dim);font-size:12.5px;margin-top:10px;font-weight:500;min-height:16px}
-.progress-bar{height:5px;background:var(--border);border-radius:100px;overflow:hidden;margin-top:10px}
-.progress-fill{height:100%;background:var(--accent-grad);width:0%;transition:width .3s cubic-bezier(.4,0,.2,1);border-radius:100px}
-
-/* ── Preview ────────────────────────────────────────────────────────── */
-.preview-section{margin-bottom:18px;display:none}
-.preview-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px}
-.preview-card{background:var(--panel);border:1px solid var(--border);border-radius:10px;overflow:hidden;font-size:10.5px;transition:transform .2s ease,box-shadow .2s ease}
-.preview-card:hover{transform:translateY(-2px);box-shadow:var(--shadow-md)}
-.preview-card img{width:100%;aspect-ratio:3/4;object-fit:cover;display:block}
-.preview-card-info{padding:6px 8px;color:var(--text-dim);font-weight:500}
-
-/* ── Results ────────────────────────────────────────────────────────── */
-.results{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px}
-.card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:12px;display:flex;flex-direction:column;gap:8px;transition:transform .18s cubic-bezier(.16,1,.3,1),box-shadow .18s ease,border-color .15s ease}
-.card:hover{box-shadow:var(--shadow-md);border-color:var(--border-strong);transform:translateY(-2px)}
-.card-title{font-size:13.5px;font-weight:700;letter-spacing:-0.01em}
-.card-sub{font-size:10.5px;color:var(--text-dim);font-weight:500}
-.card-imgs{display:grid;grid-template-columns:1fr 1fr;gap:7px}
-.img-wrap{position:relative;border-radius:8px;overflow:hidden}
-.img-label{position:absolute;top:5px;left:5px;background:rgba(0,0,0,.7);backdrop-filter:blur(4px);color:#fff;font-size:9px;font-weight:700;padding:2px 7px;border-radius:100px;letter-spacing:.02em}
-.card img{width:100%;border-radius:8px;background:#000;display:block;transition:transform .3s cubic-bezier(.16,1,.3,1)}
-.img-wrap:hover img{transform:scale(1.05)}
-.card-ph{display:flex;align-items:center;justify-content:center;height:140px;background:var(--bg-elevated);border-radius:8px;color:var(--text-faint);font-size:11px;font-weight:500}
-.card-err-box{color:var(--danger);font-size:11px;background:var(--danger-dim);border:1px solid rgba(248,113,113,.25);border-radius:8px;padding:8px 10px;font-weight:500;line-height:1.5}
-.confidence{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;padding:4px 10px;border-radius:100px}
-.conf-ok{background:var(--accent-dim);color:var(--accent)}
-.conf-warn{background:var(--warn-dim);color:var(--warn)}
-.conf-fail{background:var(--danger-dim);color:var(--danger)}
-.dl-btn{background:var(--bg-elevated);border:1px solid var(--border);color:var(--text);text-decoration:none;padding:9px;border-radius:9px;font-size:12.5px;font-weight:600;text-align:center;transition:all .15s ease}
-.dl-btn:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-dim)}
-.retry-btn{background:var(--bg-elevated);border:1px solid var(--border);color:var(--text-dim);padding:8px;border-radius:9px;font-size:11.5px;font-weight:600;cursor:pointer;text-align:center;transition:all .15s ease}
-.retry-btn:hover{color:var(--text);border-color:var(--border-strong)}
-.spinner{width:22px;height:22px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite}
-.chrono-badge{background:var(--panel);border:1px solid var(--border);padding:5px 12px;border-radius:100px;font-size:12px;font-weight:700;color:var(--text-dim);display:none;font-family:'JetBrains Mono',monospace}
-.chrono-badge.running{color:var(--accent);border-color:rgba(74,222,128,.3);animation:pulse 1s infinite}
-.chrono-badge.done{color:var(--text)}
-/* ── Login ──────────────────────────────────────────────────────────── */
-.login-overlay{position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:500;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px)}
-.login-box{background:var(--panel);border:1px solid var(--border);border-radius:20px;padding:32px;width:100%;max-width:380px;display:flex;flex-direction:column;gap:20px;box-shadow:var(--shadow-lg)}
-.login-title{font-size:20px;font-weight:800;text-align:center;letter-spacing:-0.02em}
-.login-field{display:flex;flex-direction:column;gap:8px}
-.login-field label{font-size:12px;font-weight:600;color:var(--text-dim)}
-.login-field input{width:100%;padding:12px 14px;background:var(--bg-elevated);border:1.5px solid var(--border);border-radius:10px;color:var(--text);font-size:14px;font-family:inherit;transition:all .15s ease}
-.login-field input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-dim)}
-.login-btn{padding:13px;background:var(--accent-grad);color:#06170d;border:none;border-radius:11px;font-size:14px;font-weight:700;cursor:pointer;box-shadow:var(--shadow-glow);transition:all .18s ease}
-.login-btn:hover{transform:translateY(-1px)}
-.login-err{color:var(--danger);font-size:12px;text-align:center;min-height:16px;font-weight:500}
-.user-chip{background:var(--accent-dim);border:1px solid rgba(74,222,128,.3);padding:5px 12px;border-radius:100px;font-size:12px;font-weight:700;color:var(--accent);cursor:pointer;display:flex;align-items:center;gap:6px}
-.user-chip:hover{background:var(--danger-dim);border-color:rgba(248,113,113,.3);color:var(--danger)}
-</style>
-</head>
-<body>
-<!-- Modal Login -->
-<div class="login-overlay" id="loginOverlay">
-    <div class="login-box">
-        <div class="login-title">🎨 Volakits Bot</div>
-        <div class="login-field">
-            <label>Prénom</label>
-            <input type="text" id="loginName" placeholder="ex: Moh" autocomplete="username">
-        </div>
-        <div class="login-field">
-            <label>Mot de passe</label>
-            <input type="password" id="loginPass" placeholder="••••••••" autocomplete="current-password">
-        </div>
-        <div class="login-err" id="loginErr"></div>
-        <button class="login-btn" id="loginBtn" onclick="doLogin()">Se connecter</button>
-    </div>
-</div>
-
-<div class="wrap">
-<div class="topbar">
-    <h1><span class="h1-icon">🎨</span>Générateur de flocages</h1>
-    <div class="topbar-right">
-        <div class="rpd-badge" id="rpdBadge">⚡ — / 1000</div>
-        <div class="rpd-badge" id="bufferBadge" style="color:#fbbf24;border-color:#fbbf24;display:none">⏳ buffer: —/7</div>
-        <a href="/dashboard" class="nav-link">📊 Dashboard</a>
-        <a href="/queue" class="nav-link">📋 File d'attente</a>
-        <a href="/scheduled" class="nav-link">✅ Programmés</a>
-        <a href="/templates" class="nav-link">🗂️ Templates</a>
-        <a href="/stats" class="nav-link">📈 Stats</a>
-        <a href="/monitor" class="nav-link">👀 Monitor</a>
-        <a href="/remove_box" class="nav-link">🗑️ Supprimer boîte</a>
-        <div class="user-chip" id="userChip" style="display:none" onclick="doLogout()" title="Cliquer pour se déconnecter">👤 <span id="userChipName"></span> ✕</div>
-        <button class="theme-btn" id="themeBtn">☀️</button>
-    </div>
-</div>
-<p class="subtitle">Format : <code>NOM/NUMERO/NOM_DESSOUS</code> — 3e champ optionnel</p>
-
-<!-- Le prénom est géré par le login — plus besoin de ce panel -->
-<input type="hidden" id="userName">
-<div class="field-err" id="userErr" style="display:none">⚠️ Prénom obligatoire.</div>
-
-<div class="panel">
-    <div class="grid2">
-        <div>
-            <label>Images des maillots</label>
-            <div class="dropzone" id="dropzone">
-                <span>Clique ou dépose les images ici</span>
-                <span class="file-count" id="fileCount"></span>
-                <input type="file" id="imageInput" accept="image/*" multiple>
-            </div>
-            <div class="shuffle-row">
-                <button class="btn-xs" id="shuffleImgBtn">🔀 Mélanger l'ordre</button>
-                <button class="btn-xs" id="loadTemplatesBtn">🗂️ Charger depuis Templates</button>
-            </div>
-            <div class="hint" id="templateHint"></div>
-        </div>
-        <div>
-            <label>Flocages (1 par ligne — NOM/NUMERO/NOM_DESSOUS)</label>
-            <textarea id="flockages" placeholder="PIERRE/2/OUF&#10;LUCAS/7&#10;THEO/10/PRO"></textarea>
-            <div class="shuffle-row">
-                <button class="btn-xs" id="shuffleFlocBtn">🔀 Mélanger les flocages</button>
-                <label for="csvInput" class="btn-xs" style="cursor:pointer">📄 Importer CSV</label>
-                <input type="file" id="csvInput" accept=".csv,.txt,.xlsx">
-                <button class="btn-xs" id="openLibBtn" onclick="openFlocLib()">📚 Bibliothèque</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Aperçu avant génération -->
-    <div class="preview-section" id="previewSection">
-        <label style="margin-top:12px">👁️ Aperçu des associations (avant génération)</label>
-        <div class="preview-grid" id="previewGrid"></div>
-    </div>
-
-    <div class="btn-row">
-        <button class="btn-main" id="generateBtn">Lancer la génération</button>
-        <button class="btn-main" id="testBtn" style="background:#6366f1">🧪 Test (1 image)</button>
-        <button class="btn-sec" id="selectAllImgBtn" style="display:none" onclick="selectAllImages()">☑️ Tout sélectionner</button>
-        <button class="btn-sec" id="dlSelBtn" style="display:none" onclick="dlSelected()">⬇️ Télécharger la sélection (<span id="selImgCount">0</span>)</button>
-        <button class="btn-sec" id="zipBtn">📦 ZIP</button>
-        <div class="chrono-badge" id="chronoBadge">⏱️ 00:00</div>
-    </div>
-    <div class="status" id="status"></div>
-    <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
-</div>
-
-<div class="results" id="results"></div>
-</div>
-
-<!-- Modal bibliothèque flocages -->
-<div id="flocModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:200;align-items:center;justify-content:center">
-    <div style="background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:24px;width:100%;max-width:600px;max-height:80vh;display:flex;flex-direction:column;gap:12px">
-        <div style="display:flex;align-items:center;justify-content:space-between">
-            <h2 style="margin:0;font-size:16px">📚 Bibliothèque de flocages</h2>
-            <button onclick="closeFlocLib()" style="background:none;border:none;color:var(--text);font-size:18px;cursor:pointer">✕</button>
-        </div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-            <button class="btn-xs" onclick="shuffleLib()">🔀 Mélanger</button>
-            <button class="btn-xs" onclick="deselectAllLib()">✖️ Désélectionner</button>
-            <div style="display:flex;align-items:center;gap:4px">
-                <input type="number" id="randCount" placeholder="ex: 50" min="1" style="width:70px;padding:4px 8px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px">
-                <button class="btn-xs" onclick="selectRandom()">🎲 Sélectionner aléatoirement</button>
-            </div>
-            <span id="libSelCount" style="font-size:12px;color:var(--text-dim)"></span>
-        </div>
-        <input type="text" id="libSearch" placeholder="🔍 Rechercher..." oninput="renderLib()" style="padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px">
-        <div id="libList" style="overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:4px"></div>
-        <div style="display:flex;gap:8px;justify-content:flex-end">
-            <button onclick="closeFlocLib()" style="padding:8px 16px;background:var(--panel);border:1px solid var(--border);color:var(--text);border-radius:8px;font-size:13px;cursor:pointer">Annuler</button>
-            <button onclick="useFlocLib()" style="padding:8px 16px;background:var(--accent);color:#0f1115;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">✅ Utiliser la sélection</button>
-        </div>
-    </div>
-</div>
-
-<script>
-// ── Bibliothèque flocages ──────────────────────────────────────────────────
-let libFlocages = [];
-let libSelected = new Set();
-
-async function openFlocLib() {
-    if (!libFlocages.length) {
-        const res = await fetch('/api/flocages');
-        const data = await res.json();
-        libFlocages = data.flocages || [];
+def get_accounts():
+    data = r2_get_json(KEY_ACCOUNTS)
+    if data and data.get("main"):
+        return data
+    # Valeur par défaut si rien configuré
+    return {
+        "main": DEFAULT_MAIN_ACCOUNT,
+        "others": [k for k in ROBINREACH_ACCOUNTS if k != DEFAULT_MAIN_ACCOUNT]
     }
-    libSelected.clear();
-    document.getElementById('libSearch').value = '';
-    renderLib();
-    document.getElementById('flocModal').style.display = 'flex';
-}
 
-function closeFlocLib() {
-    document.getElementById('flocModal').style.display = 'none';
-}
+def save_accounts(data):
+    return r2_put_json(KEY_ACCOUNTS, data)
 
-function renderLib() {
-    const search = document.getElementById('libSearch').value.toLowerCase();
-    const filtered = libFlocages.filter(f => f.toLowerCase().includes(search));
-    const list = document.getElementById('libList');
-    const selCount = document.getElementById('libSelCount');
-    selCount.textContent = libSelected.size > 0 ? `${libSelected.size} sélectionné(s)` : `${libFlocages.length} flocages`;
-    list.innerHTML = filtered.map((f, i) => {
-        const sel = libSelected.has(f);
-        return `<label style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;cursor:pointer;background:${sel?'rgba(74,222,128,.1)':'transparent'};font-size:12px">
-            <input type="checkbox" ${sel?'checked':''} onchange="toggleLibFloc('${f.replace(/'/g,"\\'")}',this.checked)" style="accent-color:var(--accent)">
-            ${f}
-        </label>`;
-    }).join('');
-}
+# ── Index des créneaux utilisés (évite de re-scanner tous les TikToks programmés) ──
+def get_used_slots_index():
+    """Retourne {account: [scheduled_at, ...]} — un seul appel R2 au lieu de N.
+    Si l'index n'existe pas encore (migration), il est reconstruit une seule fois."""
+    idx = r2_get_json(KEY_USED_SLOTS)
+    if idx is None:
+        idx = rebuild_used_slots_index()
+    return idx
 
-function toggleLibFloc(f, checked) {
-    if (checked) libSelected.add(f);
-    else libSelected.delete(f);
-    document.getElementById('libSelCount').textContent = libSelected.size > 0 ? `${libSelected.size} sélectionné(s)` : `${libFlocages.length} flocages`;
-}
+def add_used_slot(account, dt_str):
+    idx = get_used_slots_index()
+    idx.setdefault(account, [])
+    if dt_str not in idx[account]:
+        idx[account].append(dt_str)
+    r2_put_json(KEY_USED_SLOTS, idx)
 
-function shuffleLib() {
-    for (let i = libFlocages.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [libFlocages[i], libFlocages[j]] = [libFlocages[j], libFlocages[i]];
+def remove_used_slot(account, dt_str):
+    idx = get_used_slots_index()
+    if account in idx and dt_str in idx[account]:
+        idx[account].remove(dt_str)
+        r2_put_json(KEY_USED_SLOTS, idx)
+
+def rebuild_used_slots_index():
+    """Reconstruit l'index depuis R2 (utile si l'index se désynchronise) — scan complet, à usage rare"""
+    idx = {}
+    sched_keys = r2_list_keys(PFX_SCHEDULED)
+    for sk in sched_keys:
+        if "/imgs/" in sk: continue
+        sd = r2_get_json(sk)
+        if sd and sd.get("account") and sd.get("scheduled_at"):
+            idx.setdefault(sd["account"], []).append(sd["scheduled_at"])
+    r2_put_json(KEY_USED_SLOTS, idx)
+    return idx
+
+# ── Buffer persistant R2 (thread-safe) ────────────────────────────────────
+_buffer_lock = threading.Lock()
+_schedule_lock = threading.Lock()
+
+def get_buffer():
+    data = r2_get_json(KEY_BUFFER)
+    if data:
+        # Normaliser le format peu importe la version stockée
+        if "images_b64" not in data:
+            data["images_b64"] = []
+        if "flockages" not in data:
+            data["flockages"] = []
+        if "user" not in data:
+            data["user"] = None
+        return data
+    return {"images_b64": [], "flockages": [], "user": None}
+
+def _save_buffer(buf):
+    return r2_put_json(KEY_BUFFER, buf)
+
+def add_to_buffer_and_create_tiktoks(new_images_b64, new_flockages, user):
+    # Phase 1 : mettre à jour le buffer sous lock (rapide)
+    with _buffer_lock:
+        buf = get_buffer()
+        if not buf.get("user"):
+            buf["user"] = user
+        buf["images_b64"].extend(new_images_b64)
+        buf["flockages"].extend(new_flockages)
+        print(f"[BUFFER] Now has {len(buf['images_b64'])} images")
+        # Extraire les batches à créer
+        batches = []
+        buf_user = buf["user"]
+        while len(buf["images_b64"]) >= TIKTOK_SIZE:
+            batch_b64  = buf["images_b64"][:TIKTOK_SIZE]
+            batch_floc = buf["flockages"][:TIKTOK_SIZE]
+            tiktok_num = get_next_tiktok_number()
+            batches.append((tiktok_num, batch_b64, batch_floc))
+            buf["images_b64"] = buf["images_b64"][TIKTOK_SIZE:]
+            buf["flockages"]  = buf["flockages"][TIKTOK_SIZE:]
+        remaining = len(buf["images_b64"])
+        _save_buffer(buf)
+
+    # Phase 2 : sauvegarder les TikToks HORS du lock (appels R2 lents)
+    created = []
+    for tiktok_num, batch_b64, batch_floc in batches:
+        print(f"[BUFFER] Creating TikTok {tiktok_num}...")
+        _save_tiktok(tiktok_num, batch_b64, buf_user, batch_floc)
+        created.append(tiktok_num)
+
+    print(f"[BUFFER] Done — {len(created)} TikToks created, {remaining} pending")
+    return created, remaining
+
+
+# ── TikTok queue ───────────────────────────────────────────────────────────
+def _save_tiktok(num, images_b64, user, flockages):
+    r2 = get_r2()
+    if not r2: return False
+    image_keys = []
+    for i, b64 in enumerate(images_b64):
+        if not b64: continue
+        k = f"queue/imgs/tiktok_{num:04d}_{i+1:02d}.png"
+        r2_put_image(k, base64.b64decode(b64))
+        image_keys.append(k)
+
+    meta = {
+        "id": f"tiktok_{num:04d}",
+        "number": num,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "user": user,
+        "image_keys": image_keys,
+        "flockages": flockages,
+        "status": "pending",
+        "account": None,
+        "scheduled_at": None,
     }
-    renderLib();
-}
+    return r2_put_json(f"{PFX_QUEUE}tiktok_{num:04d}.json", meta)
 
-function selectRandom() {
-    const n = parseInt(document.getElementById('randCount').value);
-    if (!n || n < 1) { alert('Entre un nombre valide.'); return; }
-    // Mélanger et prendre les n premiers
-    const shuffled = [...libFlocages].sort(() => Math.random() - 0.5);
-    libSelected.clear();
-    shuffled.slice(0, Math.min(n, libFlocages.length)).forEach(f => libSelected.add(f));
-    renderLib();
-}
+def _enrich_tiktok(data, key, with_images=True):
+    """Ajoute les URLs signées et la clé R2. Cache l'URL avec une expiration longue."""
+    data["r2_key"] = key
+    if with_images:
+        data["image_urls"] = [r2_presigned(k, expires=604800) for k in data.get("image_keys", [])]  # 7 jours
+    else:
+        data["image_urls"] = []
+    return data
 
-function selectAllLib() {
-    const search = document.getElementById('libSearch').value.toLowerCase();
-    libFlocages.filter(f => f.toLowerCase().includes(search)).forEach(f => libSelected.add(f));
-    renderLib();
-}
+def get_all_queue_light():
+    """Récupère tous les TikToks de la queue SANS générer les URLs images (rapide, pour dispatch/schedule)"""
+    keys = sorted(r2_list_keys(PFX_QUEUE))
+    keys = [k for k in keys if "/imgs/" not in k]
+    result = []
+    for k in keys:
+        d = r2_get_json(k)
+        if d:
+            d["r2_key"] = k
+            result.append(d)
+    return result
 
-function deselectAllLib() {
-    libSelected.clear();
-    renderLib();
-}
+def get_queue(page=0, per_page=20):
+    keys = sorted(r2_list_keys(PFX_QUEUE))
+    keys = [k for k in keys if "/imgs/" not in k]
+    total = len(keys)
+    start = page * per_page
+    page_keys = keys[start:start + per_page]
+    result = []
+    for k in page_keys:
+        d = r2_get_json(k)
+        if d: result.append(_enrich_tiktok(d, k))
+    return result, total
 
-function useFlocLib() {
-    if (!libSelected.size) { alert('Sélectionne au moins un flocage.'); return; }
-    const selected = libFlocages.filter(f => libSelected.has(f));
-    document.getElementById('flockages').value = selected.join('\n');
-    updatePreview();
-    closeFlocLib();
-}
+def get_scheduled(page=0, per_page=20):
+    keys = sorted(r2_list_keys(PFX_SCHEDULED), reverse=True)
+    keys = [k for k in keys if "/imgs/" not in k][:200]
+    total = len(keys)
+    start = page * per_page
+    page_keys = keys[start:start + per_page]
+    result = []
+    for k in page_keys:
+        d = r2_get_json(k)
+        if d: result.append(_enrich_tiktok(d, k))
+    return result, total
 
-// ── Thème ──────────────────────────────────────────────────────────────────
-const html = document.documentElement;
-const themeBtn = document.getElementById('themeBtn');
-let theme = localStorage.getItem('theme') || 'dark';
-applyTheme(theme);
-function applyTheme(t){theme=t;html.setAttribute('data-theme',t);themeBtn.textContent=t==='dark'?'☀️':'🌙';localStorage.setItem('theme',t)}
-themeBtn.addEventListener('click',()=>applyTheme(theme==='dark'?'light':'dark'));
+def move_to_scheduled(queue_key, account, dt_str, robinreach_post_id=None):
+    print(f"[MOVE] Moving {queue_key} -> scheduled, account={account}, dt={dt_str}")
+    data = r2_get_json(queue_key)
+    if not data:
+        print(f"[MOVE] ❌ TikTok introuvable: {queue_key}")
+        return False
+    data["status"] = "scheduled"
+    data["account"] = account
+    data["scheduled_at"] = dt_str
+    data["robinreach_post_id"] = robinreach_post_id
+    # Déplacer les images vers scheduled/imgs/
+    new_img_keys = []
+    for old_k in data.get("image_keys", []):
+        new_k = old_k.replace("queue/imgs/", "scheduled/imgs/")
+        r2 = get_r2()
+        if r2:
+            try:
+                r2.copy_object(Bucket=R2_BUCKET,
+                    CopySource={"Bucket": R2_BUCKET, "Key": old_k},
+                    Key=new_k)
+                r2_delete(old_k)
+                new_img_keys.append(new_k)
+            except Exception:
+                new_img_keys.append(old_k)
+    data["image_keys"] = new_img_keys
+    new_key = queue_key.replace(PFX_QUEUE, PFX_SCHEDULED)
+    r2_put_json(new_key, data)
+    r2_delete(queue_key)
+    return True
 
-// ── Auth ───────────────────────────────────────────────────────────────────
-const userEl=document.getElementById('userName');
-const userErr=document.getElementById('userErr');
-const loginOverlay=document.getElementById('loginOverlay');
+# ── Prompt Gemini ──────────────────────────────────────────────────────────
+def build_prompt(name, number, name_below=None):
+    name = name.strip().upper()
+    number = number.strip()
+    name_below = (name_below or name).strip().upper()
+    parts = ["Edit this image of a sports jersey (back view). Precise text-replacement only, not a redesign."]
+    if name:
+        parts.append(f'Replace the main back name text with "{name}". Keep exact font, weight, outline, color, size and position.')
+    if number:
+        digits = ", ".join(f'"{d}"' for d in number)
+        parts.append(f'Replace the large back number with "{number}" ({len(number)} digit(s): {digits}). Render ALL digits, none missing. Keep font, color, outline and center position. Scale digit width (not height/stroke) if digit count differs. No added logos or marks.')
+    if name_below:
+        parts.append(f'Replace the smaller text below the badge with "{name_below}". Keep same position gap, font, size, color and outline.')
+    parts.append("Keep ALL else identical: colors, texture, pattern, outlines, lighting, shadows, background, tags. Only swap text content.")
+    return " ".join(parts)
 
-function setLoggedInUser(name){
-    userEl.value=name;
-    loginOverlay.style.display='none';
-    document.getElementById('userChip').style.display='flex';
-    document.getElementById('userChipName').textContent=name;
-    localStorage.setItem('logged_user',name);
-}
+def call_gemini(img_bytes, mime, name, number, name_below=None, max_retries=5, resolution="1k"):
+    img_b64 = base64.b64encode(img_bytes).decode()
+    prompt = build_prompt(name, number, name_below)
+    payload = {"contents": [{"parts": [
+        {"text": prompt},
+        {"inline_data": {"mime_type": mime, "data": img_b64}}
+    ]}]}
+    last_error = None
+    for attempt_num in range(max_retries + 1):
+        try:
+            resp = requests.post(MODEL_URL,
+                headers={"x-goog-api-key": API_KEY, "Content-Type": "application/json"},
+                json=payload, timeout=120)
+        except requests.RequestException as e:
+            last_error = f"Erreur réseau: {e}"
+            time.sleep(min(3 * (attempt_num + 1), 15))
+            continue
+        if resp.status_code != 200:
+            last_error = f"API {resp.status_code}: {resp.text[:200]}"
+            if resp.status_code in (503, 429):
+                # Google surchargé/limite atteinte — c'est temporaire, on attend plus longtemps et on insiste
+                wait = min(4 * (attempt_num + 1), 30)
+                print(f"[GEMINI] {resp.status_code} — surcharge temporaire, retry dans {wait}s ({attempt_num+1}/{max_retries})")
+                time.sleep(wait)
+            else:
+                time.sleep(1)
+            continue
+        data = resp.json()
+        try:
+            for part in data["candidates"][0]["content"]["parts"]:
+                if "inlineData" in part:
+                    img = part["inlineData"]["data"]
+                    if REPLICATE_API_KEY:
+                        upscaled = False
+                        attempt = 0
+                        MAX_UPSCALE_ATTEMPTS = 30  # limite haute pour éviter de bloquer le serveur indéfiniment
+                        while not upscaled and attempt < MAX_UPSCALE_ATTEMPTS:
+                            attempt += 1
+                            try:
+                                print(f"[UPSCALE] Tentative {attempt}/{MAX_UPSCALE_ATTEMPTS}...")
+                                r = requests.post(
+                                    "https://api.replicate.com/v1/models/nightmareai/real-esrgan/predictions",
+                                    headers={"Authorization": f"Bearer {REPLICATE_API_KEY}", "Content-Type": "application/json", "Prefer": "wait"},
+                                    json={"input": {"image": f"data:image/png;base64,{img}", "scale": 4, "face_enhance": False}},
+                                    timeout=300
+                                )
+                                if r.status_code in (200, 201):
+                                    data_r = r.json()
+                                    output = data_r.get("output")
+                                    if not output:
+                                        pid = data_r.get("id")
+                                        for _ in range(60):
+                                            time.sleep(2)
+                                            p = requests.get(f"https://api.replicate.com/v1/predictions/{pid}", headers={"Authorization": f"Bearer {REPLICATE_API_KEY}"}, timeout=30).json()
+                                            if p.get("status") == "succeeded" and p.get("output"):
+                                                output = p["output"]
+                                                break
+                                            elif p.get("status") in ("failed", "canceled"):
+                                                break
+                                    if output:
+                                        img = base64.b64encode(requests.get(output, timeout=60).content).decode()
+                                        print("[UPSCALE] ✅ 4K")
+                                        upscaled = True
+                                    else:
+                                        print(f"[UPSCALE] Pas d'output, retry {attempt}/{MAX_UPSCALE_ATTEMPTS}...")
+                                        time.sleep(3)
+                                else:
+                                    wait = min(3 * attempt, 30) if r.status_code == 429 else min(2 * attempt, 20)
+                                    print(f"[UPSCALE] Erreur {r.status_code}, retry {attempt} dans {wait}s...")
+                                    time.sleep(wait)
+                            except Exception as e:
+                                wait = min(2 * attempt, 20)
+                                print(f"[UPSCALE] Erreur: {e}, retry {attempt} dans {wait}s...")
+                                time.sleep(wait)
+                        if not upscaled:
+                            print(f"[UPSCALE] ❌ Échec après {MAX_UPSCALE_ATTEMPTS} tentatives — image non upscalée retournée en erreur")
+                            return {"success": False, "error": f"❌ Upscaling 4K impossible après {MAX_UPSCALE_ATTEMPTS} tentatives (Replicate indisponible). Relance cette image."}
+                    return {"success": True, "image": img}
+            last_error = "Pas d'image dans la réponse."
+        except (KeyError, IndexError) as e:
+            last_error = f"Réponse inattendue: {e}"
+    return {"success": False, "error": last_error}
 
-function doLogout(){
-    if(!confirm('Se déconnecter ?')) return;
-    localStorage.removeItem('logged_user');
-    localStorage.removeItem('logged_pass');
-    userEl.value='';
-    loginOverlay.style.display='flex';
-    document.getElementById('userChip').style.display='none';
-}
+# ── Pages ──────────────────────────────────────────────────────────────────
+@app.route("/")
+def index(): return render_template("index.html")
 
-async function doLogin(){
-    const name=document.getElementById('loginName').value.trim();
-    const pass=document.getElementById('loginPass').value.trim();
-    const errEl=document.getElementById('loginErr');
-    const btn=document.getElementById('loginBtn');
-    if(!name||!pass){errEl.textContent='Remplis tous les champs.';return}
-    btn.disabled=true;btn.textContent='Connexion...';
-    try{
-        const res=await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,password:pass})});
-        const d=await res.json();
-        if(d.success){
-            localStorage.setItem('logged_user',name);
-            localStorage.setItem('logged_pass',pass);
-            errEl.textContent='';
-            setLoggedInUser(name);
-        } else {
-            errEl.textContent=d.error||'Erreur de connexion';
-        }
-    }catch(e){errEl.textContent='Erreur réseau';}
-    btn.disabled=false;btn.textContent='Se connecter';
-}
+@app.route("/queue")
+def queue_page(): return render_template("queue.html")
 
-// Enter pour valider le login
-document.getElementById('loginPass').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin()});
-document.getElementById('loginName').addEventListener('keydown',e=>{if(e.key==='Enter')document.getElementById('loginPass').focus()});
+@app.route("/scheduled")
+def scheduled_page(): return render_template("scheduled.html")
 
-// Auto-login si session sauvegardée
-(async()=>{
-    const savedUser=localStorage.getItem('logged_user');
-    const savedPass=localStorage.getItem('logged_pass');
-    if(savedUser&&savedPass){
-        try{
-            const res=await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:savedUser,password:savedPass})});
-            const d=await res.json();
-            if(d.success){setLoggedInUser(savedUser);return;}
-        }catch(e){}
-        localStorage.removeItem('logged_user');localStorage.removeItem('logged_pass');
-    }
-    loginOverlay.style.display='flex';
-})();
+@app.route("/templates")
+def templates_page(): return render_template("templates.html")
 
-// ── RPD ────────────────────────────────────────────────────────────────────
-const rpdBadge=document.getElementById('rpdBadge');
-function updateRPD(){const k=`rpd_${new Date().toISOString().slice(0,10)}`;const c=parseInt(localStorage.getItem(k)||'0');const pct=c/1000;rpdBadge.textContent=`⚡ ${c}/1000`;rpdBadge.className='rpd-badge'+(pct>=.9?' danger':pct>=.7?' warn':'')}
-function incrRPD(){const k=`rpd_${new Date().toISOString().slice(0,10)}`;localStorage.setItem(k,parseInt(localStorage.getItem(k)||'0')+1);updateRPD()}
-updateRPD();
+@app.route("/dashboard")
+def dashboard():
+    entries = read_logs(7)
+    today = datetime.now(timezone.utc).date().isoformat()
+    today_e = [e for e in entries if e.get("ts","")[:10] == today]
+    by_user = {}
+    for e in today_e:
+        u = e.get("user","?"); by_user[u] = by_user.get(u,0)+1
+    queue_count = len([k for k in r2_list_keys(PFX_QUEUE) if "/imgs/" not in k])
+    sched_count = len([k for k in r2_list_keys(PFX_SCHEDULED) if "/imgs/" not in k])
+    today_count = len(today_e)
 
-// ── Buffer badge ───────────────────────────────────────────────────────────
-const bufferBadge=document.getElementById('bufferBadge');
-async function updateBufferBadge(){
-    try{
-        const res=await fetch('/api/buffer');
-        const d=await res.json();
-        if(d.pending>0){
-            bufferBadge.style.display='block';
-            bufferBadge.textContent=`⏳ buffer: ${d.pending}/7`;
-        } else {
-            bufferBadge.style.display='none';
-        }
-    }catch(e){}
-}
-updateBufferBadge();
-setInterval(updateBufferBadge, 15000);
+    # Récupérer les vraies sessions récentes depuis R2
+    session_keys = sorted(r2_list_keys("sessions/"), reverse=True)[:10]
+    recent_sessions = []
+    for sk in session_keys:
+        s = r2_get_json(sk)
+        if s: recent_sessions.append(s)
 
-// ── Fichiers ───────────────────────────────────────────────────────────────
-const dropzone=document.getElementById('dropzone');
-const imageInput=document.getElementById('imageInput');
-const fileCount=document.getElementById('fileCount');
-let selectedFiles=[];
-let currentItems=[];
-let generatedImages={};
-let generationInProgress=false;
-window.addEventListener('beforeunload', (e) => {
-    if (generationInProgress) {
-        e.preventDefault();
-        e.returnValue = 'Une génération est en cours — si tu fermes maintenant, tu perdras les images non téléchargées.';
-        return e.returnValue;
-    }
-});
-let sessionId=crypto.randomUUID();
+    return render_template("dashboard.html",
+        today_count=today_count,
+        today_success=sum(1 for e in today_e if e.get("success")),
+        today_cost=round(today_count*COST_PER_IMAGE,2),
+        tiktoks_done=today_count//7, tiktoks_goal=20,
+        by_user=by_user, recent_sessions=recent_sessions,
+        queue_count=queue_count, scheduled_count=sched_count)
 
-dropzone.addEventListener('click',()=>imageInput.click());
-dropzone.addEventListener('dragover',e=>{e.preventDefault();dropzone.classList.add('drag')});
-dropzone.addEventListener('dragleave',()=>dropzone.classList.remove('drag'));
-dropzone.addEventListener('drop',e=>{e.preventDefault();dropzone.classList.remove('drag');setFiles(Array.from(e.dataTransfer.files))});
-imageInput.addEventListener('change',e=>{setFiles(Array.from(e.target.files));e.target.value=''});
+@app.route("/stats")
+def stats():
+    entries = read_logs(30)
+    by_day_user = {}
+    total_count = 0; total_success = 0
+    for e in entries:
+        day = e.get("ts","")[:10]; user = e.get("user","?"); key = (day,user)
+        by_day_user.setdefault(key,{"total":0,"success":0})
+        by_day_user[key]["total"] += 1; total_count += 1
+        if e.get("success"): by_day_user[key]["success"]+=1; total_success+=1
+    rows = [{"day":d,"user":u,"total":c["total"],"success":c["success"],"cost":round(c["total"]*COST_PER_IMAGE,3)}
+            for (d,u),c in sorted(by_day_user.items(),reverse=True)]
+    return render_template("stats.html", rows=rows, total_count=total_count,
+        total_success=total_success, total_cost=round(total_count*COST_PER_IMAGE,2),
+        cost_per_image=COST_PER_IMAGE)
 
-function setFiles(files){
-    files.sort((a,b)=>a.name.localeCompare(b.name,undefined,{numeric:true}));
-    selectedFiles=files;
-    fileCount.textContent=files.length?`${files.length} image(s) sélectionnée(s)`:'';
-    updatePreview();
-}
+# ── API Buffer ──────────────────────────────────────────────────────────────
+@app.route("/api/buffer")
+def api_buffer():
+    buf = get_buffer()
+    pending = len(buf.get("images_b64", []))
+    return jsonify({"pending": pending, "needed": max(0, TIKTOK_SIZE - pending)})
 
-// Mélanger images
-document.getElementById('shuffleImgBtn').addEventListener('click',()=>{
-    for(let i=selectedFiles.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[selectedFiles[i],selectedFiles[j]]=[selectedFiles[j],selectedFiles[i]]}
-    fileCount.textContent=selectedFiles.length?`${selectedFiles.length} image(s) — ordre mélangé 🔀`:'';
-    updatePreview();
-});
+@app.route("/api/buffer/clear", methods=["POST"])
+def api_buffer_clear():
+    _save_buffer({"images_b64": [], "flockages": [], "user": None})
+    return jsonify({"success": True})
 
-// Charger depuis templates R2
-document.getElementById('loadTemplatesBtn').addEventListener('click',async()=>{
-    const keys=JSON.parse(localStorage.getItem('selected_templates')||'[]');
-    if(!keys.length){alert('Aucun template sélectionné. Va sur la page Templates et sélectionne des maillots.');return}
-    document.getElementById('templateHint').textContent=`⏳ Chargement de ${keys.length} templates...`;
-    const blobs=[];
-    for(const key of keys){
-        const r=await fetch(`/api/template_image?key=${encodeURIComponent(key)}`);
-        const d=await r.json();
-        if(d.image){
-            const b64=d.image;
-            const bin=atob(b64);
-            const arr=new Uint8Array(bin.length);
-            for(let i=0;i<bin.length;i++)arr[i]=bin.charCodeAt(i);
-            const blob=new Blob([arr],{type:d.mime||'image/png'});
-            blobs.push(new File([blob],key,{type:d.mime||'image/png'}));
-        }
-    }
-    setFiles(blobs);
-    document.getElementById('templateHint').textContent=`✅ ${blobs.length} templates chargés`;
-});
+# ── API Comptes ─────────────────────────────────────────────────────────────
+@app.route("/api/accounts")
+def api_get_accounts():
+    data = get_accounts()
+    data["available"] = list(ROBINREACH_ACCOUNTS.keys())
+    return jsonify(data)
 
-// ── Flocages ───────────────────────────────────────────────────────────────
-const flockagesEl=document.getElementById('flockages');
+@app.route("/api/accounts", methods=["POST"])
+def api_save_accounts():
+    data = request.json
+    save_accounts({"main": data.get("main",""), "others": data.get("others",[])})
+    return jsonify({"success": True})
 
-document.getElementById('shuffleFlocBtn').addEventListener('click',()=>{
-    const lines=flockagesEl.value.split('\n').map(l=>l.trim()).filter(Boolean);
-    for(let i=lines.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[lines[i],lines[j]]=[lines[j],lines[i]]}
-    flockagesEl.value=lines.join('\n');
-    updatePreview();
-});
+# ── API Queue ───────────────────────────────────────────────────────────────
+@app.route("/api/queue")
+def api_queue():
+    page = int(request.args.get("page", 0))
+    per_page = int(request.args.get("per_page", 20))
+    tiktoks, total = get_queue(page=page, per_page=per_page)
+    return jsonify({"tiktoks": tiktoks, "total": total, "page": page, "per_page": per_page})
 
-document.getElementById('csvInput').addEventListener('change',async e=>{
-    const file=e.target.files[0];if(!file)return;
-    const text=await file.text();
-    const lines=text.split('\n').map(l=>l.trim().replace(/[;"]/g,'/').replace(/,/g,'/')).filter(Boolean);
-    flockagesEl.value=lines.join('\n');
-    updatePreview();
-    e.target.value='';
-});
+@app.route("/api/scheduled")
+def api_scheduled():
+    page = int(request.args.get("page", 0))
+    per_page = int(request.args.get("per_page", 20))
+    tiktoks, total = get_scheduled(page=page, per_page=per_page)
+    return jsonify({"tiktoks": tiktoks, "total": total, "page": page, "per_page": per_page})
 
-flockagesEl.addEventListener('input',updatePreview);
+@app.route("/api/queue/assign", methods=["POST"])
+def api_assign():
+    data = request.json; key = data.get("key"); account = data.get("account")
+    if not key: return jsonify({"error":"key requis"}),400
+    t = r2_get_json(key)
+    if not t: return jsonify({"error":"introuvable"}),404
+    t["account"] = account
+    r2_put_json(key, t)
+    return jsonify({"success": True})
 
-// ── Aperçu ─────────────────────────────────────────────────────────────────
-async function updatePreview(){
-    const lines=flockagesEl.value.split('\n').map(l=>l.trim()).filter(Boolean);
-    const previewSection=document.getElementById('previewSection');
-    const previewGrid=document.getElementById('previewGrid');
-    if(!selectedFiles.length||!lines.length){previewSection.style.display='none';return}
-    previewSection.style.display='block';
-    const count=Math.min(selectedFiles.length,lines.length,8);
-    const previews=await Promise.all(selectedFiles.slice(0,count).map(f=>new Promise(res=>{const r=new FileReader();r.onload=e=>res(e.target.result);r.readAsDataURL(f)})));
-    previewGrid.innerHTML=previews.map((src,i)=>{
-        const parts=lines[i].split('/').map(p=>p.trim());
-        const label=`${parts[0]||''}${parts[1]?' / '+parts[1]:''}`;
-        return `<div class="preview-card"><img src="${src}" alt=""><div class="preview-card-info">${label}</div></div>`;
-    }).join('');
-    if(selectedFiles.length>count){previewGrid.innerHTML+=`<div class="preview-card" style="display:flex;align-items:center;justify-content:center;aspect-ratio:3/4;background:var(--bg);border-radius:6px"><span style="color:var(--text-dim);font-size:11px">+${selectedFiles.length-count} autres</span></div>`}
-}
+@app.route("/api/queue/dispatch", methods=["POST"])
+def api_dispatch():
+    data = request.json; accounts = data.get("accounts",[])
+    if not accounts: return jsonify({"error":"Aucun compte"}),400
+    queue = get_all_queue_light()
+    unassigned = [t for t in queue if not t.get("account")]
+    for i,t in enumerate(unassigned):
+        acc = accounts[i % len(accounts)]
+        t["account"] = acc
+        r2_put_json(t["r2_key"], {**t, "image_urls": None, "r2_key": None, "account": acc})
+    return jsonify({"success":True,"count":len(unassigned)})
 
-// ── Génération ─────────────────────────────────────────────────────────────
-const generateBtn=document.getElementById('generateBtn');
-const testBtn=document.getElementById('testBtn');
-const zipBtn=document.getElementById('zipBtn');
-const statusEl=document.getElementById('status');
-const progressFill=document.getElementById('progressFill');
-const resultsEl=document.getElementById('results');
+@app.route("/api/queue/schedule", methods=["POST"])
+def api_schedule():
+    if not _schedule_lock.acquire(blocking=False):
+        return jsonify({"error": "Une programmation est déjà en cours, réessaie dans quelques secondes."}), 429
+    try:
+     return _do_schedule()
+    finally:
+     _schedule_lock.release()
 
-// ── Reprise de session après refresh ───────────────────────────────────────
-async function resumeSessionIfAny(){
-    const saved=localStorage.getItem('active_session');
-    if(!saved) return;
-    try{
-        const {sid,total,startTime}=JSON.parse(saved);
-        const r=await fetch('/api/jobs/progress/'+sid);
-        if(!r.ok){localStorage.removeItem('active_session');return}
-        const d=await r.json();
-        if(d.status==='done'||d.status==='cancelled'){
-            localStorage.removeItem('active_session');
-            statusEl.innerHTML='✅ Session précédente terminée — '+d.success+'/'+d.total+' images dans la queue. <a href="/queue" style="color:var(--accent);font-weight:700">Voir la file →</a>';
-            progressFill.style.width='100%';
-            return;
-        }
-        statusEl.textContent='⚡ Génération en cours (reprise)... '+d.done+'/'+d.total;
-        progressFill.style.width=d.percent+'%';
-        generateBtn.disabled=true;testBtn.disabled=true;generateBtn.textContent='En cours...';
-        generationInProgress=true;
-        await new Promise((resolve)=>{
-            const poll=setInterval(async()=>{
-                try{
-                    const r2=await fetch('/api/jobs/progress/'+sid);
-                    if(!r2.ok){clearInterval(poll);resolve();return}
-                    const d2=await r2.json();
-                    progressFill.style.width=d2.percent+'%';
-                    if(d2.done>0&&d2.done<d2.total){
-                        const elapsed=(Date.now()-startTime)/1000;
-                        const rem=Math.round((elapsed/d2.done)*(d2.total-d2.done));
-                        statusEl.textContent=d2.done+'/'+d2.total+' traité(s) — reste '+(rem>60?'~'+Math.round(rem/60)+' min':'~'+rem+'s');
-                    }
-                    if(d2.status==='done'||d2.status==='cancelled'){
-                        clearInterval(poll);
-                        localStorage.removeItem('active_session');
-                        if(d2.tiktoks_created&&d2.tiktoks_created.length>0){
-                            statusEl.innerHTML='✅ '+d2.success+'/'+d2.total+' images — '+d2.tiktoks_created.length+' TikTok(s) créé(s) ! <a href="/queue" style="color:var(--accent);font-weight:700">Voir la file →</a>';
-                        } else {
-                            statusEl.textContent='✅ '+d2.success+'/'+d2.total+' images générées';
-                        }
-                        updateBufferBadge();resolve();
-                    }
-                }catch(e){}
-            },2000);
-        });
-        generationInProgress=false;generateBtn.disabled=false;testBtn.disabled=false;generateBtn.textContent='Lancer la génération';
-    }catch(e){localStorage.removeItem('active_session');}
-}
-resumeSessionIfAny();
+def _do_schedule():
+    data = request.json or {}
+    start_date_str = data.get("start_date")
+    custom_slots = data.get("custom_slots", {})
+    single_key = data.get("single_key")  # programmer un seul TikTok
 
-// ── Chrono ────────────────────────────────────────────────────────────────
-let _chronoInterval = null;
-let _chronoStart = 0;
+    queue = get_all_queue_light()
+    if single_key:
+        assigned = [t for t in queue if t.get("account") and t["r2_key"] == single_key]
+    else:
+        assigned = [t for t in queue if t.get("account")]
+    if not assigned: return jsonify({"error":"Aucun TikTok avec compte assigné"}),400
 
-function chronoStart(){
-    _chronoStart = Date.now();
-    const badge = document.getElementById('chronoBadge');
-    badge.style.display = 'flex';
-    badge.className = 'chrono-badge running';
-    _chronoInterval = setInterval(()=>{
-        const elapsed = Math.floor((Date.now() - _chronoStart) / 1000);
-        const m = Math.floor(elapsed/60).toString().padStart(2,'0');
-        const s = (elapsed%60).toString().padStart(2,'0');
-        badge.textContent = `⏱️ ${m}:${s}`;
-    }, 1000);
-}
+    now = datetime.now(timezone.utc)
+    from zoneinfo import ZoneInfo
+    paris_tz = ZoneInfo("Europe/Paris")
 
-function chronoStop(){
-    if(_chronoInterval){ clearInterval(_chronoInterval); _chronoInterval = null; }
-    const badge = document.getElementById('chronoBadge');
-    badge.className = 'chrono-badge done';
-    const elapsed = Math.floor((Date.now() - _chronoStart) / 1000);
-    const m = Math.floor(elapsed/60).toString().padStart(2,'0');
-    const s = (elapsed%60).toString().padStart(2,'0');
-    badge.textContent = `✅ ${m}:${s}`;
-    return elapsed;
-}
+    if start_date_str:
+        try:
+            y,mo,d = map(int, start_date_str.split("-"))
+            from datetime import date as date_cls
+            start_date = date_cls(y,mo,d)
+        except Exception:
+            start_date = now.date()
+    else:
+        start_date = now.date()
 
-testBtn.addEventListener('click',()=>launch(true));
-generateBtn.addEventListener('click',()=>launch(false));
+    scheduled_count = 0
+    errors = []
+    scheduled_details = []
 
-async function launch(testMode=false){
-    const userName=userEl.value.trim();
-    if(!userName){userEl.classList.add('err');userErr.style.display='block';userEl.focus();return}
-    const lines=flockagesEl.value.split('\n').map(l=>l.trim()).filter(Boolean);
-    if(!selectedFiles.length){alert('Sélectionne des images.');return}
-    if(!lines.length){alert('Renseigne les flocages.');return}
+    by_account = {}
+    for t in assigned:
+        by_account.setdefault(t["account"],[]).append(t)
+    for acc in by_account:
+        by_account[acc].sort(key=lambda x: x.get("number",0))
 
-    const filesToUse=testMode?[selectedFiles[0]]:selectedFiles;
-    const linesToUse=testMode?[lines[0]]:lines;
+    for account, tiktoks in by_account.items():
+        robinreach_id = ROBINREACH_ACCOUNTS.get(account)
+        if not robinreach_id:
+            for t in tiktoks:
+                errors.append(f"Compte '{account}' non reconnu (TikTok {t.get('number','')})")
+            continue
 
-    if(filesToUse.length!==linesToUse.length&&!testMode){
-        alert(`${filesToUse.length} images mais ${linesToUse.length} flocages.`);return
-    }
+        # Récupérer les créneaux déjà utilisés pour ce compte via l'index (1 seul appel R2 au lieu de N)
+        used_slots_idx = get_used_slots_index()
+        used_slots = set(used_slots_idx.get(account, []))
 
-    const parallel=50; // workers gérés côté serveur
-    generationInProgress=true;
-    generateBtn.disabled=true;testBtn.disabled=true;
-    generateBtn.textContent='En cours...';
-    zipBtn.style.display='none';
-    if(!testMode){resultsEl.innerHTML='';generatedImages={};sessionId=crypto.randomUUID()}
-    progressFill.style.width='0%';
-    chronoStart();
+        slot_date = start_date
+        slot_index = 0
 
-    const origPreviews=await Promise.all(filesToUse.map(f=>new Promise(res=>{const r=new FileReader();r.onload=e=>res(e.target.result);r.readAsDataURL(f)})));
+        for tiktok in tiktoks:
+            tiktok_data = r2_get_json(tiktok["r2_key"])
+            if not tiktok_data:
+                errors.append(f"TikTok {tiktok.get('number','')} introuvable")
+                continue
+            if tiktok_data.get("status") == "scheduled":
+                errors.append(f"TikTok {tiktok.get('number','')} déjà programmé, ignoré")
+                continue
 
-    for(let i=0;i<filesToUse.length;i++){
-        const parts=linesToUse[i].split('/').map(p=>p.trim());
-        currentItems[i]={file:filesToUse[i],name:parts[0]||'',number:parts[1]||'',name_below:parts[2]||'',orig:origPreviews[i]};
-        const card=document.createElement('div');
-        card.className='card';card.id=`card-${i}`;
-        const sub=`${(parts[0]||'').toUpperCase()}${parts[1]?' / '+parts[1]:''}${parts[2]?' / '+parts[2].toUpperCase():''}`;
-        card.innerHTML=`<div class="card-title">IMAGE ${i+1}${testMode?' — TEST':''}</div><div class="card-sub">${sub}</div><div class="card-imgs"><div class="img-wrap"><div class="img-label">Original</div><img src="${origPreviews[i]}"></div><div class="card-ph"><div class="spinner"></div></div></div>`;
-        if(testMode)resultsEl.prepend(card);else resultsEl.appendChild(card);
-    }
+            tiktok_data["status"] = "sending"
+            r2_put_json(tiktok["r2_key"], tiktok_data)
 
-    const formData=new FormData();
-    filesToUse.forEach(f=>formData.append('images',f));
-    formData.append('flockages',linesToUse.join('\n'));
-    formData.append('user',userName);
-    formData.append('session_id',sessionId);
-    formData.append('resolution','4k');
+            # Créneau personnalisé ?
+            custom = custom_slots.get(tiktok["r2_key"])
+            use_custom = False
+            if custom:
+                try:
+                    if "T" in custom:
+                        naive = datetime.fromisoformat(custom)
+                        slot_dt = naive.replace(tzinfo=paris_tz).astimezone(timezone.utc)
+                    else:
+                        h, m = map(int, custom.split(":"))
+                        slot_dt = datetime(slot_date.year,slot_date.month,slot_date.day,h,m,tzinfo=paris_tz).astimezone(timezone.utc)
+                    use_custom = True
+                except Exception:
+                    use_custom = False
 
-    try{
-        // Lance la génération — Railway répond en <1s, génération en background
-        const res=await fetch('/generate_bulk',{method:'POST',body:formData});
-        if(!res.ok){const d=await res.json();statusEl.textContent='Erreur: '+(d.error||'inconnue');return}
-        const {session_id:sid, total, workers}=await res.json();
-        // Sauvegarder la session pour reprise après refresh
-        localStorage.setItem('active_session', JSON.stringify({sid, total, startTime: Date.now()}));
-        statusEl.textContent=`⚡ Génération lancée avec ${workers} workers parallèles...`;
+            if not use_custom:
+                account_times = get_schedule_times_for_account(account)
+                while True:
+                    h,m = map(int, account_times[slot_index % len(account_times)].split(":"))
+                    slot_dt = datetime(slot_date.year,slot_date.month,slot_date.day,h,m,tzinfo=timezone.utc)
+                    slot_iso = slot_dt.isoformat()
+                    is_future_enough = slot_dt > now + timedelta(minutes=30)
+                    if is_future_enough and slot_iso not in used_slots:
+                        break
+                    slot_index += 1
+                    if slot_index % len(account_times) == 0:
+                        slot_date += timedelta(days=1)
 
-        // Polling toutes les 2s — plus jamais de timeout Railway
-        const genStartTime=Date.now();
-        let seenCount=0;
-        await new Promise((resolve)=>{
-            const poll=setInterval(async()=>{
-                try{
-                    const r=await fetch(`/api/jobs/progress/${sid}?last_seen=${seenCount}`);
-                    if(!r.ok){clearInterval(poll);resolve();return}
-                    const d=await r.json();
-                    const done=d.done; const errors=d.errors; const success=d.success;
-                    progressFill.style.width=`${d.percent}%`;
+            dt_str = slot_dt.isoformat()
+            paris_dt = slot_dt.astimezone(paris_tz)
+            display_time = paris_dt.strftime("%d/%m/%Y à %Hh%M")
 
-                    // Mettre à jour le badge buffer en temps réel
-                    if(d.buffer_remaining>0){
-                        bufferBadge.style.display='block';
-                        bufferBadge.textContent=`⏳ buffer: ${d.buffer_remaining}/7`;
-                    }
-
-                    // Afficher toutes les images reçues — on vérifie si déjà rendue
-                    if(d.new_results&&d.new_results.length>0){
-                        for(const res of d.new_results){
-                            const idx=res.index;
-                            if(generatedImages[idx]) continue; // déjà affichée
-                            const parts=(res.floc||'').split('/');
-                            const item=currentItems[idx]||{name:parts[0]||'',number:parts[1]||'',name_below:parts[2]||'',orig:''};
-                            if(res.image){
-                                const src=`data:image/png;base64,${res.image}`;
-                                generatedImages[idx]={src,name:item.name,number:item.number};
-                                renderResult({index:idx,image:res.image});
-                                incrRPD();
-                            } else if(res.error){
-                                renderResult({index:idx,error:res.error});
+            if ROBINREACH_API_KEY and ROBINREACH_BRAND_ID:
+                try:
+                    image_urls = [r2_presigned(k, expires=604800) for k in tiktok.get("image_keys", [])]
+                    image_urls = [u for u in image_urls if u]
+                    paris_local = slot_dt.astimezone(paris_tz)
+                    payload = {
+                        "content": FIXED_CAPTION,
+                        "media_urls": image_urls,
+                        "social_profile_ids": [robinreach_id],
+                        "publish_time": dt_str,
+                        "status": "scheduled",
+                        "timezone": "UTC",
+                        "platform_options": {
+                            "tiktok": {
+                                "add_music": True
                             }
                         }
-                        seenCount=d.seen_count||seenCount;
                     }
+                    print(f"[ROBINREACH] Sending payload: {json.dumps(payload)[:500]}")
+                    resp = None
+                    last_robin_error = None
+                    for robin_attempt in range(3):
+                        try:
+                            resp = requests.post(
+                                f"https://robinreach.com/api/v1/posts?api_key={ROBINREACH_API_KEY}&brand_id={ROBINREACH_BRAND_ID}",
+                                headers={"Accept": "application/json", "Content-Type": "application/json"},
+                                json=payload,
+                                timeout=90
+                            )
+                            break
+                        except requests.exceptions.Timeout as te:
+                            last_robin_error = str(te)
+                            print(f"[ROBINREACH] Timeout tentative {robin_attempt+1}/3, retry...")
+                            continue
+                    if resp is None:
+                        tiktok_data["status"] = "pending"
+                        r2_put_json(tiktok["r2_key"], tiktok_data)
+                        errors.append(f"TikTok {tiktok.get('number','')}: Timeout après 3 tentatives ({last_robin_error})")
+                        continue
+                    print(f"[ROBINREACH] Response {resp.status_code}: {resp.text[:500]}")
+                    if resp.status_code not in (200,201):
+                        tiktok_data["status"] = "pending"
+                        r2_put_json(tiktok["r2_key"], tiktok_data)
+                        errors.append(f"TikTok {tiktok.get('number','')}: {resp.text[:200]}")
+                        continue
+                    # Sauvegarder l'ID du post RobinReach pour pouvoir le supprimer plus tard
+                    try:
+                        resp_data = resp.json()
+                        robinreach_post_id = resp_data.get("id") or resp_data.get("post_id") or resp_data.get("data",{}).get("id")
+                        tiktok_data["robinreach_post_id"] = robinreach_post_id
+                        print(f"[ROBINREACH] Post ID: {robinreach_post_id}")
+                    except Exception:
+                        pass
+                except Exception as e:
+                    tiktok_data["status"] = "pending"
+                    r2_put_json(tiktok["r2_key"], tiktok_data)
+                    errors.append(f"TikTok {tiktok.get('number','')}: {str(e)}")
+                    continue
 
-                    // Estimer le temps restant + TikToks créés en temps réel
-                    if(done>0&&done<total){
-                        const elapsed=(Date.now()-genStartTime)/1000;
-                        const avgPerImg=elapsed/done;
-                        const remaining=Math.round(avgPerImg*(total-done));
-                        const remainingText=remaining>60?`~${Math.round(remaining/60)} min`:`~${remaining}s`;
-                        const tiktokCount=d.tiktoks_created?.length||0;
-                        const totalTiktoks=Math.floor(total/7);
-                        const tiktokInfo=tiktokCount>0?` — 🎬 ${tiktokCount}/${totalTiktoks} TikTok(s) créé(s)`:'';
-                        statusEl.textContent=`${done}/${total} traité(s)${errors>0?' ('+errors+' erreur(s))':''}${tiktokInfo} — reste ${remainingText}`;
-                    }
+            try:
+                move_to_scheduled(tiktok["r2_key"], account, dt_str, tiktok_data.get("robinreach_post_id"))
+            except Exception as e:
+                print(f"[SCHEDULE] Erreur move_to_scheduled TikTok {tiktok.get('number','')}: {e}")
+                # On continue quand même — RobinReach a déjà programmé, on note juste l'erreur
+            used_slots.add(dt_str)
+            add_used_slot(account, dt_str)
+            scheduled_count += 1
+            scheduled_details.append({
+                "tiktok": tiktok.get("number",""),
+                "account": account,
+                "time": display_time
+            })
 
-                    if(d.status==='done'||d.status==='cancelled'){
-                        clearInterval(poll);
-                        // Remplacer les spinners restants par "dans la queue"
-                        document.querySelectorAll('.card-ph').forEach(ph=>{
-                            if(ph.querySelector('.spinner')){
-                                ph.innerHTML='✅ Dans la queue';
-                                ph.style.color='var(--accent)';
-                                ph.style.fontSize='12px';
-                                ph.style.fontWeight='700';
-                            }
-                        });
-                        if(d.tiktoks_created&&d.tiktoks_created.length>0){
-                            statusEl.innerHTML=`✅ ${success}/${total} images générées — ${d.tiktoks_created.length} TikTok(s) créé(s) ! <a href="/queue" style="color:var(--accent);font-weight:700">Voir la file →</a>`;
-                        } else {
-                            statusEl.textContent=`✅ ${success}/${total} images générées${errors>0?' — '+errors+' erreur(s)':''}`;
-                        }
-                        localStorage.removeItem('active_session');
-                        const elapsed = chronoStop();
-                        updateBufferBadge();
-                        notifyDone(total,testMode);
-                        // Sauvegarder les stats de session
-                        try{
-                            await fetch('/api/session/stats',{method:'POST',headers:{'Content-Type':'application/json'},
-                                body:JSON.stringify({session_id:sid,elapsed_seconds:elapsed,total,success,user:userEl.value})});
-                        }catch(e){}
-                        resolve();
-                    }
-                }catch(e){/* retry au prochain poll */}
-            },2000);
-        });
+            if not use_custom:
+                slot_index += 1
+                if slot_index % len(account_times) == 0:
+                    slot_date += timedelta(days=1)
 
-        if(Object.keys(generatedImages).length>0){zipBtn.style.display='inline-block';document.getElementById('selectAllImgBtn').style.display='inline-block';}
-    }catch(err){statusEl.textContent='Erreur: '+err.message}
-    finally{generationInProgress=false;generateBtn.disabled=false;testBtn.disabled=false;generateBtn.textContent='Lancer la génération'}
-}
+    return jsonify({
+        "success": True,
+        "scheduled": scheduled_count,
+        "details": scheduled_details,
+        "errors": errors
+    })
 
-function renderResult(data){
-    const card=document.getElementById(`card-${data.index}`);if(!card)return;
-    const item=currentItems[data.index];
-    const sub=`${(item.name||'').toUpperCase()}${item.number?' / '+item.number:''}${item.name_below?' / '+item.name_below.toUpperCase():''}`;
-    if(data.image){
-        const src=`data:image/png;base64,${data.image}`;
-        generatedImages[data.index]={src,name:item.name,number:item.number};
-        const conf=getConfidence(data);
-        card.innerHTML=`<div class="card-title" style="display:flex;align-items:center;gap:8px"><input type="checkbox" class="img-check" data-index="${data.index}" onchange="updateSelCount()" style="accent-color:var(--accent)">IMAGE ${data.index+1}</div><div class="card-sub">${sub}</div><div class="card-imgs"><div class="img-wrap"><div class="img-label">Original</div><img src="${item.orig}"></div><div class="img-wrap"><div class="img-label">Généré</div><img src="${src}"></div></div><div>${conf}</div><a class="dl-btn" href="${src}" download="image_${data.index+1}_${item.name||'jersey'}.png">⬇️ Télécharger</a><div class="retry-btn" onclick="retryItem(${data.index})">🔄 Relancer</div>`;
-    }else{
-        card.innerHTML=`<div class="card-title">IMAGE ${data.index+1}</div><div class="card-sub">${sub}</div><div class="card-imgs"><div class="img-wrap"><div class="img-label">Original</div><img src="${item.orig}"></div><div class="card-ph">❌ Échec</div></div><div class="card-err-box">${data.error||'Erreur inconnue'}</div><div class="retry-btn" onclick="retryItem(${data.index})">🔄 Relancer</div>`;
+@app.route("/api/queue/images")
+def api_queue_images():
+    """Retourne toutes les URLs signées d'un TikTok — appelé seulement quand l'user clique pour voir tout"""
+    key = request.args.get("key")
+    if not key: return jsonify({"error": "key requis"}), 400
+    t = r2_get_json(key)
+    if not t: return jsonify({"error": "introuvable"}), 404
+    image_urls = [r2_presigned(k, expires=604800) for k in t.get("image_keys", [])]
+    return jsonify({"image_urls": image_urls})
+
+@app.route("/api/queue/reorder", methods=["POST"])
+def api_reorder_images():
+    """Réordonne les images d'un TikTok"""
+    data = request.json
+    key = data.get("key")
+    new_order = data.get("order", [])  # liste d'indices dans le nouvel ordre
+    if not key: return jsonify({"error": "key requis"}), 400
+    tiktok = r2_get_json(key)
+    if not tiktok: return jsonify({"error": "TikTok introuvable"}), 404
+    img_keys = tiktok.get("image_keys", [])
+    flockages = tiktok.get("flockages", [])
+    if len(new_order) != len(img_keys):
+        return jsonify({"error": "Ordre invalide"}), 400
+    try:
+        tiktok["image_keys"] = [img_keys[i] for i in new_order]
+        tiktok["flockages"] = [flockages[i] if i < len(flockages) else "" for i in new_order]
+        r2_put_json(key, tiktok)
+        return jsonify({"success": True})
+    except (IndexError, TypeError) as e:
+        return jsonify({"error": str(e)}), 400
+
+@app.route("/api/queue/delete_image", methods=["POST"])
+def api_delete_image():
+    """Supprime une image d'un TikTok"""
+    data = request.json
+    key = data.get("key")
+    img_index = data.get("index")
+    if not key or img_index is None: return jsonify({"error": "key et index requis"}), 400
+    tiktok = r2_get_json(key)
+    if not tiktok: return jsonify({"error": "TikTok introuvable"}), 404
+    img_keys = tiktok.get("image_keys", [])
+    flockages = tiktok.get("flockages", [])
+    if img_index < 0 or img_index >= len(img_keys):
+        return jsonify({"error": "Index invalide"}), 400
+    # Supprimer l'image de R2
+    r2_delete(img_keys[img_index])
+    tiktok["image_keys"] = [k for i,k in enumerate(img_keys) if i != img_index]
+    tiktok["flockages"] = [f for i,f in enumerate(flockages) if i != img_index]
+    r2_put_json(key, tiktok)
+    return jsonify({"success": True, "remaining": len(tiktok["image_keys"])})
+
+@app.route("/api/scheduled/check_status", methods=["POST"])
+def api_check_status():
+    """Vérifie le vrai statut de publication sur RobinReach pour des TikToks donnés"""
+    data = request.json or {}
+    keys = data.get("keys", [])
+    if not keys:
+        return jsonify({"error": "keys requis"}), 400
+    if not ROBINREACH_API_KEY or not ROBINREACH_BRAND_ID:
+        return jsonify({"error": "RobinReach non configuré"}), 400
+
+    results = {}
+    for key in keys:
+        tiktok = r2_get_json(key)
+        if not tiktok:
+            results[key] = {"status": "introuvable"}
+            continue
+        post_id = tiktok.get("robinreach_post_id")
+        if not post_id:
+            results[key] = {"status": "pas_d_id"}
+            continue
+        try:
+            resp = requests.get(
+                f"https://robinreach.com/api/v1/posts/{post_id}?api_key={ROBINREACH_API_KEY}&brand_id={ROBINREACH_BRAND_ID}",
+                headers={"Accept": "application/json"},
+                timeout=15
+            )
+            if resp.status_code == 200:
+                post_data = resp.json()
+                real_status = post_data.get("status") or post_data.get("post_status") or "inconnu"
+                results[key] = {"status": real_status, "raw": post_data}
+                # Mettre à jour le statut réel dans notre stockage
+                tiktok["real_status"] = real_status
+                r2_put_json(key, tiktok)
+            else:
+                results[key] = {"status": "erreur_api", "code": resp.status_code}
+        except Exception as e:
+            results[key] = {"status": "erreur", "error": str(e)}
+
+    return jsonify({"results": results})
+
+@app.route("/api/scheduled/find_duplicates")
+def api_find_duplicates():
+    """Détecte les TikToks programmés au même horaire sur le même compte"""
+    keys = r2_list_keys(PFX_SCHEDULED)
+    keys = [k for k in keys if "/imgs/" not in k]
+    slots = {}  # (account, scheduled_at) -> [keys]
+    for k in keys:
+        d = r2_get_json(k)
+        if not d: continue
+        acc = d.get("account")
+        at = d.get("scheduled_at")
+        if not acc or not at: continue
+        slot_key = (acc, at)
+        slots.setdefault(slot_key, []).append({"key": k, "number": d.get("number"), "id": d.get("id")})
+
+    duplicates = []
+    for (acc, at), items in slots.items():
+        if len(items) > 1:
+            duplicates.append({"account": acc, "scheduled_at": at, "tiktoks": items})
+
+    return jsonify({"duplicates": duplicates, "count": len(duplicates)})
+
+@app.route("/api/scheduled/unschedule", methods=["POST"])
+def api_unschedule():
+    """Remet des TikToks programmés dans la file d'attente ET supprime de RobinReach"""
+    data = request.json
+    keys = data.get("keys", [])
+    if not keys: return jsonify({"error": "keys requis"}), 400
+    count = 0
+    robinreach_errors = []
+    for sched_key in keys:
+        tiktok = r2_get_json(sched_key)
+        if not tiktok: continue
+
+        # Supprimer le post sur RobinReach si on a son ID
+        robinreach_post_id = tiktok.get("robinreach_post_id")
+        if robinreach_post_id and ROBINREACH_API_KEY and ROBINREACH_BRAND_ID:
+            try:
+                del_resp = requests.delete(
+                    f"https://robinreach.com/api/v1/posts/{robinreach_post_id}?api_key={ROBINREACH_API_KEY}&brand_id={ROBINREACH_BRAND_ID}",
+                    headers={"Accept": "application/json"},
+                    timeout=30
+                )
+                print(f"[ROBINREACH DELETE] Post {robinreach_post_id}: {del_resp.status_code}")
+                if del_resp.status_code not in (200, 204):
+                    robinreach_errors.append(f"Post {robinreach_post_id}: {del_resp.text[:100]}")
+            except Exception as e:
+                robinreach_errors.append(f"Post {robinreach_post_id}: {str(e)}")
+
+        # Libérer le créneau dans l'index pour qu'il redevienne disponible
+        old_account = tiktok.get("account")
+        old_slot = tiktok.get("scheduled_at")
+        if old_account and old_slot:
+            remove_used_slot(old_account, old_slot)
+
+        # Déplacer les images vers queue/imgs/
+        new_img_keys = []
+        r2 = get_r2()
+        for old_k in tiktok.get("image_keys", []):
+            new_k = old_k.replace("scheduled/imgs/", "queue/imgs/")
+            if r2 and old_k != new_k:
+                try:
+                    r2.copy_object(Bucket=R2_BUCKET,
+                        CopySource={"Bucket": R2_BUCKET, "Key": old_k}, Key=new_k)
+                    r2_delete(old_k)
+                    new_img_keys.append(new_k)
+                except Exception:
+                    new_img_keys.append(old_k)
+            else:
+                new_img_keys.append(old_k)
+
+        tiktok["image_keys"] = new_img_keys
+        tiktok["status"] = "pending"
+        tiktok["account"] = None
+        tiktok["scheduled_at"] = None
+        tiktok["robinreach_post_id"] = None
+        queue_key = sched_key.replace(PFX_SCHEDULED, PFX_QUEUE)
+        r2_put_json(queue_key, tiktok)
+        r2_delete(sched_key)
+        count += 1
+    return jsonify({"success": True, "count": count, "robinreach_errors": robinreach_errors})
+
+@app.route("/api/robinreach/profiles")
+def api_robinreach_profiles():
+    """Diagnostic : liste les profils sociaux connectés sur RobinReach avec leurs IDs"""
+    if not ROBINREACH_API_KEY or not ROBINREACH_BRAND_ID:
+        return jsonify({"error": "ROBINREACH_API_KEY ou ROBINREACH_BRAND_ID manquant dans les variables Railway"}), 400
+    try:
+        resp = requests.get(
+            f"https://robinreach.com/api/v1/social_profiles?api_key={ROBINREACH_API_KEY}&brand_id={ROBINREACH_BRAND_ID}",
+            headers={"Accept": "application/json"},
+            timeout=30
+        )
+        return jsonify({"status_code": resp.status_code, "raw_response": resp.text[:2000]})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/queue/delete", methods=["POST"])
+def api_delete():
+    data = request.json; key = data.get("key")
+    if not key: return jsonify({"error":"key requis"}),400
+    t = r2_get_json(key)
+    if t:
+        for k in t.get("image_keys",[]): r2_delete(k)
+    r2_delete(key)
+    return jsonify({"success":True})
+
+# ── Generate single ─────────────────────────────────────────────────────────
+@app.route("/api/flocages/reset", methods=["GET", "POST"])
+def api_reset_flocages():
+    r2_put_json("meta/flocages.json", {"flocages": DEFAULT_FLOCAGES})
+    return jsonify({"success": True, "count": len(DEFAULT_FLOCAGES)})
+
+@app.route("/api/flocages", methods=["GET"])
+def api_get_flocages():
+    data = r2_get_json("meta/flocages.json")
+    if not data:
+        data = {"flocages": DEFAULT_FLOCAGES}
+        r2_put_json("meta/flocages.json", data)
+    return jsonify(data)
+
+@app.route("/api/flocages", methods=["POST"])
+def api_save_flocages():
+    data = request.json
+    r2_put_json("meta/flocages.json", {"flocages": data.get("flocages", [])})
+    return jsonify({"success": True})
+
+@app.route("/remove_box")
+def remove_box_page():
+    return render_template("remove_box.html")
+
+@app.route("/api/remove_box", methods=["POST"])
+def api_remove_box():
+    if not API_KEY:
+        return jsonify({"error": "Clé API manquante"}), 500
+    f = request.files.get("image")
+    if not f:
+        return jsonify({"error": "Aucune image"}), 400
+
+    img_bytes = f.read()
+    img_b64 = base64.b64encode(img_bytes).decode()
+    mime = f.mimetype or "image/png"
+
+    prompt = (
+        "Edit this image of a sports jersey. "
+        "There is a gift box / packaging box visible in the image (it may have a logo, ribbon, or brand name on it). "
+        "Remove the gift box completely from the image. "
+        "Replace the area where the box was with the background that would naturally be there — "
+        "match the floor, wall, or surface texture and color from the surrounding area. "
+        "Keep everything else exactly the same: the jersey, the hanger/hook, the background, lighting, shadows. "
+        "The result should look like the jersey was always photographed without any box."
+    )
+
+    payload = {
+        "contents": [{"parts": [
+            {"text": prompt},
+            {"inline_data": {"mime_type": mime, "data": img_b64}}
+        ]}]
     }
-}
 
-function getConfidence(data){
-    if(!data.image)return'<span class="confidence conf-fail">❌ Échec</span>';
-    // Score basique : si on a une image, on suppose OK — à terme on peut faire OCR
-    return'<span class="confidence conf-ok">✅ Généré</span>';
-}
+    try:
+        resp = requests.post(
+            MODEL_URL,
+            headers={"x-goog-api-key": API_KEY, "Content-Type": "application/json"},
+            json=payload,
+            timeout=120
+        )
+        if resp.status_code != 200:
+            return jsonify({"error": f"API {resp.status_code}: {resp.text[:200]}"}), 500
+        data = resp.json()
+        for part in data["candidates"][0]["content"]["parts"]:
+            if "inlineData" in part:
+                return jsonify({"image": part["inlineData"]["data"]})
+        return jsonify({"error": "Pas d'image dans la réponse"}), 500
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
-async function retryItem(index){
-    const item=currentItems[index];if(!item)return;
-    const card=document.getElementById(`card-${index}`);if(!card)return;
-    if(!confirm('⚠️ Cette image sera régénérée pour cet affichage/téléchargement uniquement.\n\nSi les 7 images de ce TikTok ont déjà été formées dans la file d\'attente, il faudra aussi supprimer/corriger manuellement l\'image dans /queue — cette régénération ne la remplace PAS automatiquement là-bas.\n\nContinuer ?')) return;
-    const sub=`${item.name.toUpperCase()}${item.number?' / '+item.number:''}${item.name_below?' / '+item.name_below.toUpperCase():''}`;
-    card.innerHTML=`<div class="card-title">IMAGE ${index+1}</div><div class="card-sub">${sub}</div><div class="card-imgs"><div class="img-wrap"><div class="img-label">Original</div><img src="${item.orig}"></div><div class="card-ph"><div class="spinner"></div></div></div>`;
-    const fd=new FormData();
-    fd.append('image',item.file);fd.append('name',item.name);fd.append('number',item.number);fd.append('name_below',item.name_below||'');fd.append('user',userEl.value.trim());
-    fd.append('skip_buffer','true'); // évite de créer une image égarée dans un futur TikTok différent
-    try{
-        const res=await fetch('/generate_single',{method:'POST',body:fd});
-        const d=await res.json();incrRPD();
-        if(!res.ok||d.error){renderResult({index,error:d.error||'Erreur'});return}
-        renderResult({index,image:d.image});
-        if(Object.keys(generatedImages).length>0){zipBtn.style.display='inline-block';document.getElementById('selectAllImgBtn').style.display='inline-block';}
-    }catch(err){renderResult({index,error:err.message})}
-}
+@app.route("/generate_single", methods=["POST"])
+def generate_single():
+    if not API_KEY: return jsonify({"error":"Clé API manquante"}),500
+    f = request.files.get("image")
+    user = request.form.get("user","").strip()
+    name = request.form.get("name","").strip()
+    number = request.form.get("number","").strip()
+    name_below = request.form.get("name_below","").strip() or None
+    resolution = request.form.get("resolution", "1k").strip()
+    skip_buffer = request.form.get("skip_buffer", "false").lower() == "true"
+    if not f: return jsonify({"error":"Aucune image"}),400
+    result = call_gemini(f.read(), f.mimetype or "image/png", name, number, name_below, resolution=resolution)
+    log_generation(user, result["success"])
+    if result["success"]:
+        # Ajouter au buffer SEULEMENT si ce n'est pas un "Relancer" d'une image déjà comptabilisée
+        # (évite de dupliquer l'image dans le buffer/un futur TikTok différent)
+        if not skip_buffer:
+            floc = f"{name}/{number}/{name_below or ''}"
+            add_to_buffer_and_create_tiktoks([result["image"]], [floc], user)
+        return jsonify({"image": result["image"]})
+    return jsonify({"error": result["error"]}), 500
 
-// ── Sélection et téléchargement multiple ──────────────────────────────────
-function updateSelCount(){
-    const checks=document.querySelectorAll('.img-check:checked');
-    const count=checks.length;
-    document.getElementById('selImgCount').textContent=count;
-    document.getElementById('dlSelBtn').style.display=count>0?'inline-block':'none';
-    document.getElementById('selectAllImgBtn').style.display=Object.keys(generatedImages).length>0?'inline-block':'none';
-}
+# ── Generate bulk (ASYNC — plus de timeout Railway) ─────────────────────────
+@app.route("/generate_bulk", methods=["POST"])
+def generate_bulk():
+    if not API_KEY: return jsonify({"error": "Clé API manquante"}), 500
 
-function selectAllImages(){
-    document.querySelectorAll('.img-check').forEach(cb=>cb.checked=true);
-    updateSelCount();
-}
+    files = request.files.getlist("images")
+    flockages_raw = request.form.get("flockages", "")
+    user = request.form.get("user", "").strip()
+    session_id = request.form.get("session_id", str(uuid.uuid4()))
+    resolution = request.form.get("resolution", "1k").strip()
 
-async function dlSelected(){
-    const checks=document.querySelectorAll('.img-check:checked');
-    for(const cb of checks){
-        const idx=parseInt(cb.dataset.index);
-        const img=generatedImages[idx];
-        if(!img) continue;
-        const a=document.createElement('a');
-        a.href=img.src;
-        a.download=`image_${idx+1}_${img.name||'jersey'}.png`;
-        a.click();
-        await new Promise(r=>setTimeout(r,300)); // petit délai entre chaque DL
-    }
-}
+    lines = [l.strip() for l in flockages_raw.splitlines() if l.strip()]
+    if not files: return jsonify({"error": "Aucune image"}), 400
+    if not lines: return jsonify({"error": "Aucun flocage"}), 400
+    if len(files) != len(lines): return jsonify({"error": f"{len(files)} images / {len(lines)} flocages"}), 400
 
-// ── ZIP ────────────────────────────────────────────────────────────────────
-zipBtn.addEventListener('click',async()=>{
-    zipBtn.disabled=true;zipBtn.textContent='⏳ Préparation...';
-    const zip=new JSZip();
-    for(const[idx,img]of Object.entries(generatedImages)){
-        zip.file(`image_${parseInt(idx)+1}_${img.name||'jersey'}.png`,img.src.split(',')[1],{base64:true});
-    }
-    const blob=await zip.generateAsync({type:'blob'});
-    const url=URL.createObjectURL(blob);
-    const a=document.createElement('a');a.href=url;a.download=`flocages_${new Date().toISOString().slice(0,10)}.zip`;a.click();
-    URL.revokeObjectURL(url);
-    zipBtn.disabled=false;zipBtn.textContent='📦 Tout télécharger en ZIP';
-});
+    items = []
+    for f, line in zip(files, lines):
+        p = line.split("/") if "/" in line else (line.split(",") if "," in line else [line])
+        items.append({
+            "bytes": f.read(), "mime": f.mimetype or "image/png",
+            "name": p[0].strip() if p else "",
+            "number": p[1].strip() if len(p) > 1 else "",
+            "name_below": p[2].strip() if len(p) > 2 else None,
+        })
 
-// ── Notification ───────────────────────────────────────────────────────────
-function notifyDone(total,testMode){
-    document.title=`✅ ${total} images prêtes`;
-    try{const ctx=new(window.AudioContext||window.webkitAudioContext)();const o=ctx.createOscillator();const g=ctx.createGain();o.connect(g);g.connect(ctx.destination);o.frequency.value=880;g.gain.setValueAtTime(0.3,ctx.currentTime);g.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+0.5);o.start();o.stop(ctx.currentTime+0.5)}catch(e){}
-    if(Notification.permission==='granted')new Notification(testMode?'🧪 Test terminé':'✅ Génération terminée',{body:`${total} image(s) prête(s)`});
-    else if(Notification.permission!=='denied')Notification.requestPermission().then(p=>{if(p==='granted')new Notification('✅ Terminé',{body:`${total} image(s) prête(s)`})});
-}
-document.addEventListener('visibilitychange',()=>{if(!document.hidden)document.title='Générateur de flocages'});
-</script>
-</body>
-</html>
+    # Initialiser la session immédiatement
+    _get_or_create_session(session_id, len(items))
+    with _job_sessions_lock:
+        if session_id in _job_sessions:
+            _job_sessions[session_id]["user"] = user
+
+    # Lancer la génération en background — Railway ne coupe plus jamais la connexion
+    t = threading.Thread(target=_run_bulk_async, args=(session_id, items, user, resolution), daemon=True)
+    t.start()
+
+    # Répondre immédiatement (< 100ms) — plus aucun timeout possible
+    return jsonify({
+        "session_id": session_id,
+        "total": len(items),
+        "status": "running",
+        "workers": WORKER_COUNT,
+    })
+
+@app.route("/api/jobs/progress/<session_id>")
+def api_jobs_progress(session_id):
+    """Polling endpoint — retourne aussi les nouvelles images depuis last_seen"""
+    last_seen = int(request.args.get("last_seen", 0))
+    with _job_sessions_lock:
+        s = _job_sessions.get(session_id)
+    # Fallback R2 si Railway a redémarré
+    if not s:
+        saved = r2_get_json(f"sessions/{session_id}.json")
+        if saved:
+            return jsonify({
+                "session_id": session_id,
+                "total": saved.get("total", 0),
+                "done": saved.get("total", 0),
+                "errors": saved.get("total", 0) - saved.get("success", 0),
+                "success": saved.get("success", 0),
+                "status": "done",
+                "tiktoks_created": [],
+                "buffer_remaining": 0,
+                "percent": 100,
+                "new_results": [],
+            })
+        return jsonify({"error": "Session introuvable"}), 404
+    # Lire tout sous lock pour cohérence — y compris new_results
+    with _job_sessions_lock:
+        snap = {
+            "total": s["total"],
+            "done": s["done"],
+            "errors": s["errors"],
+            "status": s["status"],
+            "tiktoks_created": list(s.get("tiktoks_created", [])),
+            "buffer_remaining": s.get("buffer_remaining", 0),
+            "new_results": list(s["results"][last_seen:]),  # copie sous lock
+        }
+    new_results = snap["new_results"]
+    done = snap["done"]; total = snap["total"]
+    return jsonify({
+        "session_id": session_id,
+        "total": total,
+        "done": done,
+        "errors": snap["errors"],
+        "success": done - snap["errors"],
+        "status": snap["status"],
+        "tiktoks_created": snap["tiktoks_created"],
+        "buffer_remaining": snap["buffer_remaining"],
+        "percent": round(done / total * 100) if total else 0,
+        "new_results": [{"image": r.get("image"), "floc": r.get("floc",""), "index": r.get("orig_index", last_seen + i), "error": r.get("error")} for i, r in enumerate(new_results)],
+        "seen_count": last_seen + len(new_results),
+    })
+
+@app.route("/monitor")
+def monitor_page():
+    return render_template("monitor.html")
+
+@app.route("/api/monitor/sessions")
+def api_monitor_sessions():
+    """Retourne toutes les sessions actives en RAM pour le monitoring en temps réel"""
+    active = []
+    with _job_sessions_lock:
+        for sid, s in _job_sessions.items():
+            active.append({
+                "session_id": sid,
+                "user": s.get("user", "Inconnu"),
+                "total": s["total"],
+                "done": s["done"],
+                "errors": s["errors"],
+                "status": s["status"],
+                "percent": round(s["done"] / s["total"] * 100) if s["total"] else 0,
+                "tiktoks_created": s.get("tiktoks_created", []),
+                "buffer_remaining": s.get("buffer_remaining", 0),
+                "created_at": s.get("created_at"),
+                "elapsed_seconds": s.get("elapsed_seconds", 0),
+            })
+    # Trier : en cours d'abord, puis par date
+    active.sort(key=lambda x: (x["status"] != "running", x.get("created_at","") or ""), reverse=False)
+    return jsonify({"active": active})
+
+@app.route("/api/sessions")
+def api_sessions():
+    """Retourne les sessions récentes avec leurs stats"""
+    session_keys = sorted(r2_list_keys("sessions/"), reverse=True)[:30]
+    sessions = []
+    for sk in session_keys:
+        s = r2_get_json(sk)
+        if s: sessions.append(s)
+    return jsonify({"sessions": sessions})
+
+@app.route("/api/session/stats", methods=["POST"])
+def api_session_stats():
+    """Sauvegarde les stats de durée d'une session de génération"""
+    data = request.json or {}
+    sid = data.get("session_id")
+    if not sid: return jsonify({"error": "session_id requis"}), 400
+    # Mettre à jour la session R2 avec la durée
+    key = f"sessions/{sid}.json"
+    session = r2_get_json(key) or {}
+    session["elapsed_seconds"] = data.get("elapsed_seconds", 0)
+    session["images_per_min"] = round(data.get("total", 0) / max(data.get("elapsed_seconds", 1) / 60, 0.01), 1)
+    session["total"] = data.get("total", session.get("total", 0))
+    session["success"] = data.get("success", session.get("success", 0))
+    session["user"] = data.get("user", session.get("user", ""))
+    r2_put_json(key, session)
+    return jsonify({"success": True})
+
+@app.route("/api/jobs/cancel/<session_id>", methods=["POST"])
+def api_jobs_cancel(session_id):
+    """Marque une session comme annulée (les workers en cours finissent leur image)"""
+    with _job_sessions_lock:
+        s = _job_sessions.get(session_id)
+        if s:
+            s["status"] = "cancelled"
+    return jsonify({"success": True})
+
+# ── API Templates ───────────────────────────────────────────────────────────
+@app.route("/api/templates")
+def api_templates():
+    r2 = get_r2()
+    if not r2: return jsonify({"templates":[],"error":"R2 non configuré"})
+    keys = r2_list_keys(PFX_TEMPLATES, suffix=(".png",".jpg",".jpeg",".webp"))
+    # r2_list_keys filtre .json, on refait manuellement
+    r2 = get_r2()
+    try:
+        all_keys = []
+        kwargs = {"Bucket":R2_BUCKET,"Prefix":PFX_TEMPLATES}
+        while True:
+            resp = r2.list_objects_v2(**kwargs)
+            for obj in resp.get("Contents",[]):
+                k = obj["Key"]
+                if k.lower().endswith((".png",".jpg",".jpeg",".webp")):
+                    all_keys.append({"key":k,"name":k.replace(PFX_TEMPLATES,"").rsplit(".",1)[0],
+                        "url":r2_presigned(k),"size":obj["Size"]})
+            if not resp.get("IsTruncated"): break
+            kwargs["ContinuationToken"] = resp["NextContinuationToken"]
+        return jsonify({"templates":all_keys})
+    except Exception as e:
+        return jsonify({"templates":[],"error":str(e)})
+
+@app.route("/api/templates/upload", methods=["POST"])
+def api_templates_upload():
+    r2 = get_r2()
+    if not r2: return jsonify({"error":"R2 non configuré"}),500
+    files = request.files.getlist("files")
+    uploaded = []
+    for f in files:
+        key = f"{PFX_TEMPLATES}{f.filename}"
+        r2.upload_fileobj(f, R2_BUCKET, key, ExtraArgs={"ContentType":f.mimetype or "image/png"})
+        uploaded.append(key)
+    return jsonify({"uploaded":uploaded})
+
+@app.route("/api/templates/delete", methods=["POST"])
+def api_templates_delete():
+    key = (request.json or {}).get("key")
+    if not key: return jsonify({"error":"key requis"}),400
+    r2_delete(key)
+    return jsonify({"deleted":key})
+
+@app.route("/api/template_image")
+def api_template_image():
+    key = request.args.get("key")
+    if not key: return jsonify({"error":"key requis"}),400
+    r2 = get_r2()
+    if not r2: return jsonify({"error":"R2 non configuré"}),500
+    try:
+        obj = r2.get_object(Bucket=R2_BUCKET, Key=key)
+        return jsonify({"image":base64.b64encode(obj["Body"].read()).decode(),"mime":obj.get("ContentType","image/png")})
+    except Exception as e:
+        return jsonify({"error":str(e)}),500
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT",5000))
+    app.run(host="0.0.0.0", port=port, debug=False, threaded=True)
+
+@app.route("/calendar")
+def calendar_page():
+    return render_template("calendar.html")
+
+@app.route("/api/calendar")
+def api_calendar():
+    """Retourne tous les TikToks programmés groupés par compte et par date"""
+    account_filter = request.args.get("account", "all")
+    
+    # Lire tous les TikToks programmés
+    keys = r2_list_keys(PFX_SCHEDULED)
+    events = []
+    
+    for k in keys:
+        if "/imgs/" in k:
+            continue
+        d = r2_get_json(k)
+        if not d or not d.get("scheduled_at"):
+            continue
+        acc = d.get("account", "")
+        if account_filter != "all" and acc != account_filter:
+            continue
+        
+        # Convertir en heure Paris pour l'affichage
+        try:
+            from zoneinfo import ZoneInfo
+            paris_tz = ZoneInfo("Europe/Paris")
+            dt_utc = datetime.fromisoformat(d["scheduled_at"])
+            if dt_utc.tzinfo is None:
+                dt_utc = dt_utc.replace(tzinfo=timezone.utc)
+            dt_paris = dt_utc.astimezone(paris_tz)
+            date_str = dt_paris.strftime("%Y-%m-%d")
+            time_str = dt_paris.strftime("%Hh%M")
+        except Exception:
+            date_str = d["scheduled_at"][:10]
+            time_str = d["scheduled_at"][11:16]
+        
+        # Thumbnail : première image
+        thumb_url = None
+        img_keys = d.get("image_keys", [])
+        if img_keys:
+            thumb_url = r2_presigned(img_keys[0], expires=86400)
+        
+        events.append({
+            "id": d.get("id"),
+            "number": d.get("number"),
+            "account": acc,
+            "date": date_str,
+            "time": time_str,
+            "scheduled_at": d.get("scheduled_at"),
+            "real_status": d.get("real_status", "scheduled"),
+            "thumb": thumb_url,
+            "r2_key": k,
+        })
+    
+    # Stats par compte
+    accounts_list = list(ROBINREACH_ACCOUNTS.keys())
+    
+    return jsonify({
+        "events": events,
+        "accounts": accounts_list,
+        "schedule_times": {
+            acc: get_schedule_times_for_account(acc)
+            for acc in accounts_list
+        }
+    })
