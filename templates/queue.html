@@ -78,9 +78,13 @@ h1{font-size:24px;margin:0;font-weight:800;letter-spacing:-0.02em}
 .filter-chip.active{background:var(--accent-grad);color:#06170d;border-color:transparent}
 .search-input{padding:8px 14px;background:var(--panel);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:12.5px;min-width:160px;font-family:inherit;transition:all .15s ease}
 .search-input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-dim)}
-.status-bar{background:var(--accent-dim);border:1px solid rgba(74,222,128,.25);border-radius:12px;padding:13px 18px;margin-bottom:18px;font-size:13px;font-weight:500;display:none;transition:opacity .3s,transform .3s}
+.status-bar{background:var(--accent-dim);border:1px solid rgba(74,222,128,.25);border-radius:12px;padding:13px 18px;margin-bottom:4px;font-size:13px;font-weight:500;display:none;transition:opacity .3s,transform .3s}
 .status-bar.show{display:block;opacity:1;transform:translateY(0)}
 .status-bar:not(.show){opacity:0;transform:translateY(-4px);pointer-events:none}
+.prog-wrap{display:none;margin-bottom:18px}
+.prog-wrap.show{display:block}
+.prog-bar{height:6px;background:var(--border);border-radius:100px;overflow:hidden;margin-top:6px}
+.prog-fill{height:100%;background:var(--accent-grad);width:0%;transition:width .3s cubic-bezier(.4,0,.2,1);border-radius:100px}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px}
 .card{background:var(--panel);border:1.5px solid var(--border);border-radius:16px;overflow:hidden;transition:transform .18s cubic-bezier(.16,1,.3,1),box-shadow .18s ease,border-color .15s ease}
 .card:hover{box-shadow:var(--shadow-md);border-color:var(--border-strong);transform:translateY(-2px)}
@@ -171,6 +175,9 @@ h1{font-size:24px;margin:0;font-weight:800;letter-spacing:-0.02em}
     </div>
 
     <div class="status-bar" id="statusBar"></div>
+    <div class="prog-wrap" id="progWrap">
+        <div class="prog-bar"><div class="prog-fill" id="progFill"></div></div>
+    </div>
 
     <div class="toolbar">
         <span class="count-badge" id="countBadge">⏳ Chargement...</span>
@@ -619,27 +626,59 @@ function closeRecap(){ document.getElementById('recapModal').classList.remove('o
 async function scheduleAll(){
     closeRecap();
     const assigned=allTiktoks.filter(t=>t.account);
-    const startDate = document.getElementById('startDate').value;
-    showStatus(`🚀 Programmation de ${assigned.length} TikTok(s) en cours...`);
+    const total=assigned.length;
+    const startDate=document.getElementById('startDate').value;
     document.getElementById('scheduleBtn').disabled=true;
-    const res=await fetch('/api/queue/schedule',{
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({start_date: startDate || null, custom_slots: customSlots})
-    });
-    const d=await res.json();
+
+    // Afficher la barre de progression
+    const progWrap=document.getElementById('progWrap');
+    const progFill=document.getElementById('progFill');
+    progWrap.classList.add('show');
+    progFill.style.width='0%';
+
+    let done=0; let errors=0;
+
+    // Programmer TikTok par TikTok — on voit la progression en temps réel
+    for(const t of assigned){
+        showStatus(`⏳ Programmation ${done+1}/${total} — TikTok ${t.number}...`);
+        try{
+            const res=await fetch('/api/queue/schedule',{
+                method:'POST',
+                headers:{'Content-Type':'application/json'},
+                body:JSON.stringify({
+                    start_date: startDate||null,
+                    custom_slots: customSlots[t.r2_key]?{[t.r2_key]:customSlots[t.r2_key]}:{},
+                    single_key: t.r2_key
+                })
+            });
+            const d=await res.json();
+            if(d.scheduled>0){
+                // Retirer la carte immédiatement de la liste
+                allTiktoks=allTiktoks.filter(x=>x.r2_key!==t.r2_key);
+                selectedForMain.delete(t.r2_key);
+                checkedForDelete.delete(t.r2_key);
+                delete customSlots[t.r2_key];
+                totalCount=Math.max(0,totalCount-1);
+                // Retirer visuellement la carte
+                const card=document.getElementById(`c-${t.id}`);
+                if(card){card.style.opacity='0.3';card.style.pointerEvents='none';}
+            } else {
+                errors++;
+            }
+        }catch(e){ errors++; }
+        done++;
+        progFill.style.width=`${Math.round(done/total*100)}%`;
+    }
+
+    progWrap.classList.remove('show');
     document.getElementById('scheduleBtn').disabled=false;
-    if(d.errors?.length){
-        showStatus(`✅ ${d.scheduled} programmés — ⚠️ ${d.errors.length} erreur(s) : ${d.errors[0]}`);
+    customSlots={};
+    updateCounters();
+
+    if(errors>0){
+        showStatus(`✅ ${done-errors}/${total} programmés — ⚠️ ${errors} erreur(s)`);
     } else {
-        let recap = `✅ ${d.scheduled} TikTok(s) programmés !\n\n`;
-        if(d.details?.length){
-            recap += d.details.slice(0,10).map(x=>`• TikTok ${x.tiktok} → ${x.account} le ${x.time}`).join('\n');
-            if(d.details.length>10) recap += `\n... et ${d.details.length-10} autres`;
-        }
-        alert(recap);
-        showStatus(`✅ ${d.scheduled} TikTok(s) programmés avec succès !`);
-        customSlots={};
+        showStatus(`✅ ${done} TikTok(s) programmés avec succès !`);
     }
     await loadPage(currentPage);
 }
