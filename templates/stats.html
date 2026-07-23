@@ -101,7 +101,28 @@
 
     <div class="chart-panel">
         <h2>Générations par jour</h2>
-        <canvas id="chart" height="100"></canvas>
+        <div style="margin-top:32px">
+    <h2 style="font-size:16px;font-weight:800;margin-bottom:12px">⏱️ Sessions de génération</h2>
+    <div style="background:var(--panel);border:1px solid var(--border);border-radius:14px;overflow:hidden">
+        <table style="width:100%;border-collapse:collapse;font-size:12.5px">
+            <thead>
+                <tr style="border-bottom:1px solid var(--border)">
+                    <th style="padding:12px 16px;text-align:left;color:var(--text-dim);font-weight:600">Date</th>
+                    <th style="padding:12px 16px;text-align:left;color:var(--text-dim);font-weight:600">User</th>
+                    <th style="padding:12px 16px;text-align:left;color:var(--text-dim);font-weight:600">Images</th>
+                    <th style="padding:12px 16px;text-align:left;color:var(--text-dim);font-weight:600">Durée</th>
+                    <th style="padding:12px 16px;text-align:left;color:var(--text-dim);font-weight:600">Vitesse</th>
+                    <th style="padding:12px 16px;text-align:left;color:var(--text-dim);font-weight:600">Coût</th>
+                </tr>
+            </thead>
+            <tbody id="sessionsTable">
+                <tr><td colspan="6" style="text-align:center;color:var(--text-dim);padding:20px">Chargement...</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<canvas id="chart" height="100"></canvas>
     </div>
 
     {% if rows %}
@@ -183,6 +204,32 @@ new Chart(ctx, {
         }
     }
 });
+
+// ── Sessions ──────────────────────────────────────────────────────────────
+async function loadSessions(){
+    try{
+        const res = await fetch('/api/sessions');
+        const d = await res.json();
+        const sessions = d.sessions || [];
+        const el = document.getElementById('sessionsTable');
+        if(!sessions.length){el.innerHTML='<tr><td colspan="6" style="text-align:center;color:var(--text-dim);padding:20px">Aucune session enregistrée</td></tr>';return;}
+        el.innerHTML = sessions.map(s=>{
+            const dur = s.elapsed_seconds ? `${Math.floor(s.elapsed_seconds/60)}m${(s.elapsed_seconds%60).toString().padStart(2,'0')}s` : '—';
+            const ipm = s.images_per_min ? `${s.images_per_min} img/min` : '—';
+            const date = s.start ? new Date(s.start).toLocaleDateString('fr-FR',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}) : '—';
+            const cost = s.total ? `$${(s.total*0.069).toFixed(2)}` : '—';
+            return `<tr>
+                <td>${date}</td>
+                <td>${s.user||'—'}</td>
+                <td>${s.success||0}/${s.total||0}</td>
+                <td style="color:var(--accent);font-weight:700">${dur}</td>
+                <td>${ipm}</td>
+                <td>${cost}</td>
+            </tr>`;
+        }).join('');
+    }catch(e){}
+}
+loadSessions();
 
 // Export CSV
 function exportCSV() {
