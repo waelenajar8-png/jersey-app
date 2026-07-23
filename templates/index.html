@@ -547,6 +547,15 @@ async function launch(testMode=false){
                     }
                     if(d.status==='done'||d.status==='cancelled'){
                         clearInterval(poll);
+                        // Remplacer tous les spinners par un message "dans la queue"
+                        document.querySelectorAll('.card-ph').forEach(ph=>{
+                            if(ph.querySelector('.spinner')){
+                                ph.innerHTML='✅ Dans la queue';
+                                ph.style.color='var(--accent)';
+                                ph.style.fontSize='12px';
+                                ph.style.fontWeight='700';
+                            }
+                        });
                         // Afficher résultat TikToks créés
                         if(d.tiktoks_created&&d.tiktoks_created.length>0){
                             statusEl.innerHTML=`✅ ${success}/${total} images générées — ${d.tiktoks_created.length} TikTok(s) créé(s) ! <a href="/queue" style="color:var(--accent);font-weight:700">Voir la file →</a>`;
