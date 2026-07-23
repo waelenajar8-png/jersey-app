@@ -268,8 +268,9 @@ function render(){
 
     grid.innerHTML=filtered.map(t=>{
         const imgs=t.image_urls||[];
-        const show=imgs.slice(0,4);
-        const rem=imgs.length-4;
+        const show=imgs.slice(0,1);
+        const total=t.image_keys?.length||imgs.length;
+        const rem=total-1;
         const scheduledDate=new Date(t.scheduled_at);
         const dateStr=scheduledDate.toLocaleDateString('fr-FR',{weekday:'short',day:'2-digit',month:'short'});
         const timeStr=scheduledDate.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
@@ -287,7 +288,7 @@ function render(){
             </div>
             <div class="images-grid">
                 ${show.map(u=>`<img src="${u||''}" loading="lazy" onerror="this.style.opacity='.15'" onclick="openLightbox('${u}')">`).join('')}
-                ${rem>0?`<div class="more">+${rem}</div>`:''}
+                ${rem>0?`<div class="more">+${rem} imgs</div>`:''}
             </div>
             <div class="card-footer">
                 <span class="account-tag">${t.account||'—'}</span>
