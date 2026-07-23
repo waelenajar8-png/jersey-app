@@ -145,6 +145,7 @@ h1{font-size:24px;margin:0;font-weight:800;letter-spacing:-.02em}
             <button class="month-btn" onclick="changeMonth(-1)">‹</button>
             <div class="month-label" id="monthLabel">—</div>
             <button class="month-btn" onclick="changeMonth(1)">›</button>
+            <button class="month-btn" onclick="goToday()" style="font-size:12px;padding:8px 12px;background:var(--accent-dim);color:var(--accent);border-color:rgba(74,222,128,.3)">Aujourd'hui</button>
         </div>
         <div class="account-tabs" id="accountTabs">
             <div class="account-tab active" data-account="all" onclick="setAccount('all',this)">Tous les comptes</div>
@@ -239,6 +240,13 @@ function changeMonth(delta){
     viewMonth+=delta;
     if(viewMonth>11){viewMonth=0;viewYear++}
     if(viewMonth<0){viewMonth=11;viewYear--}
+    renderCalendar();
+}
+
+function goToday(){
+    const now=new Date();
+    viewYear=now.getFullYear();
+    viewMonth=now.getMonth();
     renderCalendar();
 }
 
