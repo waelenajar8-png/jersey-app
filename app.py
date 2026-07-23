@@ -32,70 +32,100 @@ def _get_or_create_session(session_id, total):
                 "done": 0,
                 "errors": 0,
                 "results": [],
+                "pending_buffer": [],
                 "status": "running",
                 "created_at": datetime.now(timezone.utc).isoformat(),
                 "tiktoks_created": [],
+                "buffer_remaining": 0,
+                "user": None,
             }
         return _job_sessions[session_id]
 
-def _update_session(session_id, success, image_b64=None, floc=None, error=None):
+def _update_session(session_id, success, image_b64=None, floc=None, error=None, idx=None, user=None):
     with _job_sessions_lock:
         s = _job_sessions.get(session_id)
         if not s:
             return
         s["done"] += 1
         if success and image_b64:
-            s["results"].append({"image": image_b64, "floc": floc})
+            s["results"].append({"image": image_b64, "floc": floc, "orig_index": idx})
+            s["pending_buffer"].append({"image": image_b64, "floc": floc})
         else:
             s["errors"] += 1
         if s["done"] >= s["total"]:
             s["status"] = "done"
+        # Créer un TikTok toutes les 7 images — comme avant
+        pending = s["pending_buffer"]
+        session_user = s.get("user") or user
+        if len(pending) >= TIKTOK_SIZE:
+            batch = pending[:TIKTOK_SIZE]
+            s["pending_buffer"] = pending[TIKTOK_SIZE:]
+        else:
+            batch = None
+
+    if batch:
+        try:
+            imgs = [r["image"] for r in batch]
+            flocs = [r["floc"] for r in batch]
+            created, remaining = add_to_buffer_and_create_tiktoks(imgs, flocs, session_user)
+            with _job_sessions_lock:
+                s = _job_sessions.get(session_id)
+                if s:
+                    s["tiktoks_created"].extend(created)
+                    s["buffer_remaining"] = remaining
+            print(f"[SESSION] ✅ {len(created)} TikTok(s) créé(s) en cours de génération")
+        except Exception as e:
+            print(f"[SESSION] Erreur création TikTok intermédiaire: {e}")
 
 def _finalize_session(session_id, user):
-    """Crée les TikToks depuis les résultats de la session"""
+    """Crée les TikToks depuis les images restantes (< 7) à la fin"""
     with _job_sessions_lock:
         s = _job_sessions.get(session_id)
         if not s:
             return
-        results = s["results"]
+        pending = s["pending_buffer"][:]
+        session_user = s.get("user") or user
 
-    if not results:
+    if not pending:
         return
 
-    images_b64 = [r["image"] for r in results]
-    flocs = [r["floc"] for r in results]
+    imgs = [r["image"] for r in pending]
+    flocs = [r["floc"] for r in pending]
     try:
-        created, remaining = add_to_buffer_and_create_tiktoks(images_b64, flocs, user)
+        created, remaining = add_to_buffer_and_create_tiktoks(imgs, flocs, session_user)
         with _job_sessions_lock:
             s = _job_sessions.get(session_id)
             if s:
-                s["tiktoks_created"] = created
+                s["tiktoks_created"].extend(created)
                 s["buffer_remaining"] = remaining
     except Exception as e:
-        print(f"[SESSION] Erreur finalisation {session_id}: {e}")
+        print(f"[SESSION] Erreur finalisation: {e}")
 
 def _run_bulk_async(session_id, items, user, resolution):
     """Lance la génération en background avec WORKER_COUNT workers"""
     import gc
     session = _get_or_create_session(session_id, len(items))
 
+    # Attacher l'index original à chaque item pour garder l'ordre
+    for i, item in enumerate(items):
+        item["_index"] = i
+
     def process_one(item):
+        idx = item["_index"]
         try:
             img_bytes = item["bytes"]
             res = call_gemini(img_bytes, item["mime"], item["name"], item["number"], item["name_below"], resolution=resolution)
             log_generation(user, res["success"])
             if res["success"]:
                 floc = f"{item['name']}/{item['number']}/{item.get('name_below','') or ''}"
-                _update_session(session_id, True, res["image"], floc)
-                # Libérer la mémoire immédiatement après traitement
+                _update_session(session_id, True, res["image"], floc, idx=idx, user=user)
                 res["image"] = None
             else:
-                _update_session(session_id, False, error=res.get("error"))
+                _update_session(session_id, False, error=res.get("error"), idx=idx)
         except Exception as e:
-            print(f"[WORKER] Erreur inattendue: {e}")
-            _update_session(session_id, False, error=str(e))
+            print(f"[WORKER] Erreur inattendue image {idx}: {e}")
+            _update_session(session_id, False, error=str(e), idx=idx)
         finally:
-            # Forcer le garbage collector à libérer la RAM
             item["bytes"] = None
             gc.collect()
 
@@ -1594,6 +1624,9 @@ def generate_bulk():
 
     # Initialiser la session immédiatement
     _get_or_create_session(session_id, len(items))
+    with _job_sessions_lock:
+        if session_id in _job_sessions:
+            _job_sessions[session_id]["user"] = user
 
     # Lancer la génération en background — Railway ne coupe plus jamais la connexion
     t = threading.Thread(target=_run_bulk_async, args=(session_id, items, user, resolution), daemon=True)
@@ -1644,7 +1677,7 @@ def api_jobs_progress(session_id):
         "tiktoks_created": s.get("tiktoks_created", []),
         "buffer_remaining": s.get("buffer_remaining", 0),
         "percent": round(s["done"] / s["total"] * 100) if s["total"] else 0,
-        "new_results": [{"image": r["image"], "floc": r["floc"], "index": last_seen + i} for i, r in enumerate(new_results)],
+        "new_results": [{"image": r["image"], "floc": r["floc"], "index": r.get("orig_index", last_seen + i)} for i, r in enumerate(new_results)],
         "seen_count": last_seen + len(new_results),
     })
 
