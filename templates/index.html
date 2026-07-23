@@ -712,16 +712,21 @@ async function launch(testMode=false){
                         bufferBadge.textContent=`⏳ buffer: ${d.buffer_remaining}/7`;
                     }
 
-                    // Afficher les nouvelles images dès qu'elles arrivent
+                    // Afficher toutes les images reçues — on vérifie si déjà rendue
                     if(d.new_results&&d.new_results.length>0){
                         for(const res of d.new_results){
                             const idx=res.index;
-                            const parts=res.floc.split('/');
+                            if(generatedImages[idx]) continue; // déjà affichée
+                            const parts=(res.floc||'').split('/');
                             const item=currentItems[idx]||{name:parts[0]||'',number:parts[1]||'',name_below:parts[2]||'',orig:''};
-                            const src=`data:image/png;base64,${res.image}`;
-                            generatedImages[idx]={src,name:item.name,number:item.number};
-                            renderResult({index:idx,image:res.image});
-                            incrRPD();
+                            if(res.image){
+                                const src=`data:image/png;base64,${res.image}`;
+                                generatedImages[idx]={src,name:item.name,number:item.number};
+                                renderResult({index:idx,image:res.image});
+                                incrRPD();
+                            } else if(res.error){
+                                renderResult({index:idx,error:res.error});
+                            }
                         }
                         seenCount=d.seen_count||seenCount;
                     }
