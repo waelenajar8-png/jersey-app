@@ -609,13 +609,16 @@ async function launch(testMode=false){
                         seenCount=d.seen_count||seenCount;
                     }
 
-                    // Estimer le temps restant
+                    // Estimer le temps restant + TikToks créés en temps réel
                     if(done>0&&done<total){
                         const elapsed=(Date.now()-genStartTime)/1000;
                         const avgPerImg=elapsed/done;
                         const remaining=Math.round(avgPerImg*(total-done));
                         const remainingText=remaining>60?`~${Math.round(remaining/60)} min`:`~${remaining}s`;
-                        statusEl.textContent=`${done}/${total} traité(s)${errors>0?' ('+errors+' erreur(s))':''} — reste ${remainingText}`;
+                        const tiktokCount=d.tiktoks_created?.length||0;
+                        const totalTiktoks=Math.floor(total/7);
+                        const tiktokInfo=tiktokCount>0?` — 🎬 ${tiktokCount}/${totalTiktoks} TikTok(s) créé(s)`:'';
+                        statusEl.textContent=`${done}/${total} traité(s)${errors>0?' ('+errors+' erreur(s))':''}${tiktokInfo} — reste ${remainingText}`;
                     }
 
                     if(d.status==='done'||d.status==='cancelled'){
