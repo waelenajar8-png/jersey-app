@@ -141,6 +141,7 @@ KEY_USED_SLOTS = "meta/used_slots.json"
 
 # Lock pour éviter race conditions sur le compteur/buffer
 _r2_lock = threading.Lock()
+_log_lock = threading.Lock()
 
 DEFAULT_FLOCAGES = [
     'UN PEU / 2 / LIMONADE',
@@ -626,9 +627,10 @@ def get_next_tiktok_number():
 
 # ── Logs persistants sur R2 ────────────────────────────────────────────────
 def log_generation(user, success):
-    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    key = f"{PFX_LOGS}{today}.jsonl"
-    entry = json.dumps({
+    with _log_lock:
+     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+     key = f"{PFX_LOGS}{today}.jsonl"
+     entry = json.dumps({
         "ts": datetime.now(timezone.utc).isoformat(),
         "user": user or "Inconnu",
         "success": success
@@ -719,31 +721,21 @@ def rebuild_used_slots_index():
     r2_put_json(KEY_USED_SLOTS, idx)
     return idx
 
-# ── Buffer persistant R2 ───────────────────────────────────────────────────
-
-# ── Buffer local (/tmp) ────────────────────────────────────────────────────
-BUFFER_FILE = "/tmp/tiktok_buffer.json"
+# ── Buffer persistant R2 (thread-safe) ────────────────────────────────────
+_buffer_lock = threading.Lock()
 
 def get_buffer():
-    try:
-        if os.path.exists(BUFFER_FILE):
-            with open(BUFFER_FILE) as f:
-                return json.load(f)
-    except Exception:
-        pass
+    data = r2_get_json(KEY_BUFFER)
+    if data:
+        return data
     return {"images_b64": [], "flockages": [], "user": None}
 
 def _save_buffer(buf):
-    try:
-        with open(BUFFER_FILE, "w") as f:
-            json.dump(buf, f)
-        return True
-    except Exception as e:
-        print(f"[BUFFER SAVE ERROR] {e}")
-        return False
+    return r2_put_json(KEY_BUFFER, buf)
 
 def add_to_buffer_and_create_tiktoks(new_images_b64, new_flockages, user):
-    buf = get_buffer()
+    with _buffer_lock:
+     buf = get_buffer()
     if not buf.get("user"):
         buf["user"] = user
     buf["images_b64"].extend(new_images_b64)
@@ -954,8 +946,7 @@ def call_gemini(img_bytes, mime, name, number, name_below=None, max_retries=5, r
                                 time.sleep(wait)
                         if not upscaled:
                             print(f"[UPSCALE] ❌ Échec après {MAX_UPSCALE_ATTEMPTS} tentatives — image non upscalée retournée en erreur")
-                            last_error = f"❌ Upscaling 4K impossible après {MAX_UPSCALE_ATTEMPTS} tentatives (Replicate indisponible). Relance cette image."
-                            continue
+                            return {"success": False, "error": f"❌ Upscaling 4K impossible après {MAX_UPSCALE_ATTEMPTS} tentatives (Replicate indisponible). Relance cette image."}
                     return {"success": True, "image": img}
             last_error = "Pas d'image dans la réponse."
         except (KeyError, IndexError) as e:
@@ -1583,7 +1574,22 @@ def api_jobs_progress(session_id):
     """Polling endpoint — appelé toutes les 2s par le frontend pour voir l'avancement"""
     with _job_sessions_lock:
         s = _job_sessions.get(session_id)
+    # Fallback R2 si Railway a redémarré et la session n'est plus en RAM
     if not s:
+        saved = r2_get_json(f"sessions/{session_id}.json")
+        if saved:
+            # Session terminée retrouvée dans R2
+            return jsonify({
+                "session_id": session_id,
+                "total": saved.get("total", 0),
+                "done": saved.get("total", 0),
+                "errors": saved.get("total", 0) - saved.get("success", 0),
+                "success": saved.get("success", 0),
+                "status": "done",
+                "tiktoks_created": [],
+                "buffer_remaining": 0,
+                "percent": 100,
+            })
         return jsonify({"error": "Session introuvable"}), 404
     return jsonify({
         "session_id": session_id,
