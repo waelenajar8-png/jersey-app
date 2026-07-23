@@ -143,6 +143,33 @@ h1{font-size:24px;margin:0;font-weight:800;letter-spacing:-0.02em}
 .lightbox-bg img{max-width:90vw;max-height:90vh;border-radius:12px;box-shadow:var(--shadow-lg)}
 .lightbox-close{position:absolute;top:20px;right:20px;background:rgba(255,255,255,.1);border:none;color:#fff;font-size:22px;width:42px;height:42px;border-radius:50%;cursor:pointer;transition:background .15s}
 .lightbox-close:hover{background:rgba(255,255,255,.2)}
+/* ── Modal éditeur images ─────────────────────────────────────── */
+.img-editor-bg{position:fixed;inset:0;background:rgba(5,6,10,.88);backdrop-filter:blur(6px);z-index:200;display:none;align-items:flex-start;justify-content:center;padding:24px;overflow-y:auto}
+.img-editor-bg.open{display:flex}
+.img-editor{background:var(--panel);border:1px solid var(--border);border-radius:20px;width:100%;max-width:680px;padding:24px;box-shadow:var(--shadow-lg);margin:auto}
+.img-editor-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px}
+.img-editor-title{font-size:16px;font-weight:800;letter-spacing:-0.01em}
+.img-editor-close{background:var(--bg-elevated);border:1px solid var(--border);color:var(--text);width:34px;height:34px;border-radius:50%;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;transition:all .15s}
+.img-editor-close:hover{border-color:var(--danger);color:var(--danger)}
+.img-editor-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:20px}
+.ie-item{position:relative;border-radius:10px;overflow:hidden;border:2px solid transparent;transition:border-color .15s;cursor:grab;background:var(--bg-elevated)}
+.ie-item.dragging{opacity:.4;cursor:grabbing}
+.ie-item.drag-over{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-dim)}
+.ie-item img{width:100%;aspect-ratio:3/4;object-fit:cover;display:block}
+.ie-item-num{position:absolute;top:5px;left:5px;background:rgba(0,0,0,.7);color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:6px}
+.ie-item-actions{position:absolute;inset:0;background:rgba(0,0,0,.55);display:none;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:8px}
+.ie-item:hover .ie-item-actions{display:flex}
+.ie-btn{width:100%;padding:5px 0;border:none;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;transition:all .15s}
+.ie-btn-zoom{background:rgba(255,255,255,.2);color:#fff}
+.ie-btn-zoom:hover{background:rgba(255,255,255,.35)}
+.ie-btn-up{background:rgba(74,222,128,.3);color:#4ade80}
+.ie-btn-up:hover{background:rgba(74,222,128,.5)}
+.ie-btn-down{background:rgba(74,222,128,.3);color:#4ade80}
+.ie-btn-down:hover{background:rgba(74,222,128,.5)}
+.ie-btn-del{background:rgba(248,113,113,.3);color:#f87171}
+.ie-btn-del:hover{background:rgba(248,113,113,.5)}
+.ie-loading{text-align:center;padding:40px;color:var(--text-dim)}
+.ie-actions{display:flex;gap:8px;justify-content:flex-end}
 .recap-list{max-height:300px;overflow-y:auto;background:var(--bg-elevated);border-radius:10px;padding:12px;font-size:12px;margin-top:12px}
 .recap-item{padding:6px 0;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;font-weight:500}
 .recap-item:last-child{border-bottom:none}
@@ -223,6 +250,23 @@ h1{font-size:24px;margin:0;font-weight:800;letter-spacing:-0.02em}
 <div class="lightbox-bg" id="lightbox" onclick="closeLightbox()">
     <button class="lightbox-close" onclick="closeLightbox()">✕</button>
     <img id="lightboxImg" src="" onclick="event.stopPropagation()">
+</div>
+
+<!-- Modal éditeur images -->
+<div class="img-editor-bg" id="imgEditorBg" onclick="closeImgEditor(event)">
+    <div class="img-editor" onclick="event.stopPropagation()">
+        <div class="img-editor-header">
+            <div class="img-editor-title" id="ieTitle">🖼️ Éditer les images</div>
+            <button class="img-editor-close" onclick="closeImgEditor()">✕</button>
+        </div>
+        <div class="img-editor-grid" id="ieGrid">
+            <div class="ie-loading"><div class="spinner"></div>Chargement...</div>
+        </div>
+        <div class="ie-actions">
+            <button class="btn-sec" onclick="closeImgEditor()">Fermer</button>
+            <button class="btn" onclick="saveImgOrder()">💾 Sauvegarder l'ordre</button>
+        </div>
+    </div>
 </div>
 
 <!-- Modal config comptes -->
@@ -367,26 +411,19 @@ async function clearBuffer(){
 function renderImgsGridHtml(t){
     const imgs=t.image_urls||[];
     const total=t.image_keys?.length||imgs.length;
-    // Si toutes les images sont chargées, afficher avec drag & drop complet
-    if(imgs.length>=total&&imgs.length>0){
-        return renderAllImgsHtml(t);
-    }
-    // Sinon afficher thumbnail + bouton charger tout
     const thumb=imgs[0]||'';
-    return `<div class="img-item" data-index="0"
-                draggable="true"
-                ondragstart="imgDragStart(event,'${t.id}')"
-                ondragover="event.preventDefault()"
-                ondrop="imgDrop(event,'${t.id}','${t.r2_key}')">
-                <img src="${thumb}" loading="lazy" onerror="this.style.opacity='.15'" onclick="openLightbox('${thumb}')">
-                <div class="img-overlay">
-                    <button class="img-del" onclick="deleteImage(event,'${t.r2_key}',0,'${t.id}')">✕</button>
-                </div>
-                <div class="img-num">1/${total}</div>
-            </div>
-            ${total>1?`<div class="more-imgs" style="cursor:pointer;font-size:11px;flex-direction:column;gap:2px" onclick="loadAllImgs('${t.r2_key}','${t.id}')">
-                <span style="font-size:16px">🖼️</span>+${total-1} imgs<span style="font-size:9px;opacity:.7">cliquer pour réordonner</span>
-            </div>`:''}`;
+    // Afficher seulement la thumbnail + bouton éditer — page légère et rapide
+    return `<div style="position:relative;cursor:pointer" onclick="openImgEditor('${t.r2_key}','${t.id}','TikTok ${t.number}')">
+        <div class="img-item" data-index="0">
+            <img src="${thumb}" loading="lazy" onerror="this.style.opacity='.15'">
+            <div class="img-num">1/${total}</div>
+        </div>
+        ${total>1?`<div class="more-imgs" style="font-size:11px;flex-direction:column;gap:1px">
+            <span style="font-size:14px">✏️</span>
+            <span>${total} imgs</span>
+            <span style="font-size:9px;opacity:.6">éditer</span>
+        </div>`:''}
+    </div>`;
 }
 
 async function loadAllImgs(r2Key, tiktokId){
@@ -499,6 +536,91 @@ function openLightbox(url){
 }
 function closeLightbox(){
     document.getElementById('lightbox').classList.remove('open');
+}
+
+// ── Modal éditeur images ───────────────────────────────────────────────────
+let _ieCurrentKey=null,_ieCurrentId=null,_ieUrls=[],_ieDragSrc=null;
+
+async function openImgEditor(r2Key,tiktokId,title){
+    _ieCurrentKey=r2Key; _ieCurrentId=tiktokId;
+    document.getElementById('ieTitle').textContent=`🖼️ ${title}`;
+    document.getElementById('ieGrid').innerHTML='<div class="ie-loading"><div class="spinner"></div>Chargement...</div>';
+    document.getElementById('imgEditorBg').classList.add('open');
+    const t=allTiktoks.find(t=>t.r2_key===r2Key);
+    if(t&&t.image_urls&&t.image_urls.length>1){
+        _ieUrls=[...t.image_urls]; renderIeGrid();
+    } else {
+        const res=await fetch(`/api/queue/images?key=${encodeURIComponent(r2Key)}`);
+        const d=await res.json();
+        _ieUrls=d.image_urls||[];
+        if(t) t.image_urls=_ieUrls;
+        renderIeGrid();
+    }
+}
+
+function closeImgEditor(e){
+    if(e&&e.target!==document.getElementById('imgEditorBg')) return;
+    document.getElementById('imgEditorBg').classList.remove('open');
+}
+
+function renderIeGrid(){
+    const grid=document.getElementById('ieGrid');
+    if(!_ieUrls.length){grid.innerHTML='<div class="ie-loading">Aucune image</div>';return;}
+    grid.innerHTML=_ieUrls.map((url,i)=>`
+        <div class="ie-item" draggable="true" data-index="${i}"
+             ondragstart="ieDragStart(event,${i})"
+             ondragover="event.preventDefault();event.currentTarget.classList.add('drag-over')"
+             ondragleave="event.currentTarget.classList.remove('drag-over')"
+             ondrop="ieDrop(event,${i})">
+            <img src="${url}" loading="lazy" onerror="this.style.opacity='.2'">
+            <div class="ie-item-num">${i+1}/${_ieUrls.length}</div>
+            <div class="ie-item-actions">
+                <button class="ie-btn ie-btn-zoom" onclick="openLightbox('${url}')">🔍 Agrandir</button>
+                ${i>0?`<button class="ie-btn ie-btn-up" onclick="ieMoveUp(${i})">↑ Monter</button>`:''}
+                ${i<_ieUrls.length-1?`<button class="ie-btn ie-btn-down" onclick="ieMoveDown(${i})">↓ Descendre</button>`:''}
+                <button class="ie-btn ie-btn-del" onclick="ieDelete(${i})">🗑️ Supprimer</button>
+            </div>
+        </div>`).join('');
+}
+
+function ieDragStart(e,idx){_ieDragSrc=idx;e.currentTarget.classList.add('dragging');}
+function ieDrop(e,targetIdx){
+    e.currentTarget.classList.remove('drag-over');
+    document.querySelectorAll('.ie-item').forEach(el=>el.classList.remove('dragging'));
+    if(_ieDragSrc===null||_ieDragSrc===targetIdx) return;
+    const moved=_ieUrls.splice(_ieDragSrc,1)[0];
+    _ieUrls.splice(targetIdx,0,moved);
+    _ieDragSrc=null; renderIeGrid();
+}
+function ieMoveUp(i){if(i<=0)return;[_ieUrls[i-1],_ieUrls[i]]=[_ieUrls[i],_ieUrls[i-1]];renderIeGrid();}
+function ieMoveDown(i){if(i>=_ieUrls.length-1)return;[_ieUrls[i],_ieUrls[i+1]]=[_ieUrls[i+1],_ieUrls[i]];renderIeGrid();}
+
+async function ieDelete(i){
+    if(!confirm(`Supprimer l'image ${i+1} définitivement ?`)) return;
+    const t=allTiktoks.find(t=>t.r2_key===_ieCurrentKey);
+    try{
+        await fetch('/api/queue/delete_image',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:_ieCurrentKey,index:i})});
+        _ieUrls.splice(i,1);
+        if(t) t.image_urls=[..._ieUrls];
+        renderIeGrid();
+        const imgsGrid=document.getElementById(`imgs-${_ieCurrentId}`);
+        if(imgsGrid&&t) imgsGrid.innerHTML=renderImgsGridHtml(t);
+    }catch(e){showStatus('❌ Erreur lors de la suppression');}
+}
+
+async function saveImgOrder(){
+    const t=allTiktoks.find(t=>t.r2_key===_ieCurrentKey);
+    if(!t) return;
+    const originalUrls=t.image_urls||_ieUrls;
+    const newOrder=_ieUrls.map(url=>originalUrls.indexOf(url)).filter(i=>i>=0);
+    try{
+        await fetch('/api/queue/reorder',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:_ieCurrentKey,order:newOrder})});
+        t.image_urls=[..._ieUrls];
+        const imgsGrid=document.getElementById(`imgs-${_ieCurrentId}`);
+        if(imgsGrid) imgsGrid.innerHTML=renderImgsGridHtml(t);
+        showStatus('✅ Ordre sauvegardé !');
+        document.getElementById('imgEditorBg').classList.remove('open');
+    }catch(e){showStatus('❌ Erreur lors de la sauvegarde');}
 }
 
 // ── Sélection suppression ──────────────────────────────────────────────────
