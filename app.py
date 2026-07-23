@@ -945,11 +945,11 @@ def call_gemini(img_bytes, mime, name, number, name_below=None, max_retries=5, r
                                         print(f"[UPSCALE] Pas d'output, retry {attempt}/{MAX_UPSCALE_ATTEMPTS}...")
                                         time.sleep(3)
                                 else:
-                                    wait = min(10 * attempt, 120) if r.status_code == 429 else min(5 * attempt, 60)
+                                    wait = min(3 * attempt, 30) if r.status_code == 429 else min(2 * attempt, 20)
                                     print(f"[UPSCALE] Erreur {r.status_code}, retry {attempt} dans {wait}s...")
                                     time.sleep(wait)
                             except Exception as e:
-                                wait = min(5 * attempt, 60)
+                                wait = min(2 * attempt, 20)
                                 print(f"[UPSCALE] Erreur: {e}, retry {attempt} dans {wait}s...")
                                 time.sleep(wait)
                         if not upscaled:
