@@ -535,12 +535,11 @@ function render(){
         return;
     }
 
-    const allAccounts=[accounts.main,...(accounts.others||[])].filter(Boolean);
-
     grid.innerHTML=list.slice(0,_displayCount).map(t=>renderCard(t)).join('');
 }
 
 function renderCard(t){
+    const allAccounts=[accounts.main,...(accounts.others||[])].filter(Boolean);
         const sel=selectedForMain.has(t.r2_key);
         const checked=checkedForDelete.has(t.r2_key);
         const date=new Date(t.created_at).toLocaleDateString('fr-FR',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});
