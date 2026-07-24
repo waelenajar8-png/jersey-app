@@ -134,7 +134,20 @@ def _run_bulk_async(session_id, items, user, resolution):
     def gemini_one(item):
         idx = item["_index"]
         try:
-            res = call_gemini_only(item["bytes"], item["mime"], item["name"], item["number"], item["name_below"])
+            # Tirer UN flocage aléatoire depuis la bibliothèque pour ce prompt Gemini
+            import random as _rnd
+            try:
+                floc_data = r2_get_json("meta/flocages.json") or {}
+                all_flocs = floc_data.get("flocages", DEFAULT_FLOCAGES)
+            except Exception:
+                all_flocs = DEFAULT_FLOCAGES
+            floc_str = _rnd.choice(all_flocs) if all_flocs else "LOVEUR / 2 / BLONDE"
+            parts = [p.strip() for p in floc_str.split("/")]
+            fname = parts[0] if parts else ""
+            fnum  = parts[1] if len(parts) > 1 else "2"
+            fbelow = parts[2] if len(parts) > 2 else ""
+            item["_floc"] = floc_str  # stocker pour _update_session
+            res = call_gemini_only(item["bytes"], item["mime"], fname, fnum, fbelow)
             item["_gemini_result"] = res
             log_generation(user, res["success"])
             if not res["success"]:
@@ -164,8 +177,8 @@ def _run_bulk_async(session_id, items, user, resolution):
                     _update_session(session_id, False, error="❌ Upscaling 4K impossible après 30 tentatives.", idx=idx)
                     continue
                 img = upscaled
-            # floc vide intentionnel — les flocages sont générés automatiquement dans _save_tiktok
-            _update_session(session_id, True, img, "", idx=idx, user=user, template_key=item.get("template_key",""))
+            # Passer le flocage tiré dans gemini_one
+            _update_session(session_id, True, img, item.get("_floc",""), idx=idx, user=user, template_key=item.get("template_key",""))
         except Exception as e:
             print(f"[UPSCALE] Erreur inattendue image {idx}: {e}")
             _update_session(session_id, False, error=str(e), idx=idx)
@@ -1168,11 +1181,27 @@ def _save_tiktok(num, images_b64, user, flockages=None, template_keys=None):
     r2 = get_r2()
     if not r2: return False
 
-    # ── Toujours 4 pépites + 3 normaux (tirage sans remise pour les pépites) ──
-    pepites_chosen = _draw_pepites(4)
-    normaux_chosen = _draw_normaux(3)
-    final_flockages = pepites_chosen + normaux_chosen
-    print(f"[TIKTOK {num}] {len(pepites_chosen)}P+{len(normaux_chosen)}N: {pepites_chosen[:1]}...")
+    # ── Réordonner les flocages : pépites en premier (4 max), normaux ensuite ──
+    # Les flocages ont été tirés individuellement dans gemini_one
+    import random as _rnd
+    try:
+        floc_data = r2_get_json("meta/flocages.json") or {}
+        pepites_set = set(floc_data.get("pepites", PEPITE_FLOCAGES))
+    except Exception:
+        pepites_set = set(PEPITE_FLOCAGES)
+
+    provided = [f for f in (flockages or []) if f]
+    if provided:
+        # Réordonner : pépites d'abord, normaux ensuite
+        pepites_in = [f for f in provided if f in pepites_set]
+        normaux_in = [f for f in provided if f not in pepites_set]
+        final_flockages = pepites_in + normaux_in
+    else:
+        # Fallback si aucun flocage fourni
+        pepites_chosen = _draw_pepites(4)
+        normaux_chosen = _draw_normaux(3)
+        final_flockages = pepites_chosen + normaux_chosen
+    print(f"[TIKTOK {num}] {len(final_flockages)} flocages: {final_flockages[:2]}...")
 
     image_keys = []
     for i, b64 in enumerate(images_b64):
