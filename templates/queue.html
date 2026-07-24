@@ -656,7 +656,7 @@ function renderIeGrid(){
                 <button class="ie-btn" style="background:rgba(251,191,36,.3);color:#fbbf24" onclick="ieRegenerate(${i})">🔄 Régénérer</button>
                 <button class="ie-btn ie-btn-del" onclick="ieDelete(${i})">🗑️ Supprimer</button>
             </div>
-        </div>`).join('');
+        </div>`; }).join('');
 }
 
 function ieDragStart(e,idx){_ieDragSrc=idx;e.currentTarget.classList.add('dragging');}
