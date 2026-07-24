@@ -229,11 +229,10 @@ ROBINREACH_BRAND_ID = os.environ.get("ROBINREACH_BRAND_ID")  # Volakits Principa
 
 # Brand IDs par compte
 ROBINREACH_BRAND_IDS = {
-    "Volakits Principal": os.environ.get("ROBINREACH_BRAND_ID", "daabd792abb3921e"),
-    "Volakits2":          os.environ.get("ROBINREACH_BRAND_ID", "daabd792abb3921e"),
-    "Volakits (wassim)":  os.environ.get("ROBINREACH_BRAND_ID_WASSIM", "614afbc8348ab0d5"),
-    "Volakits (seik)":    os.environ.get("ROBINREACH_BRAND_ID_SEIK", "babc56d4969df579"),
-    "Volakits (moh)":     os.environ.get("ROBINREACH_BRAND_ID_MOH", "f854dfa3161caf8b"),
+    "Volakits Main (wael)": os.environ.get("ROBINREACH_BRAND_ID", "daabd792abb3921e"),
+    "Volakits 1 (seik)":    "babc56d4969df579",
+    "Volakits 2 (momo)":    "f854dfa3161caf8b",
+    "Volakits 6 (wassim)":  "614afbc8348ab0d5",
 }
 
 # ── Auth utilisateurs ──────────────────────────────────────────────────────
@@ -809,12 +808,12 @@ def read_logs(days=30):
 # ── Comptes TikTok (stockés sur R2) ───────────────────────────────────────
 # ── Comptes TikTok RobinReach (IDs réels) ──────────────────────────────────
 ROBINREACH_ACCOUNTS = {
-    "Volakits Principal": 11739,   # compte principal, wael
-    "Volakits2": 11848,
-    "Volakits (wassim)": 11846,
-    "Volakits (seik)": 11847,
+    "Volakits Main (wael)": 11739,
+    "Volakits 1 (seik)":    11847,
+    "Volakits 2 (momo)":    11848,
+    "Volakits 6 (wassim)":  11846,
 }
-DEFAULT_MAIN_ACCOUNT = "Volakits Principal"
+DEFAULT_MAIN_ACCOUNT = "Volakits Main (wael)"
 
 def get_accounts():
     data = r2_get_json(KEY_ACCOUNTS)
@@ -1332,18 +1331,20 @@ def _do_schedule():
     for acc in by_account:
         by_account[acc].sort(key=lambda x: x.get("number",0))
 
+    # ── Phase 1 : attribuer tous les créneaux en séquence (garanti sans doublons) ──
+    # ── Phase 2 : envoyer à RobinReach + sauvegarder R2 en parallèle ──────────────
+    jobs = []  # liste de (tiktok, tiktok_data, account, robinreach_id, dt_str, display_time)
+
     for account, tiktoks in by_account.items():
         robinreach_id = ROBINREACH_ACCOUNTS.get(account)
-        print(f"[SCHEDULE] account='{account}' robinreach_id={robinreach_id} available={list(ROBINREACH_ACCOUNTS.keys())}")
+        print(f"[SCHEDULE] account='{account}' robinreach_id={robinreach_id}")
         if not robinreach_id:
             for t in tiktoks:
                 errors.append(f"Compte '{account}' non reconnu (TikTok {t.get('number','')})")
             continue
 
-        # Récupérer les créneaux déjà utilisés pour ce compte via l'index (1 seul appel R2 au lieu de N)
         used_slots_idx = get_used_slots_index()
         used_slots = set(used_slots_idx.get(account, []))
-
         slot_date = start_date
         slot_index = 0
 
@@ -1355,9 +1356,6 @@ def _do_schedule():
             if tiktok_data.get("status") == "scheduled":
                 errors.append(f"TikTok {tiktok.get('number','')} déjà programmé, ignoré")
                 continue
-
-            tiktok_data["status"] = "sending"
-            r2_put_json(tiktok["r2_key"], tiktok_data)
 
             # Créneau personnalisé ?
             custom = custom_slots.get(tiktok["r2_key"])
@@ -1391,84 +1389,88 @@ def _do_schedule():
             paris_dt = slot_dt.astimezone(paris_tz)
             display_time = paris_dt.strftime("%d/%m/%Y à %Hh%M")
 
-            if ROBINREACH_API_KEY and ROBINREACH_BRAND_ID:
-                try:
-                    image_urls = [r2_presigned(k, expires=604800) for k in tiktok.get("image_keys", [])]
-                    image_urls = [u for u in image_urls if u]
-                    paris_local = slot_dt.astimezone(paris_tz)
-                    payload = {
-                        "content": FIXED_CAPTION,
-                        "media_urls": image_urls,
-                        "social_profile_ids": [robinreach_id],
-                        "publish_time": dt_str,
-                        "status": "scheduled",
-                        "timezone": "UTC",
-                        "platform_options": {
-                            "tiktok": {
-                                "add_music": True
-                            }
-                        }
-                    }
-                    print(f"[ROBINREACH] Sending payload FULL: {json.dumps(payload)}")
-                    resp = None
-                    last_robin_error = None
-                    brand_id_for_account = ROBINREACH_BRAND_IDS.get(account, ROBINREACH_BRAND_ID)
-                    for robin_attempt in range(3):
-                        try:
-                            resp = requests.post(
-                                f"https://robinreach.com/api/v1/posts?api_key={ROBINREACH_API_KEY}&brand_id={brand_id_for_account}",
-                                headers={"Accept": "application/json", "Content-Type": "application/json"},
-                                json=payload,
-                                timeout=90
-                            )
-                            break
-                        except requests.exceptions.Timeout as te:
-                            last_robin_error = str(te)
-                            print(f"[ROBINREACH] Timeout tentative {robin_attempt+1}/3, retry...")
-                            continue
-                    if resp is None:
-                        tiktok_data["status"] = "pending"
-                        r2_put_json(tiktok["r2_key"], tiktok_data)
-                        errors.append(f"TikTok {tiktok.get('number','')}: Timeout après 3 tentatives ({last_robin_error})")
-                        continue
-                    print(f"[ROBINREACH] Response {resp.status_code}: {resp.text[:500]}")
-                    if resp.status_code not in (200,201):
-                        tiktok_data["status"] = "pending"
-                        r2_put_json(tiktok["r2_key"], tiktok_data)
-                        errors.append(f"TikTok {tiktok.get('number','')}: {resp.text[:200]}")
-                        continue
-                    # Sauvegarder l'ID du post RobinReach pour pouvoir le supprimer plus tard
-                    try:
-                        resp_data = resp.json()
-                        robinreach_post_id = resp_data.get("id") or resp_data.get("post_id") or resp_data.get("data",{}).get("id")
-                        tiktok_data["robinreach_post_id"] = robinreach_post_id
-                        print(f"[ROBINREACH] Post ID: {robinreach_post_id}")
-                    except Exception:
-                        pass
-                except Exception as e:
-                    tiktok_data["status"] = "pending"
-                    r2_put_json(tiktok["r2_key"], tiktok_data)
-                    errors.append(f"TikTok {tiktok.get('number','')}: {str(e)}")
-                    continue
-
-            try:
-                move_to_scheduled(tiktok["r2_key"], account, dt_str, tiktok_data.get("robinreach_post_id"))
-            except Exception as e:
-                print(f"[SCHEDULE] Erreur move_to_scheduled TikTok {tiktok.get('number','')}: {e}")
-                # On continue quand même — RobinReach a déjà programmé, on note juste l'erreur
+            # Stocker le job pour traitement parallèle en Phase 2
+            jobs.append({
+                "tiktok": tiktok,
+                "tiktok_data": tiktok_data,
+                "account": account,
+                "robinreach_id": robinreach_id,
+                "dt_str": dt_str,
+                "display_time": display_time,
+                "brand_id": ROBINREACH_BRAND_IDS.get(account, ROBINREACH_BRAND_ID),
+            })
             used_slots.add(dt_str)
             add_used_slot(account, dt_str)
-            scheduled_count += 1
-            scheduled_details.append({
-                "tiktok": tiktok.get("number",""),
-                "account": account,
-                "time": display_time
-            })
 
             if not use_custom:
                 slot_index += 1
                 if slot_index % len(account_times) == 0:
                     slot_date += timedelta(days=1)
+
+    # ── Phase 2 : RobinReach + R2 en parallèle ────────────────────────────
+    def process_schedule_job(job):
+        tiktok = job["tiktok"]
+        tiktok_data = job["tiktok_data"]
+        account = job["account"]
+        robinreach_id = job["robinreach_id"]
+        dt_str = job["dt_str"]
+        display_time = job["display_time"]
+        brand_id = job["brand_id"]
+
+        if ROBINREACH_API_KEY and brand_id:
+            try:
+                image_urls = [r2_presigned(k, expires=604800) for k in tiktok.get("image_keys", [])]
+                image_urls = [u for u in image_urls if u]
+                payload = {
+                    "content": FIXED_CAPTION,
+                    "media_urls": image_urls,
+                    "social_profile_ids": [robinreach_id],
+                    "publish_time": dt_str,
+                    "status": "scheduled",
+                    "timezone": "UTC",
+                    "platform_options": {"tiktok": {"add_music": True}}
+                }
+                resp = None
+                for _ in range(3):
+                    try:
+                        resp = requests.post(
+                            f"https://robinreach.com/api/v1/posts?api_key={ROBINREACH_API_KEY}&brand_id={brand_id}",
+                            headers={"Accept": "application/json", "Content-Type": "application/json"},
+                            json=payload, timeout=90
+                        )
+                        break
+                    except requests.exceptions.Timeout:
+                        continue
+                if resp is None:
+                    return {"error": f"TikTok {tiktok.get('number','')}: Timeout"}
+                print(f"[ROBINREACH] Response {resp.status_code}: {resp.text[:200]}")
+                if resp.status_code not in (200, 201):
+                    return {"error": f"TikTok {tiktok.get('number','')}: {resp.text[:200]}"}
+                try:
+                    rd = resp.json()
+                    tiktok_data["robinreach_post_id"] = rd.get("id") or rd.get("post_id") or rd.get("data",{}).get("id")
+                except Exception:
+                    pass
+            except Exception as e:
+                return {"error": f"TikTok {tiktok.get('number','')}: {str(e)}"}
+
+        try:
+            move_to_scheduled(tiktok["r2_key"], account, dt_str, tiktok_data.get("robinreach_post_id"))
+        except Exception as e:
+            print(f"[SCHEDULE] move_to_scheduled error: {e}")
+
+        return {"success": True, "tiktok": tiktok.get("number",""), "account": account, "time": display_time}
+
+    # Lancer tous les jobs en parallèle (max 5 simultanés pour pas spammer RobinReach)
+    with ThreadPoolExecutor(max_workers=5) as ex:
+        results_jobs = list(ex.map(process_schedule_job, jobs))
+
+    for r in results_jobs:
+        if r.get("error"):
+            errors.append(r["error"])
+        else:
+            scheduled_count += 1
+            scheduled_details.append({"tiktok": r["tiktok"], "account": r["account"], "time": r["time"]})
 
     return jsonify({
         "success": True,
