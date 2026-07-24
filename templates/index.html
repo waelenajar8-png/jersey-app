@@ -556,17 +556,10 @@ document.getElementById('loadTemplatesBtn').addEventListener('click',async()=>{
     document.getElementById('templateHint').textContent=`✅ ${blobs.length} templates chargés`;
 });
 
-// ── Flocages ───────────────────────────────────────────────────────────────
+// ── Flocages (automatiques — les listeners sont désactivés) ───────────────
 const flockagesEl=document.getElementById('flockages');
 
-document.getElementById('shuffleFlocBtn').addEventListener('click',()=>{
-    const lines=flockagesEl.value.split('\n').map(l=>l.trim()).filter(Boolean);
-    for(let i=lines.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[lines[i],lines[j]]=[lines[j],lines[i]]}
-    flockagesEl.value=lines.join('\n');
-    updatePreview();
-});
-
-document.getElementById('csvInput').addEventListener('change',async e=>{
+document.getElementById('csvInput')?.addEventListener('change',async e=>{
     const file=e.target.files[0];if(!file)return;
     const text=await file.text();
     const lines=text.split('\n').map(l=>l.trim().replace(/[;"]/g,'/').replace(/,/g,'/')).filter(Boolean);
