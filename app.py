@@ -2373,6 +2373,44 @@ def api_templates():
     except Exception as e:
         return jsonify({"templates":[],"error":str(e)})
 
+@app.route("/api/templates/random")
+def api_templates_random():
+    """Retourne N templates aléatoires avec leurs images base64 — évite N appels séparés"""
+    import random as _random
+    n = int(request.args.get("n", 50))
+    r2 = get_r2()
+    if not r2: return jsonify({"templates": [], "error": "R2 non configuré"})
+    try:
+        all_keys = []
+        kwargs = {"Bucket": R2_BUCKET, "Prefix": PFX_TEMPLATES}
+        while True:
+            resp = r2.list_objects_v2(**kwargs)
+            for obj in resp.get("Contents", []):
+                k = obj["Key"]
+                if k.lower().endswith((".png", ".jpg", ".jpeg", ".webp")):
+                    all_keys.append(k)
+            if not resp.get("IsTruncated"): break
+            kwargs["ContinuationToken"] = resp["NextContinuationToken"]
+        _random.shuffle(all_keys)
+        selected = all_keys[:min(n, len(all_keys))]
+        templates = []
+        for k in selected:
+            try:
+                obj = r2.get_object(Bucket=R2_BUCKET, Key=k)
+                data = obj["Body"].read()
+                mime = "image/png" if k.lower().endswith(".png") else "image/jpeg"
+                templates.append({
+                    "key": k,
+                    "name": k.replace(PFX_TEMPLATES, "").rsplit(".", 1)[0],
+                    "image": base64.b64encode(data).decode(),
+                    "mime": mime
+                })
+            except Exception:
+                pass
+        return jsonify({"templates": templates, "total": len(all_keys)})
+    except Exception as e:
+        return jsonify({"templates": [], "error": str(e)})
+
 @app.route("/api/templates/upload", methods=["POST"])
 def api_templates_upload():
     r2 = get_r2()
