@@ -224,6 +224,11 @@ input[type=file]{display:none}
             <div class="shuffle-row">
                 <button class="btn-xs" id="shuffleImgBtn">🔀 Mélanger l'ordre</button>
                 <button class="btn-xs" id="loadTemplatesBtn">🗂️ Charger depuis Templates</button>
+                <div style="display:flex;align-items:center;gap:6px">
+                    <input type="number" id="randTemplateCount" value="50" min="1" max="500"
+                        style="width:60px;padding:4px 8px;background:var(--bg-elevated);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:12px;text-align:center">
+                    <button class="btn-xs" id="randTemplatesBtn" style="background:var(--accent-dim);border-color:rgba(74,222,128,.3);color:var(--accent)">🎲 Templates aléatoires</button>
+                </div>
             </div>
             <div class="hint" id="templateHint"></div>
         </div>
@@ -494,6 +499,37 @@ document.getElementById('shuffleImgBtn').addEventListener('click',()=>{
     for(let i=selectedFiles.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[selectedFiles[i],selectedFiles[j]]=[selectedFiles[j],selectedFiles[i]]}
     fileCount.textContent=selectedFiles.length?`${selectedFiles.length} image(s) — ordre mélangé 🔀`:'';
     updatePreview();
+});
+
+// Charger N templates aléatoires depuis R2
+document.getElementById('randTemplatesBtn').addEventListener('click', async()=>{
+    const n = parseInt(document.getElementById('randTemplateCount').value) || 50;
+    const hint = document.getElementById('templateHint');
+    hint.textContent = `⏳ Chargement de ${n} templates aléatoires...`;
+    document.getElementById('randTemplatesBtn').disabled = true;
+    try {
+        // Un seul appel API — retourne N templates aléatoires avec leurs images
+        const res = await fetch(`/api/templates/random?n=${n}`);
+        const d = await res.json();
+        if(!d.templates?.length){ hint.textContent='❌ Aucun template trouvé'; return; }
+        hint.textContent = `⏳ Préparation de ${d.templates.length} templates...`;
+        const blobs = [];
+        for(const t of d.templates){
+            const bin=atob(t.image);const arr=new Uint8Array(bin.length);
+            for(let i=0;i<bin.length;i++)arr[i]=bin.charCodeAt(i);
+            const blob=new Blob([arr],{type:t.mime||'image/png'});
+            const file=new File([blob],t.key,{type:t.mime||'image/png'});
+            file._templateKey=t.key;
+            blobs.push(file);
+        }
+        selectedFiles = blobs;
+        fileCount.textContent = `${blobs.length} template(s) chargé(s) 🎲`;
+        hint.textContent = `✅ ${blobs.length}/${d.total} templates aléatoires chargés`;
+        updatePreview();
+    } catch(e) {
+        hint.textContent = `❌ Erreur: ${e.message}`;
+    }
+    document.getElementById('randTemplatesBtn').disabled = false;
 });
 
 // Charger depuis templates R2
