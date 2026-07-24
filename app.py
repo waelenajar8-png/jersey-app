@@ -1495,14 +1495,25 @@ def api_replace_image():
     key = data.get("key")
     index = data.get("index")
     image_b64 = data.get("image")
+    new_floc = data.get("new_floc")  # nouveau flocage optionnel
     if not key or index is None or not image_b64: return jsonify({"error": "key, index et image requis"}), 400
     t = r2_get_json(key)
     if not t: return jsonify({"error": "introuvable"}), 404
     img_keys = t.get("image_keys", [])
     if index < 0 or index >= len(img_keys): return jsonify({"error": "index invalide"}), 400
-    # Remplacer l'image dans R2
     try:
         r2_put_image(img_keys[index], base64.b64decode(image_b64))
+        # Mettre à jour le flocage si modifié
+        if new_floc:
+            flockages = t.get("flockages", [])
+            if index < len(flockages):
+                flockages[index] = new_floc
+            else:
+                while len(flockages) <= index:
+                    flockages.append("")
+                flockages[index] = new_floc
+            t["flockages"] = flockages
+            r2_put_json(key, t)
         return jsonify({"success": True})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
