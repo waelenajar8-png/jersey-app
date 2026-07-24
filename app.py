@@ -2098,7 +2098,14 @@ def api_delete():
 # ── Generate single ─────────────────────────────────────────────────────────
 @app.route("/api/flocages/reset", methods=["GET", "POST"])
 def api_reset_flocages():
+    global _pepites_deck_mem, _normaux_cache
     r2_put_json("meta/flocages.json", {"flocages": DEFAULT_FLOCAGES, "pepites": PEPITE_FLOCAGES})
+    # Vider le deck et le cache mémoire pour forcer rechargement
+    r2_put_json("meta/pepites_deck.json", {"remaining": []})
+    with _pepites_deck_lock:
+        _pepites_deck_mem = []
+        _normaux_cache = []
+    print("[RESET] Cache flocages vidé — sera rechargé au prochain TikTok")
     return jsonify({"success": True, "count": len(DEFAULT_FLOCAGES)})
 
 @app.route("/api/flocages", methods=["GET"])
