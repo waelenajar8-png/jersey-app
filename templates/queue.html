@@ -956,7 +956,10 @@ function confirmScheduleAll(){
 }
 function closeRecap(){ document.getElementById('recapModal').classList.remove('open'); }
 
+let _schedulingInProgress=false;
 async function scheduleAll(){
+    if(_schedulingInProgress) return; // double-clic protection
+    _schedulingInProgress=true;
     closeRecap();
     const assigned=allTiktoks.filter(t=>t.account);
     const total=assigned.length;
@@ -979,6 +982,7 @@ async function scheduleAll(){
 
     progFill.style.width='100%';
     setTimeout(()=>progWrap.classList.remove('show'),600);
+    _schedulingInProgress=false;
     document.getElementById('scheduleBtn').disabled=false;
     customSlots={};
 
