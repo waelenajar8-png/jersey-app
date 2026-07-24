@@ -15,6 +15,9 @@ from botocore.config import Config
 
 app = Flask(__name__)
 
+# ── Cache flocages chargé au démarrage ─────────────────────────────────────
+# (sera initialisé au premier appel si pas encore chargé)
+
 # ── Job Queue Asynchrone ────────────────────────────────────────────────────
 # Stockage en mémoire des sessions de génération actives
 # { session_id: { total, done, errors, results, status, created_at } }
@@ -1093,48 +1096,73 @@ def get_pepites_count_per_tiktok(n_tiktoks, n_pepites):
 
 # ── Tirage sans remise pour les pépites ─────────────────────────────────
 _pepites_deck_lock = threading.Lock()
+_pepites_deck_mem = []      # paquet en mémoire — évite appels R2 à chaque TikTok
+_normaux_cache = []         # liste normaux en cache mémoire
+
+def _load_flocages_cache():
+    """Charge les listes depuis R2 une seule fois au démarrage/reset"""
+    global _pepites_deck_mem, _normaux_cache
+    import random as _random
+    try:
+        floc_data = r2_get_json("meta/flocages.json") or {}
+        pepites_list = floc_data.get("pepites", PEPITE_FLOCAGES)[:]
+        all_flocs = floc_data.get("flocages", DEFAULT_FLOCAGES)
+        pepites_set = set(pepites_list)
+        normaux = [f for f in all_flocs if f not in pepites_set]
+    except Exception:
+        pepites_list = PEPITE_FLOCAGES[:]
+        normaux = [f for f in DEFAULT_FLOCAGES if f not in set(PEPITE_FLOCAGES)]
+    # Charger le paquet restant depuis R2 si disponible
+    try:
+        deck_data = r2_get_json("meta/pepites_deck.json") or {}
+        remaining = deck_data.get("remaining", [])
+        if remaining:
+            _pepites_deck_mem = remaining
+        else:
+            _random.shuffle(pepites_list)
+            _pepites_deck_mem = pepites_list
+    except Exception:
+        _random.shuffle(pepites_list)
+        _pepites_deck_mem = pepites_list
+    _normaux_cache = normaux
+    print(f"[DECK] Cache chargé: {len(_pepites_deck_mem)} pépites restantes, {len(_normaux_cache)} normaux")
 
 def _draw_pepites(n=4):
-    """Tire n pépites sans remise depuis le paquet R2 — remélanges si vide"""
+    """Tire n pépites sans remise depuis le paquet en mémoire"""
     import random as _random
+    global _pepites_deck_mem
     with _pepites_deck_lock:
-        try:
-            deck_data = r2_get_json("meta/pepites_deck.json") or {}
-            remaining = deck_data.get("remaining", [])
-        except Exception:
-            remaining = []
-
-        # Si paquet vide ou insuffisant, remélanges
-        if len(remaining) < n:
+        if not _pepites_deck_mem:
+            _load_flocages_cache()
+        # Si encore insuffisant après chargement, remélanges
+        if len(_pepites_deck_mem) < n:
             try:
                 floc_data = r2_get_json("meta/flocages.json") or {}
                 full_list = floc_data.get("pepites", PEPITE_FLOCAGES)[:]
             except Exception:
                 full_list = PEPITE_FLOCAGES[:]
             _random.shuffle(full_list)
-            remaining = full_list
-            print(f"[DECK] Paquet remelange: {len(remaining)} pepites")
-
-        # Tirer n pépites
-        chosen = remaining[:n]
-        remaining = remaining[n:]
-
-        # Sauvegarder le paquet restant
-        r2_put_json("meta/pepites_deck.json", {"remaining": remaining})
-        print(f"[DECK] {n} pepites tirees, {len(remaining)} restantes")
+            _pepites_deck_mem = full_list
+            print(f"[DECK] Paquet remelange: {len(_pepites_deck_mem)} pépites")
+        chosen = _pepites_deck_mem[:n]
+        _pepites_deck_mem = _pepites_deck_mem[n:]
+        # Sauvegarder en R2 de façon asynchrone seulement tous les 10 tirages
+        if len(_pepites_deck_mem) % 10 == 0:
+            try:
+                r2_put_json("meta/pepites_deck.json", {"remaining": _pepites_deck_mem})
+            except Exception:
+                pass
         return chosen
 
 def _draw_normaux(n=3):
-    """Tire n flocages normaux aléatoires"""
+    """Tire n flocages normaux depuis le cache mémoire"""
     import random as _random
-    try:
-        floc_data = r2_get_json("meta/flocages.json") or {}
-        pepites_set = set(floc_data.get("pepites", PEPITE_FLOCAGES))
-        all_flocs = floc_data.get("flocages", DEFAULT_FLOCAGES)
-        normaux = [f for f in all_flocs if f not in pepites_set]
-    except Exception:
-        normaux = [f for f in DEFAULT_FLOCAGES if f not in set(PEPITE_FLOCAGES)]
-    return _random.sample(normaux, min(n, len(normaux)))
+    global _normaux_cache
+    if not _normaux_cache:
+        _load_flocages_cache()
+    if not _normaux_cache:
+        return []
+    return _random.sample(_normaux_cache, min(n, len(_normaux_cache)))
 
 def _save_tiktok(num, images_b64, user, flockages=None, template_keys=None):
     r2 = get_r2()
