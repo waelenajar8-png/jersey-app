@@ -271,11 +271,15 @@ h1{font-size:24px;margin:0;font-weight:800;letter-spacing:-0.02em}
         <!-- Flocage modifiable -->
         <div style="margin-bottom:16px">
             <label style="font-size:11px;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:.04em;display:block;margin-bottom:6px">Flocage</label>
-            <div style="display:flex;gap:8px;align-items:center">
+            <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
                 <input type="text" id="regenFlocInput" placeholder="NOM / NUMÉRO / NOM_DESSOUS"
                     style="flex:1;padding:10px 12px;background:var(--bg-elevated);border:1.5px solid var(--border);border-radius:10px;color:var(--text);font-size:13px;font-family:inherit;font-weight:600">
-                <div style="font-size:11px;color:var(--text-faint);white-space:nowrap">format:<br>NOM/NUM/DESSOUS</div>
+                <button onclick="pickRandomFloc()" title="Flocage aléatoire depuis la bibliothèque"
+                    style="padding:10px 14px;background:var(--accent-dim);border:1px solid rgba(74,222,128,.3);color:var(--accent);border-radius:10px;cursor:pointer;font-size:14px;font-weight:700;white-space:nowrap">🎲 Aléatoire</button>
             </div>
+            <!-- Flocages du TikTok courant pour choisir rapidement -->
+            <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px">Flocages du TikTok :</div>
+            <div id="regenFlocList" style="display:flex;flex-wrap:wrap;gap:6px"></div>
         </div>
         <!-- Template -->
         <label style="font-size:11px;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:.04em;display:block;margin-bottom:8px">Choisir un template <span style="font-weight:400;text-transform:none">(optionnel — garde le même si non sélectionné)</span></label>
@@ -610,7 +614,7 @@ function closeLightbox(){
 }
 
 // ── Modal éditeur images ───────────────────────────────────────────────────
-let _ieCurrentKey=null,_ieCurrentId=null,_ieUrls=[],_ieOriginalUrls=[],_ieDragSrc=null;
+let _ieCurrentKey=null,_ieCurrentId=null,_ieUrls=[],_ieOriginalUrls=[],_ieItems=[],_ieDragSrc=null;
 
 async function openImgEditor(r2Key,tiktokId,title){
     _ieCurrentKey=r2Key; _ieCurrentId=tiktokId;
@@ -618,12 +622,13 @@ async function openImgEditor(r2Key,tiktokId,title){
     document.getElementById('ieGrid').innerHTML='<div class="ie-loading"><div class="spinner"></div>Chargement...</div>';
     document.getElementById('imgEditorBg').classList.add('open');
     const t=allTiktoks.find(t=>t.r2_key===r2Key);
-    // Toujours charger depuis R2 pour avoir les URLs fraîches et l'ordre correct
     const res=await fetch(`/api/queue/images?key=${encodeURIComponent(r2Key)}`);
     const d=await res.json();
-    _ieUrls=d.image_urls||[];
-    _ieOriginalUrls=[..._ieUrls]; // snapshot de l'ordre original pour saveImgOrder
-    if(t) t.image_urls=[..._ieUrls];
+    const urls=d.image_urls||[];
+    // Stocker les items avec leur index original — l'index ne change jamais même si l'URL expire
+    _ieItems=urls.map((url,i)=>({url,origIndex:i}));
+    _ieUrls=urls; // compatibilité
+    if(t) t.image_urls=[...urls];
     renderIeGrid();
 }
 
@@ -634,8 +639,9 @@ function closeImgEditor(e){
 
 function renderIeGrid(){
     const grid=document.getElementById('ieGrid');
-    if(!_ieUrls.length){grid.innerHTML='<div class="ie-loading">Aucune image</div>';return;}
-    grid.innerHTML=_ieUrls.map((url,i)=>`
+    if(!_ieItems.length){grid.innerHTML='<div class="ie-loading">Aucune image</div>';return;}
+    _ieUrls=_ieItems.map(it=>it.url); // sync pour compatibilité
+    grid.innerHTML=_ieItems.map((item,i)=>{const url=item.url;return`
         <div class="ie-item" draggable="true" data-index="${i}"
              ondragstart="ieDragStart(event,${i})"
              ondragover="event.preventDefault();event.currentTarget.classList.add('drag-over')"
@@ -658,12 +664,12 @@ function ieDrop(e,targetIdx){
     e.currentTarget.classList.remove('drag-over');
     document.querySelectorAll('.ie-item').forEach(el=>el.classList.remove('dragging'));
     if(_ieDragSrc===null||_ieDragSrc===targetIdx) return;
-    const moved=_ieUrls.splice(_ieDragSrc,1)[0];
-    _ieUrls.splice(targetIdx,0,moved);
+    const moved=_ieItems.splice(_ieDragSrc,1)[0];
+    _ieItems.splice(targetIdx,0,moved);
     _ieDragSrc=null; renderIeGrid();
 }
-function ieMoveUp(i){if(i<=0)return;[_ieUrls[i-1],_ieUrls[i]]=[_ieUrls[i],_ieUrls[i-1]];renderIeGrid();}
-function ieMoveDown(i){if(i>=_ieUrls.length-1)return;[_ieUrls[i],_ieUrls[i+1]]=[_ieUrls[i+1],_ieUrls[i]];renderIeGrid();}
+function ieMoveUp(i){if(i<=0)return;[_ieItems[i-1],_ieItems[i]]=[_ieItems[i],_ieItems[i-1]];renderIeGrid();}
+function ieMoveDown(i){if(i>=_ieItems.length-1)return;[_ieItems[i],_ieItems[i+1]]=[_ieItems[i+1],_ieItems[i]];renderIeGrid();}
 
 async function ieDelete(i){
     if(!confirm(`Supprimer l'image ${i+1} définitivement ?`)) return;
@@ -680,6 +686,21 @@ async function ieDelete(i){
 
 let _regenIndex=null;
 let _ieTemplates=[];
+let _flocLibrary=[];
+
+async function pickRandomFloc(){
+    // Charger la bibliothèque si pas encore fait
+    if(!_flocLibrary.length){
+        try{
+            const res=await fetch('/api/flockages');
+            const d=await res.json();
+            _flocLibrary=d.flockages||[];
+        }catch(e){showStatus('❌ Erreur chargement bibliothèque');return;}
+    }
+    if(!_flocLibrary.length){showStatus('❌ Bibliothèque vide');return;}
+    const random=_flocLibrary[Math.floor(Math.random()*_flocLibrary.length)];
+    document.getElementById('regenFlocInput').value=random;
+}
 
 async function ieRegenerate(i){
     _regenIndex=i;
@@ -688,6 +709,15 @@ async function ieRegenerate(i){
     const floc=(tiktokData.flockages||[])[i]||'';
     // Pré-remplir le champ flocage modifiable
     document.getElementById('regenFlocInput').value=floc;
+    // Afficher les flocages du TikTok pour choisir rapidement
+    const allFlocs=(tiktokData.flockages||[]).filter(Boolean);
+    const uniqueFlocs=[...new Set(allFlocs)];
+    document.getElementById('regenFlocList').innerHTML=uniqueFlocs.map(f=>
+        `<span onclick="document.getElementById('regenFlocInput').value='${f}'" 
+            style="cursor:pointer;background:var(--bg-elevated);border:1px solid var(--border);padding:4px 10px;border-radius:8px;font-size:11px;font-weight:600;transition:all .15s"
+            onmouseover="this.style.borderColor='var(--accent)'" 
+            onmouseout="this.style.borderColor='var(--border)'">${f}</span>`
+    ).join('');
     document.getElementById('regenModal').classList.add('open');
     // Charger les templates si pas encore fait
     if(!_ieTemplates.length){
@@ -716,7 +746,11 @@ async function selectRegenTemplate(templateKey){
     // Si pas de template sélectionné, utiliser le template original
     if(!templateKey){
         templateKey=(tiktokData.template_keys||[])[i]||'';
-        if(!templateKey){ showStatus('❌ Template original inconnu — choisis un template dans la grille'); return; }
+        if(!templateKey){
+            showStatus('⚠️ Template original non sauvegardé — choisis un template dans la grille ci-dessus');
+            document.getElementById('regenModal').classList.add('open');
+            return;
+        }
     }
     // Spinner sur l'image
     const grid=document.getElementById('ieGrid');
@@ -754,24 +788,19 @@ async function saveImgOrder(){
     const t=allTiktoks.find(t=>t.r2_key===_ieCurrentKey);
     if(!t) return;
 
-    // Calculer l'ordre basé sur les image_keys originales
-    // _ieOriginalUrls garde les URLs dans l'ordre original chargé depuis R2
-    const originalUrls = _ieOriginalUrls || t.image_urls || [];
-    const newOrder = _ieUrls.map(url => {
-        const idx = originalUrls.indexOf(url);
-        return idx;
-    }).filter(i => i >= 0);
+    // Utiliser les origIndex — jamais affectés par l'expiration des URLs signées
+    const newOrder=_ieItems.map(item=>item.origIndex);
 
-    if(newOrder.length !== _ieUrls.length){
+    if(newOrder.some(i=>i<0||i===undefined)){
         showStatus('❌ Erreur ordre — réouvre le modal et réessaie');
         return;
     }
 
     try{
-        const res = await fetch('/api/queue/reorder',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:_ieCurrentKey,order:newOrder})});
+        const res=await fetch('/api/queue/reorder',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:_ieCurrentKey,order:newOrder})});
         if(!res.ok){ showStatus('❌ Erreur serveur lors de la sauvegarde'); return; }
-        t.image_urls=[..._ieUrls];
-        t.thumb_url = _ieUrls[0] || t.thumb_url;
+        t.image_urls=_ieItems.map(it=>it.url);
+        t.thumb_url=_ieItems[0]?.url||t.thumb_url;
         const imgsGrid=document.getElementById(`imgs-${_ieCurrentId}`);
         if(imgsGrid) imgsGrid.innerHTML=renderImgsGridHtml(t);
         showStatus('✅ Ordre sauvegardé !');
