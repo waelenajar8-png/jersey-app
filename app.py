@@ -117,35 +117,59 @@ def _finalize_session(session_id, user):
         print(f"[SESSION] Erreur finalisation: {e}")
 
 def _run_bulk_async(session_id, items, user, resolution):
-    """Lance la génération en background avec WORKER_COUNT workers"""
+    """Phase 1 : Gemini en parallèle. Phase 2 : Replicate séquentiel → zéro 429"""
     import gc
     session = _get_or_create_session(session_id, len(items))
 
-    # Attacher l'index original à chaque item pour garder l'ordre
     for i, item in enumerate(items):
         item["_index"] = i
+        item["_gemini_result"] = None  # résultat Gemini avant upscale
 
-    def process_one(item):
+    # ── Phase 1 : Gemini en parallèle (WORKER_COUNT workers) ─────────────
+    print(f"[BULK] Phase 1 — Gemini sur {len(items)} images avec {WORKER_COUNT} workers...")
+
+    def gemini_one(item):
         idx = item["_index"]
         try:
-            img_bytes = item["bytes"]
-            res = call_gemini(img_bytes, item["mime"], item["name"], item["number"], item["name_below"], resolution=resolution)
+            res = call_gemini_only(item["bytes"], item["mime"], item["name"], item["number"], item["name_below"])
+            item["_gemini_result"] = res
             log_generation(user, res["success"])
-            if res["success"]:
-                floc = f"{item['name']}/{item['number']}/{item.get('name_below','') or ''}"
-                _update_session(session_id, True, res["image"], floc, idx=idx, user=user, template_key=item.get("template_key",""))
-                res["image"] = None
-            else:
+            if not res["success"]:
                 _update_session(session_id, False, error=res.get("error"), idx=idx)
         except Exception as e:
-            print(f"[WORKER] Erreur inattendue image {idx}: {e}")
+            print(f"[WORKER] Erreur Gemini image {idx}: {e}")
+            item["_gemini_result"] = {"success": False, "error": str(e)}
             _update_session(session_id, False, error=str(e), idx=idx)
         finally:
             item["bytes"] = None
             gc.collect()
 
     with ThreadPoolExecutor(max_workers=WORKER_COUNT) as ex:
-        list(ex.map(process_one, items))
+        list(ex.map(gemini_one, items))
+
+    # ── Phase 2 : Replicate séquentiel (une image à la fois) ─────────────
+    print(f"[BULK] Phase 2 — Upscaling 4K séquentiel...")
+    successful = [it for it in items if it.get("_gemini_result", {}).get("success")]
+
+    for item in successful:
+        idx = item["_index"]
+        img = item["_gemini_result"]["image"]
+        try:
+            if REPLICATE_API_KEY:
+                upscaled = upscale_image(img)
+                if not upscaled:
+                    _update_session(session_id, False, error="❌ Upscaling 4K impossible après 30 tentatives.", idx=idx)
+                    continue
+                img = upscaled
+            floc = f"{item['name']}/{item['number']}/{item.get('name_below','') or ''}"
+            _update_session(session_id, True, img, floc, idx=idx, user=user, template_key=item.get("template_key",""))
+        except Exception as e:
+            print(f"[UPSCALE] Erreur inattendue image {idx}: {e}")
+            _update_session(session_id, False, error=str(e), idx=idx)
+        finally:
+            if item.get("_gemini_result"):
+                item["_gemini_result"]["image"] = None
+            gc.collect()
 
     # Créer les TikToks une fois tout terminé
     _finalize_session(session_id, user)
@@ -1003,7 +1027,8 @@ def build_prompt(name, number, name_below=None):
     parts.append("Keep ALL else identical: colors, texture, pattern, outlines, lighting, shadows, background, tags. Only swap text content.")
     return " ".join(parts)
 
-def call_gemini(img_bytes, mime, name, number, name_below=None, max_retries=5, resolution="1k"):
+def call_gemini_only(img_bytes, mime, name, number, name_below=None, max_retries=5):
+    """Phase 1 : génère l'image avec Gemini uniquement, sans upscaling"""
     img_b64 = base64.b64encode(img_bytes).decode()
     prompt = build_prompt(name, number, name_below)
     payload = {"contents": [{"parts": [
@@ -1023,9 +1048,8 @@ def call_gemini(img_bytes, mime, name, number, name_below=None, max_retries=5, r
         if resp.status_code != 200:
             last_error = f"API {resp.status_code}: {resp.text[:200]}"
             if resp.status_code in (503, 429):
-                # Google surchargé/limite atteinte — c'est temporaire, on attend plus longtemps et on insiste
                 wait = min(4 * (attempt_num + 1), 30)
-                print(f"[GEMINI] {resp.status_code} — surcharge temporaire, retry dans {wait}s ({attempt_num+1}/{max_retries})")
+                print(f"[GEMINI] {resp.status_code} — retry dans {wait}s ({attempt_num+1}/{max_retries})")
                 time.sleep(wait)
             else:
                 time.sleep(1)
@@ -1034,57 +1058,70 @@ def call_gemini(img_bytes, mime, name, number, name_below=None, max_retries=5, r
         try:
             for part in data["candidates"][0]["content"]["parts"]:
                 if "inlineData" in part:
-                    img = part["inlineData"]["data"]
-                    if REPLICATE_API_KEY:
-                        upscaled = False
-                        attempt = 0
-                        MAX_UPSCALE_ATTEMPTS = 30  # limite haute pour éviter de bloquer le serveur indéfiniment
-                        while not upscaled and attempt < MAX_UPSCALE_ATTEMPTS:
-                            attempt += 1
-                            try:
-                                print(f"[UPSCALE] Tentative {attempt}/{MAX_UPSCALE_ATTEMPTS}...")
-                                r = requests.post(
-                                    "https://api.replicate.com/v1/models/nightmareai/real-esrgan/predictions",
-                                    headers={"Authorization": f"Bearer {REPLICATE_API_KEY}", "Content-Type": "application/json", "Prefer": "wait"},
-                                    json={"input": {"image": f"data:image/png;base64,{img}", "scale": 4, "face_enhance": False}},
-                                    timeout=300
-                                )
-                                if r.status_code in (200, 201):
-                                    data_r = r.json()
-                                    output = data_r.get("output")
-                                    if not output:
-                                        pid = data_r.get("id")
-                                        for _ in range(60):
-                                            time.sleep(2)
-                                            p = requests.get(f"https://api.replicate.com/v1/predictions/{pid}", headers={"Authorization": f"Bearer {REPLICATE_API_KEY}"}, timeout=30).json()
-                                            if p.get("status") == "succeeded" and p.get("output"):
-                                                output = p["output"]
-                                                break
-                                            elif p.get("status") in ("failed", "canceled"):
-                                                break
-                                    if output:
-                                        img = base64.b64encode(requests.get(output, timeout=60).content).decode()
-                                        print("[UPSCALE] ✅ 4K")
-                                        upscaled = True
-                                    else:
-                                        print(f"[UPSCALE] Pas d'output, retry {attempt}/{MAX_UPSCALE_ATTEMPTS}...")
-                                        time.sleep(3)
-                                else:
-                                    wait = min(3 * attempt, 30) if r.status_code == 429 else min(2 * attempt, 20)
-                                    print(f"[UPSCALE] Erreur {r.status_code}, retry {attempt} dans {wait}s...")
-                                    time.sleep(wait)
-                            except Exception as e:
-                                wait = min(2 * attempt, 20)
-                                print(f"[UPSCALE] Erreur: {e}, retry {attempt} dans {wait}s...")
-                                time.sleep(wait)
-                        if not upscaled:
-                            print(f"[UPSCALE] ❌ Échec après {MAX_UPSCALE_ATTEMPTS} tentatives — image non upscalée retournée en erreur")
-                            return {"success": False, "error": f"❌ Upscaling 4K impossible après {MAX_UPSCALE_ATTEMPTS} tentatives (Replicate indisponible). Relance cette image."}
-                    return {"success": True, "image": img}
+                    return {"success": True, "image": part["inlineData"]["data"]}
             last_error = "Pas d'image dans la réponse."
         except (KeyError, IndexError) as e:
             last_error = f"Réponse inattendue: {e}"
     return {"success": False, "error": last_error}
+
+def upscale_image(img_b64):
+    """Phase 2 : upscale 4K via Replicate — à appeler séquentiellement"""
+    if not REPLICATE_API_KEY:
+        return img_b64
+    MAX_UPSCALE_ATTEMPTS = 30
+    attempt = 0
+    while attempt < MAX_UPSCALE_ATTEMPTS:
+        attempt += 1
+        try:
+            print(f"[UPSCALE] Tentative {attempt}/{MAX_UPSCALE_ATTEMPTS}...")
+            r = requests.post(
+                "https://api.replicate.com/v1/models/nightmareai/real-esrgan/predictions",
+                headers={"Authorization": f"Bearer {REPLICATE_API_KEY}", "Content-Type": "application/json", "Prefer": "wait"},
+                json={"input": {"image": f"data:image/png;base64,{img_b64}", "scale": 4, "face_enhance": False}},
+                timeout=300
+            )
+            if r.status_code in (200, 201):
+                data_r = r.json()
+                output = data_r.get("output")
+                if not output:
+                    pid = data_r.get("id")
+                    for _ in range(60):
+                        time.sleep(2)
+                        p = requests.get(f"https://api.replicate.com/v1/predictions/{pid}",
+                            headers={"Authorization": f"Bearer {REPLICATE_API_KEY}"}, timeout=30).json()
+                        if p.get("status") == "succeeded" and p.get("output"):
+                            output = p["output"]; break
+                        elif p.get("status") in ("failed", "canceled"):
+                            break
+                if output:
+                    img_4k = base64.b64encode(requests.get(output, timeout=60).content).decode()
+                    print("[UPSCALE] ✅ 4K")
+                    return img_4k
+                else:
+                    print(f"[UPSCALE] Pas d'output, retry {attempt}...")
+                    time.sleep(3)
+            else:
+                wait = min(3 * attempt, 30) if r.status_code == 429 else min(2 * attempt, 20)
+                print(f"[UPSCALE] Erreur {r.status_code}, retry dans {wait}s...")
+                time.sleep(wait)
+        except Exception as e:
+            wait = min(2 * attempt, 20)
+            print(f"[UPSCALE] Erreur: {e}, retry dans {wait}s...")
+            time.sleep(wait)
+    print(f"[UPSCALE] ❌ Échec après {MAX_UPSCALE_ATTEMPTS} tentatives")
+    return None
+
+def call_gemini(img_bytes, mime, name, number, name_below=None, max_retries=5, resolution="1k"):
+    """Compatibilité — génère et upscale en une fois (pour generate_single)"""
+    result = call_gemini_only(img_bytes, mime, name, number, name_below, max_retries)
+    if not result["success"]:
+        return result
+    if REPLICATE_API_KEY:
+        upscaled = upscale_image(result["image"])
+        if not upscaled:
+            return {"success": False, "error": "❌ Upscaling 4K impossible. Relance cette image."}
+        result["image"] = upscaled
+    return result
 
 # ── Pages ──────────────────────────────────────────────────────────────────
 @app.route("/")
