@@ -225,7 +225,16 @@ R2_SECRET_KEY = os.environ.get("R2_SECRET_ACCESS_KEY")
 R2_BUCKET     = os.environ.get("R2_BUCKET", "jersey-templates")
 
 ROBINREACH_API_KEY  = os.environ.get("ROBINREACH_API_KEY")
-ROBINREACH_BRAND_ID = os.environ.get("ROBINREACH_BRAND_ID")
+ROBINREACH_BRAND_ID = os.environ.get("ROBINREACH_BRAND_ID")  # Volakits Principal
+
+# Brand IDs par compte
+ROBINREACH_BRAND_IDS = {
+    "Volakits Principal": os.environ.get("ROBINREACH_BRAND_ID", "daabd792abb3921e"),
+    "Volakits2":          os.environ.get("ROBINREACH_BRAND_ID", "daabd792abb3921e"),
+    "Volakits (wassim)":  os.environ.get("ROBINREACH_BRAND_ID_WASSIM", "614afbc8348ab0d5"),
+    "Volakits (seik)":    os.environ.get("ROBINREACH_BRAND_ID_SEIK", "babc56d4969df579"),
+    "Volakits (moh)":     os.environ.get("ROBINREACH_BRAND_ID_MOH", "f854dfa3161caf8b"),
+}
 
 # ── Auth utilisateurs ──────────────────────────────────────────────────────
 # Format: { "prenom": "mot_de_passe" }
@@ -1403,10 +1412,11 @@ def _do_schedule():
                     print(f"[ROBINREACH] Sending payload FULL: {json.dumps(payload)}")
                     resp = None
                     last_robin_error = None
+                    brand_id_for_account = ROBINREACH_BRAND_IDS.get(account, ROBINREACH_BRAND_ID)
                     for robin_attempt in range(3):
                         try:
                             resp = requests.post(
-                                f"https://robinreach.com/api/v1/posts?api_key={ROBINREACH_API_KEY}&brand_id={ROBINREACH_BRAND_ID}",
+                                f"https://robinreach.com/api/v1/posts?api_key={ROBINREACH_API_KEY}&brand_id={brand_id_for_account}",
                                 headers={"Accept": "application/json", "Content-Type": "application/json"},
                                 json=payload,
                                 timeout=90
