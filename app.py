@@ -1325,6 +1325,7 @@ def _do_schedule():
 
     for account, tiktoks in by_account.items():
         robinreach_id = ROBINREACH_ACCOUNTS.get(account)
+        print(f"[SCHEDULE] account='{account}' robinreach_id={robinreach_id} available={list(ROBINREACH_ACCOUNTS.keys())}")
         if not robinreach_id:
             for t in tiktoks:
                 errors.append(f"Compte '{account}' non reconnu (TikTok {t.get('number','')})")
