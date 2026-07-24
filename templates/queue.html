@@ -264,13 +264,27 @@ h1{font-size:24px;margin:0;font-weight:800;letter-spacing:-0.02em}
 <!-- Modal sélecteur template pour régénération -->
 <div class="regen-modal-bg" id="regenModal" onclick="if(event.target===this)this.classList.remove('open')">
     <div class="regen-modal">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
-            <div style="font-size:16px;font-weight:800">🔄 Choisir un template</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+            <div style="font-size:16px;font-weight:800">🔄 Régénérer une image</div>
             <button style="background:var(--bg-elevated);border:1px solid var(--border);color:var(--text);width:34px;height:34px;border-radius:50%;cursor:pointer;font-size:16px" onclick="document.getElementById('regenModal').classList.remove('open')">✕</button>
         </div>
-        <div style="font-size:12px;color:var(--text-dim)">Flocage : <strong id="regenFloc" style="color:var(--text)">—</strong></div>
+        <!-- Flocage modifiable -->
+        <div style="margin-bottom:16px">
+            <label style="font-size:11px;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:.04em;display:block;margin-bottom:6px">Flocage</label>
+            <div style="display:flex;gap:8px;align-items:center">
+                <input type="text" id="regenFlocInput" placeholder="NOM / NUMÉRO / NOM_DESSOUS"
+                    style="flex:1;padding:10px 12px;background:var(--bg-elevated);border:1.5px solid var(--border);border-radius:10px;color:var(--text);font-size:13px;font-family:inherit;font-weight:600">
+                <div style="font-size:11px;color:var(--text-faint);white-space:nowrap">format:<br>NOM/NUM/DESSOUS</div>
+            </div>
+        </div>
+        <!-- Template -->
+        <label style="font-size:11px;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:.04em;display:block;margin-bottom:8px">Choisir un template <span style="font-weight:400;text-transform:none">(optionnel — garde le même si non sélectionné)</span></label>
         <div class="regen-template-grid" id="regenTemplateGrid">
             <div style="grid-column:1/-1;text-align:center;padding:20px;color:var(--text-dim)"><div class="spinner"></div></div>
+        </div>
+        <div style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end">
+            <button class="btn-sec" onclick="document.getElementById('regenModal').classList.remove('open')">Annuler</button>
+            <button class="btn" onclick="selectRegenTemplate(null)" style="background:var(--panel);border:1px solid var(--border);color:var(--text)">🔄 Régénérer sans changer le template</button>
         </div>
     </div>
 </div>
@@ -672,8 +686,8 @@ async function ieRegenerate(i){
     // Récupérer le flocage de cette image
     const tiktokData=await fetch(`/api/queue/tiktok?key=${encodeURIComponent(_ieCurrentKey)}`).then(r=>r.json());
     const floc=(tiktokData.flockages||[])[i]||'';
-    // Ouvrir le sélecteur de template
-    document.getElementById('regenFloc').textContent=floc||'—';
+    // Pré-remplir le champ flocage modifiable
+    document.getElementById('regenFlocInput').value=floc;
     document.getElementById('regenModal').classList.add('open');
     // Charger les templates si pas encore fait
     if(!_ieTemplates.length){
@@ -693,10 +707,17 @@ async function selectRegenTemplate(templateKey){
     document.getElementById('regenModal').classList.remove('open');
     const i=_regenIndex;
     if(i===null) return;
-    // Récupérer flocage
+    // Utiliser le flocage modifié dans l'input (ou l'original si vide)
+    const flocInput=document.getElementById('regenFlocInput').value.trim();
     const tiktokData=await fetch(`/api/queue/tiktok?key=${encodeURIComponent(_ieCurrentKey)}`).then(r=>r.json());
-    const floc=(tiktokData.flockages||[])[i]||'';
+    const originalFloc=(tiktokData.flockages||[])[i]||'';
+    const floc=flocInput||originalFloc;
     const parts=floc.split('/').map(p=>p.trim());
+    // Si pas de template sélectionné, utiliser le template original
+    if(!templateKey){
+        templateKey=(tiktokData.template_keys||[])[i]||'';
+        if(!templateKey){ showStatus('❌ Template original inconnu — choisis un template dans la grille'); return; }
+    }
     // Spinner sur l'image
     const grid=document.getElementById('ieGrid');
     const items=[...grid.querySelectorAll('.ie-item')];
@@ -723,7 +744,7 @@ async function selectRegenTemplate(templateKey){
         if(!res.ok||d.error){showStatus(`❌ Erreur: ${d.error}`);renderIeGrid();return}
         _ieUrls[i]=`data:image/png;base64,${d.image}`;
         await fetch('/api/queue/replace_image',{method:'POST',headers:{'Content-Type':'application/json'},
-            body:JSON.stringify({key:_ieCurrentKey,index:i,image:d.image})});
+            body:JSON.stringify({key:_ieCurrentKey,index:i,image:d.image,new_floc:floc})});
         showStatus('✅ Image régénérée !');
         renderIeGrid();
     }catch(e){showStatus(`❌ Erreur: ${e.message}`);renderIeGrid();}
