@@ -131,20 +131,30 @@ def _run_bulk_async(session_id, items, user, resolution):
     # ── Phase 1 : Gemini en parallèle (WORKER_COUNT workers) ─────────────
     print(f"[BULK] Phase 1 — Gemini sur {len(items)} images avec {WORKER_COUNT} workers...")
 
-    # Charger la liste des flocages UNE SEULE FOIS avant les workers
+    # Charger pepites et normaux UNE SEULE FOIS avant les workers
     import random as _rnd
     try:
         _floc_data = r2_get_json("meta/flocages.json") or {}
-        _all_flocs = _floc_data.get("flocages", DEFAULT_FLOCAGES)
+        _pepites_list = _floc_data.get("pepites", PEPITE_FLOCAGES) or PEPITE_FLOCAGES
+        _all_flocs = _floc_data.get("flocages", DEFAULT_FLOCAGES) or DEFAULT_FLOCAGES
+        _pepites_set_lower = {p.lower().strip() for p in _pepites_list}
+        _normaux_list = [f for f in _all_flocs if f.lower().strip() not in _pepites_set_lower]
     except Exception:
-        _all_flocs = DEFAULT_FLOCAGES
-    if not _all_flocs:
-        _all_flocs = DEFAULT_FLOCAGES
+        _pepites_list = PEPITE_FLOCAGES
+        _normaux_list = [f for f in DEFAULT_FLOCAGES if f.lower().strip() not in {p.lower().strip() for p in PEPITE_FLOCAGES}]
 
+    # Assigner pépite ou normal selon la position dans le TikTok
+    # Images dont (index % 7) < 4 → pépite, sinon → normal
     def gemini_one(item):
         idx = item["_index"]
         try:
-            floc_str = _rnd.choice(_all_flocs)
+            pos_in_tiktok = idx % TIKTOK_SIZE  # 0-6
+            if pos_in_tiktok < 4 and _pepites_list:
+                floc_str = _rnd.choice(_pepites_list)
+            elif _normaux_list:
+                floc_str = _rnd.choice(_normaux_list)
+            else:
+                floc_str = _rnd.choice(_pepites_list or DEFAULT_FLOCAGES)
             parts = [p.strip() for p in floc_str.split("/")]
             fname = parts[0] if parts else ""
             fnum  = parts[1] if len(parts) > 1 else "2"
