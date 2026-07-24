@@ -131,17 +131,20 @@ def _run_bulk_async(session_id, items, user, resolution):
     # ── Phase 1 : Gemini en parallèle (WORKER_COUNT workers) ─────────────
     print(f"[BULK] Phase 1 — Gemini sur {len(items)} images avec {WORKER_COUNT} workers...")
 
+    # Charger la liste des flocages UNE SEULE FOIS avant les workers
+    import random as _rnd
+    try:
+        _floc_data = r2_get_json("meta/flocages.json") or {}
+        _all_flocs = _floc_data.get("flocages", DEFAULT_FLOCAGES)
+    except Exception:
+        _all_flocs = DEFAULT_FLOCAGES
+    if not _all_flocs:
+        _all_flocs = DEFAULT_FLOCAGES
+
     def gemini_one(item):
         idx = item["_index"]
         try:
-            # Tirer UN flocage aléatoire depuis la bibliothèque pour ce prompt Gemini
-            import random as _rnd
-            try:
-                floc_data = r2_get_json("meta/flocages.json") or {}
-                all_flocs = floc_data.get("flocages", DEFAULT_FLOCAGES)
-            except Exception:
-                all_flocs = DEFAULT_FLOCAGES
-            floc_str = _rnd.choice(all_flocs) if all_flocs else "LOVEUR / 2 / BLONDE"
+            floc_str = _rnd.choice(_all_flocs)
             parts = [p.strip() for p in floc_str.split("/")]
             fname = parts[0] if parts else ""
             fnum  = parts[1] if len(parts) > 1 else "2"
