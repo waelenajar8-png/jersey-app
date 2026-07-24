@@ -1400,7 +1400,7 @@ def _do_schedule():
                             }
                         }
                     }
-                    print(f"[ROBINREACH] Sending payload: {json.dumps(payload)[:500]}")
+                    print(f"[ROBINREACH] Sending payload FULL: {json.dumps(payload)}")
                     resp = None
                     last_robin_error = None
                     for robin_attempt in range(3):
