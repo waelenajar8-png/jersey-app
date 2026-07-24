@@ -164,8 +164,8 @@ def _run_bulk_async(session_id, items, user, resolution):
                     _update_session(session_id, False, error="❌ Upscaling 4K impossible après 30 tentatives.", idx=idx)
                     continue
                 img = upscaled
-            floc = f"{item['name']}/{item['number']}/{item.get('name_below','') or ''}"
-            _update_session(session_id, True, img, floc, idx=idx, user=user, template_key=item.get("template_key",""))
+            # floc vide intentionnel — les flocages sont générés automatiquement dans _save_tiktok
+            _update_session(session_id, True, img, "", idx=idx, user=user, template_key=item.get("template_key",""))
         except Exception as e:
             print(f"[UPSCALE] Erreur inattendue image {idx}: {e}")
             _update_session(session_id, False, error=str(e), idx=idx)
@@ -1172,7 +1172,7 @@ def _save_tiktok(num, images_b64, user, flockages=None, template_keys=None):
     pepites_chosen = _draw_pepites(4)
     normaux_chosen = _draw_normaux(3)
     final_flockages = pepites_chosen + normaux_chosen
-    print(f"[TIKTOK {num}] Flocages: {pepites_chosen[0]}... (4P+3N)")
+    print(f"[TIKTOK {num}] {len(pepites_chosen)}P+{len(normaux_chosen)}N: {pepites_chosen[:1]}...")
 
     image_keys = []
     for i, b64 in enumerate(images_b64):
