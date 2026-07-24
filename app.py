@@ -211,9 +211,12 @@ FIXED_CAPTION  = "3 Maillot Acheté 1 Offert 🎁 #volakits #ete #foot"
 # Créneaux de publication en UTC, PAR COMPTE (le principal poste plus souvent que les autres)
 # Conversion heure française (UTC+2 été) → UTC : soustraire 2h
 SCHEDULE_TIMES_BY_ACCOUNT = {
-    "Volakits Principal": ["07:00", "10:30", "14:00", "17:30", "19:30"],  # 9h/12h30/16h/19h30/21h30 Paris — 5x/jour
+    "Volakits Main (wael)": ["07:00", "10:30", "14:00", "17:30", "19:30"],  # 9h/12h30/16h/19h30/21h30 Paris — 5x/jour
+    "Volakits 1 (seik)":    ["07:00", "10:30", "14:00", "17:30", "19:30"],
+    "Volakits 2 (momo)":    ["07:00", "10:30", "14:00", "17:30", "19:30"],
+    "Volakits 6 (wassim)":  ["07:00", "10:30", "14:00", "17:30", "19:30"],
 }
-SCHEDULE_TIMES_DEFAULT = ["10:30", "17:30"]  # 12h30/19h30 Paris — 2x/jour pour les autres comptes
+SCHEDULE_TIMES_DEFAULT = ["07:00", "10:30", "14:00", "17:30", "19:30"]  # 5x/jour pour tous
 
 def get_schedule_times_for_account(account):
     """Retourne les créneaux horaires (UTC) pour un compte donné"""
@@ -1608,6 +1611,134 @@ def api_check_status():
             results[key] = {"status": "erreur", "error": str(e)}
 
     return jsonify({"results": results})
+
+@app.route("/api/scheduled/fix_slots", methods=["POST"])
+def api_fix_slots():
+    """Recalcule et corrige les créneaux de tous les TikToks programmés d'un compte"""
+    data = request.json or {}
+    account = data.get("account")
+    if not account: return jsonify({"error": "account requis"}), 400
+
+    from zoneinfo import ZoneInfo
+    paris_tz = ZoneInfo("Europe/Paris")
+    now = datetime.now(timezone.utc)
+
+    # Récupérer tous les TikToks programmés de ce compte
+    keys = r2_list_keys(PFX_SCHEDULED)
+    keys = [k for k in keys if "/imgs/" not in k]
+    tiktoks = []
+    for k in keys:
+        d = r2_get_json(k)
+        if d and d.get("account") == account:
+            tiktoks.append((k, d))
+
+    if not tiktoks:
+        return jsonify({"error": f"Aucun TikTok programmé pour {account}"}), 404
+
+    # Trier par date de programmation actuelle
+    tiktoks.sort(key=lambda x: x[1].get("scheduled_at", ""))
+
+    # Recalculer les créneaux avec les bons horaires
+    account_times = get_schedule_times_for_account(account)
+    print(f"[FIX_SLOTS] {account}: {len(tiktoks)} TikToks, créneaux: {account_times}")
+
+    # Réinitialiser les créneaux utilisés pour ce compte
+    used_slots_idx = get_used_slots_index()
+    # Supprimer les anciens créneaux de ce compte
+    old_slots = set(used_slots_idx.get(account, []))
+
+    slot_date = now.date()
+    slot_index = 0
+    used_slots = set()
+    updated = 0
+    errors = []
+
+    def reschedule_one(item):
+        nonlocal slot_date, slot_index, updated
+        key, tiktok_data = item
+        robinreach_post_id = tiktok_data.get("robinreach_post_id")
+        brand_id = ROBINREACH_BRAND_IDS.get(account, ROBINREACH_BRAND_ID)
+        robinreach_id = ROBINREACH_ACCOUNTS.get(account)
+
+        # Trouver le prochain créneau disponible
+        while True:
+            h, m = map(int, account_times[slot_index % len(account_times)].split(":"))
+            slot_dt = datetime(slot_date.year, slot_date.month, slot_date.day, h, m, tzinfo=timezone.utc)
+            slot_iso = slot_dt.isoformat()
+            if slot_dt > now + timedelta(minutes=30) and slot_iso not in used_slots:
+                break
+            slot_index += 1
+            if slot_index % len(account_times) == 0:
+                slot_date = slot_date + timedelta(days=1)
+
+        new_dt_str = slot_dt.isoformat()
+        used_slots.add(new_dt_str)
+
+        # Mettre à jour sur RobinReach
+        if robinreach_post_id and ROBINREACH_API_KEY and brand_id:
+            try:
+                resp = requests.patch(
+                    f"https://robinreach.com/api/v1/posts/{robinreach_post_id}?api_key={ROBINREACH_API_KEY}&brand_id={brand_id}",
+                    headers={"Accept": "application/json", "Content-Type": "application/json"},
+                    json={"publish_time": new_dt_str, "timezone": "UTC"},
+                    timeout=30
+                )
+                print(f"[FIX_SLOTS] Post {robinreach_post_id} → {new_dt_str}: {resp.status_code}")
+                if resp.status_code not in (200, 201):
+                    # Si PATCH pas supporté, essayer de supprimer et recréer
+                    image_urls = [r2_presigned(k, expires=604800) for k in tiktok_data.get("image_keys", [])]
+                    requests.delete(
+                        f"https://robinreach.com/api/v1/posts/{robinreach_post_id}?api_key={ROBINREACH_API_KEY}&brand_id={brand_id}",
+                        timeout=15
+                    )
+                    new_resp = requests.post(
+                        f"https://robinreach.com/api/v1/posts?api_key={ROBINREACH_API_KEY}&brand_id={brand_id}",
+                        headers={"Accept": "application/json", "Content-Type": "application/json"},
+                        json={
+                            "content": FIXED_CAPTION,
+                            "media_urls": image_urls,
+                            "social_profile_ids": [robinreach_id],
+                            "publish_time": new_dt_str,
+                            "status": "scheduled",
+                            "timezone": "UTC",
+                            "platform_options": {"tiktok": {"add_music": True}}
+                        },
+                        timeout=90
+                    )
+                    if new_resp.status_code in (200, 201):
+                        try:
+                            new_id = new_resp.json().get("id") or new_resp.json().get("post_id")
+                            tiktok_data["robinreach_post_id"] = new_id
+                        except Exception:
+                            pass
+            except Exception as e:
+                errors.append(f"TikTok {tiktok_data.get('number','')}: {e}")
+                return
+
+        # Mettre à jour dans R2
+        tiktok_data["scheduled_at"] = new_dt_str
+        r2_put_json(key, tiktok_data)
+        add_used_slot(account, new_dt_str)
+
+        slot_index += 1
+        if slot_index % len(account_times) == 0:
+            slot_date = slot_date + timedelta(days=1)
+
+    # Supprimer les anciens créneaux de l'index
+    used_slots_idx[account] = []
+    r2_put_json("meta/used_slots.json", used_slots_idx)
+
+    for item in tiktoks:
+        reschedule_one(item)
+        updated += 1
+
+    return jsonify({
+        "success": True,
+        "updated": updated,
+        "errors": errors,
+        "account": account,
+        "slots_used": list(used_slots)[:5]
+    })
 
 @app.route("/api/scheduled/find_duplicates")
 def api_find_duplicates():
