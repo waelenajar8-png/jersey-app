@@ -1123,11 +1123,13 @@ def _load_flocages_cache():
         floc_data = r2_get_json("meta/flocages.json") or {}
         pepites_list = floc_data.get("pepites", PEPITE_FLOCAGES)[:]
         all_flocs = floc_data.get("flocages", DEFAULT_FLOCAGES)
-        pepites_set = set(pepites_list)
-        normaux = [f for f in all_flocs if f not in pepites_set]
+        # Comparaison insensible à la casse
+        pepites_lower = {p.lower().strip() for p in pepites_list}
+        normaux = [f for f in all_flocs if f.lower().strip() not in pepites_lower]
     except Exception:
         pepites_list = PEPITE_FLOCAGES[:]
-        normaux = [f for f in DEFAULT_FLOCAGES if f not in set(PEPITE_FLOCAGES)]
+        pepites_lower = {p.lower().strip() for p in pepites_list}
+        normaux = [f for f in DEFAULT_FLOCAGES if f.lower().strip() not in pepites_lower]
     # Charger le paquet restant depuis R2 si disponible
     try:
         deck_data = r2_get_json("meta/pepites_deck.json") or {}
@@ -1189,15 +1191,17 @@ def _save_tiktok(num, images_b64, user, flockages=None, template_keys=None):
     import random as _rnd
     try:
         floc_data = r2_get_json("meta/flocages.json") or {}
-        pepites_set = set(floc_data.get("pepites", PEPITE_FLOCAGES))
+        pepites_raw = floc_data.get("pepites", PEPITE_FLOCAGES)
+        # Comparaison insensible à la casse
+        pepites_set_lower = {p.lower().strip() for p in pepites_raw}
     except Exception:
-        pepites_set = set(PEPITE_FLOCAGES)
+        pepites_set_lower = {p.lower().strip() for p in PEPITE_FLOCAGES}
 
     provided = [f for f in (flockages or []) if f]
     if provided:
-        # Réordonner : pépites d'abord, normaux ensuite
-        pepites_in = [f for f in provided if f in pepites_set]
-        normaux_in = [f for f in provided if f not in pepites_set]
+        # Réordonner : pépites d'abord, normaux ensuite (comparaison insensible casse)
+        pepites_in = [f for f in provided if f.lower().strip() in pepites_set_lower]
+        normaux_in = [f for f in provided if f.lower().strip() not in pepites_set_lower]
         final_flockages = pepites_in + normaux_in
     else:
         # Fallback si aucun flocage fourni
