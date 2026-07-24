@@ -2224,6 +2224,7 @@ def api_remove_box():
 
 @app.route("/generate_single", methods=["POST"])
 def generate_single():
+    import random as _rnd
     if not API_KEY: return jsonify({"error":"Clé API manquante"}),500
     f = request.files.get("image")
     user = request.form.get("user","").strip()
@@ -2233,6 +2234,18 @@ def generate_single():
     resolution = request.form.get("resolution", "1k").strip()
     skip_buffer = request.form.get("skip_buffer", "false").lower() == "true"
     if not f: return jsonify({"error":"Aucune image"}),400
+    # Si pas de flocage fourni, en tirer un aléatoire
+    if not name and not number:
+        try:
+            floc_data = r2_get_json("meta/flocages.json") or {}
+            all_flocs = floc_data.get("flocages", DEFAULT_FLOCAGES) or DEFAULT_FLOCAGES
+        except Exception:
+            all_flocs = DEFAULT_FLOCAGES
+        floc_str = _rnd.choice(all_flocs) if all_flocs else "LOVEUR / 2 / BLONDE"
+        parts = [p.strip() for p in floc_str.split("/")]
+        name = parts[0] if parts else ""
+        number = parts[1] if len(parts) > 1 else "2"
+        name_below = parts[2] if len(parts) > 2 else None
     result = call_gemini(f.read(), f.mimetype or "image/png", name, number, name_below, resolution=resolution)
     log_generation(user, result["success"])
     if result["success"]:
