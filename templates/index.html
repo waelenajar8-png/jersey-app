@@ -228,14 +228,14 @@ input[type=file]{display:none}
             <div class="hint" id="templateHint"></div>
         </div>
         <div>
-            <label>Flocages (1 par ligne — NOM/NUMERO/NOM_DESSOUS)</label>
-            <textarea id="flockages" placeholder="PIERRE/2/OUF&#10;LUCAS/7&#10;THEO/10/PRO"></textarea>
-            <div class="shuffle-row">
-                <button class="btn-xs" id="shuffleFlocBtn">🔀 Mélanger les flocages</button>
-                <label for="csvInput" class="btn-xs" style="cursor:pointer">📄 Importer CSV</label>
-                <input type="file" id="csvInput" accept=".csv,.txt,.xlsx">
-                <button class="btn-xs" id="openLibBtn" onclick="openFlocLib()">📚 Bibliothèque</button>
+            <div style="background:var(--accent-dim);border:1px solid rgba(74,222,128,.3);border-radius:12px;padding:14px 16px;display:flex;align-items:center;gap:12px">
+                <span style="font-size:22px">🎯</span>
+                <div>
+                    <div style="font-weight:700;font-size:13px;color:var(--text)">Flocages automatiques</div>
+                    <div style="font-size:12px;color:var(--text-dim);margin-top:3px">Chaque TikTok reçoit automatiquement <strong style="color:var(--accent)">4 flocages pépites</strong> + <strong style="color:var(--accent)">3 flocages normaux</strong> tirés aléatoirement depuis la bibliothèque.</div>
+                </div>
             </div>
+            <textarea id="flockages" style="display:none"></textarea>
         </div>
     </div>
 
@@ -649,16 +649,10 @@ generateBtn.addEventListener('click',()=>launch(false));
 async function launch(testMode=false){
     const userName=userEl.value.trim();
     if(!userName){userEl.classList.add('err');userErr.style.display='block';userEl.focus();return}
-    const lines=flockagesEl.value.split('\n').map(l=>l.trim()).filter(Boolean);
+    // Flocages automatiques — 4 pépites + 3 normaux générés côté serveur
     if(!selectedFiles.length){alert('Sélectionne des images.');return}
-    if(!lines.length){alert('Renseigne les flocages.');return}
 
     const filesToUse=testMode?[selectedFiles[0]]:selectedFiles;
-    const linesToUse=testMode?[lines[0]]:lines;
-
-    if(filesToUse.length!==linesToUse.length&&!testMode){
-        alert(`${filesToUse.length} images mais ${linesToUse.length} flocages.`);return
-    }
 
     const parallel=50; // workers gérés côté serveur
     generationInProgress=true;
@@ -672,19 +666,17 @@ async function launch(testMode=false){
     const origPreviews=await Promise.all(filesToUse.map(f=>new Promise(res=>{const r=new FileReader();r.onload=e=>res(e.target.result);r.readAsDataURL(f)})));
 
     for(let i=0;i<filesToUse.length;i++){
-        const parts=linesToUse[i].split('/').map(p=>p.trim());
-        currentItems[i]={file:filesToUse[i],name:parts[0]||'',number:parts[1]||'',name_below:parts[2]||'',orig:origPreviews[i],template_key:filesToUse[i]._templateKey||''};
+        currentItems[i]={file:filesToUse[i],name:'',number:'',name_below:'',orig:origPreviews[i],template_key:filesToUse[i]._templateKey||''};
         const card=document.createElement('div');
         card.className='card';card.id=`card-${i}`;
-        const sub=`${(parts[0]||'').toUpperCase()}${parts[1]?' / '+parts[1]:''}${parts[2]?' / '+parts[2].toUpperCase():''}`;
-        card.innerHTML=`<div class="card-title">IMAGE ${i+1}${testMode?' — TEST':''}</div><div class="card-sub">${sub}</div><div class="card-imgs"><div class="img-wrap"><div class="img-label">Original</div><img src="${origPreviews[i]}"></div><div class="card-ph"><div class="spinner"></div></div></div>`;
+        card.innerHTML=`<div class="card-title">IMAGE ${i+1}${testMode?' — TEST':''}</div><div class="card-sub">🎯 Flocage auto</div><div class="card-imgs"><div class="img-wrap"><div class="img-label">Original</div><img src="${origPreviews[i]}"></div><div class="card-ph"><div class="spinner"></div></div></div>`;
         if(testMode)resultsEl.prepend(card);else resultsEl.appendChild(card);
     }
 
     const formData=new FormData();
     filesToUse.forEach(f=>formData.append('images',f));
     formData.append('template_keys', JSON.stringify(filesToUse.map(f=>f._templateKey||'')));
-    formData.append('flockages',linesToUse.join('\n'));
+    formData.append('flockages','');
     formData.append('user',userName);
     formData.append('session_id',sessionId);
     formData.append('resolution','4k');
