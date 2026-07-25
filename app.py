@@ -65,46 +65,43 @@ def get_vertex_token():
     with urllib.request.urlopen(req) as resp:
         return json.loads(resp.read())["access_token"]
 
-def upscale_image_vertex(img_b64):
-    """Upscale 4K via Vertex AI Imagen 4 — vrai 4K natif Google"""
-    try:
-        token = get_vertex_token()
-        url = f"https://{VERTEX_LOCATION}-aiplatform.googleapis.com/v1/projects/{VERTEX_PROJECT_ID}/locations/{VERTEX_LOCATION}/publishers/google/models/imagen-4.0-upscale-preview:predict"
-        
-        payload = {
-            "instances": [{
-                "image": {"bytesBase64Encoded": img_b64}
-            }],
-            "parameters": {
-                "sampleImageSize": "4096",
-                "mode": "upscale"
-            }
-        }
-        
-        resp = requests.post(
-            url,
-            headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
-            json=payload,
-            timeout=120
-        )
-        
-        print(f"[VERTEX] Status: {resp.status_code}, Response: {resp.text[:300]}")
-        if resp.status_code == 200:
-            data = resp.json()
-            predictions = data.get("predictions", [])
-            if predictions:
-                result = predictions[0].get("bytesBase64Encoded") or predictions[0].get("image", {}).get("bytesBase64Encoded")
-                if result:
-                    return result
-                print(f"[VERTEX] Pas de bytesBase64Encoded dans: {str(predictions[0])[:200]}")
+def upscale_image_vertex(img_b64, max_retries=30):
+    """Upscale via Vertex AI Imagen 4 avec retries"""
+    url = f"https://{VERTEX_LOCATION}-aiplatform.googleapis.com/v1/projects/{VERTEX_PROJECT_ID}/locations/{VERTEX_LOCATION}/publishers/google/models/imagen-4.0-upscale-preview:predict"
+    payload = {
+        "instances": [{"image": {"bytesBase64Encoded": img_b64}}],
+        "parameters": {"upscaleConfig": {"upscaleFactor": "x2"}}
+    }
+    for attempt in range(1, max_retries + 1):
+        try:
+            token = get_vertex_token()
+            resp = requests.post(
+                url,
+                headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+                json=payload,
+                timeout=120
+            )
+            print(f"[VERTEX] Tentative {attempt}: Status {resp.status_code}")
+            if resp.status_code == 200:
+                data = resp.json()
+                predictions = data.get("predictions", [])
+                if predictions:
+                    result = predictions[0].get("bytesBase64Encoded")
+                    if result:
+                        return result
             else:
-                print(f"[VERTEX] Pas de predictions dans: {str(data)[:200]}")
-        return None
-    except Exception as e:
-        print(f"[VERTEX] Exception: {e}")
-        import traceback
-        traceback.print_exc()
-        return None
+                print(f"[VERTEX] Erreur {resp.status_code}: {resp.text[:200]}")
+            if attempt < max_retries:
+                wait = min(4 * attempt, 30)
+                print(f"[VERTEX] Retry dans {wait}s...")
+                time.sleep(wait)
+        except Exception as e:
+            print(f"[VERTEX] Exception tentative {attempt}: {e}")
+            if attempt < max_retries:
+                wait = min(4 * attempt, 30)
+                time.sleep(wait)
+    print(f"[VERTEX] ❌ Échec après {max_retries} tentatives")
+    return None
 from datetime import datetime, timezone, timedelta
 from concurrent.futures import ThreadPoolExecutor
 from flask import Flask, render_template, request, Response, jsonify
