@@ -1512,78 +1512,24 @@ def call_gemini_only(img_bytes, mime, name, number, name_below=None, max_retries
     return {"success": False, "error": last_error}
 
 def upscale_image(img_b64):
-    """Phase 2 : upscale 4K — Vertex AI en priorité, Replicate en fallback"""
-    # Essayer Vertex AI d'abord (vrai 4K natif Google)
-    if GOOGLE_CREDENTIALS_JSON:
-        print("[UPSCALE] Utilisation Vertex AI Imagen 4...")
-        result = upscale_image_vertex(img_b64)
-        if result:
-            print("[UPSCALE] ✅ 4K Vertex AI")
-            return result
-        print("[UPSCALE] Vertex AI échoué, fallback Replicate...")
-    
-    if not REPLICATE_API_KEY:
+    """Upscale 4K via Vertex AI Imagen 4 uniquement"""
+    if not GOOGLE_CREDENTIALS_JSON:
+        print("[UPSCALE] ⚠️ Pas de credentials Vertex AI — image non upscalée")
         return img_b64
-    MAX_UPSCALE_ATTEMPTS = 30
-    attempt = 0
-    while attempt < MAX_UPSCALE_ATTEMPTS:
-        attempt += 1
-        try:
-            print(f"[UPSCALE] Tentative {attempt}/{MAX_UPSCALE_ATTEMPTS}...")
-            r = requests.post(
-                "https://api.replicate.com/v1/predictions",
-                headers={"Authorization": f"Bearer {REPLICATE_API_KEY}", "Content-Type": "application/json", "Prefer": "wait"},
-                json={"version": "4fa021de8b0fa096ef5b4a541c2f6160d9a6d4c5dab499175e8179122d36aadb", "input": {"image": img_b64}},
-                timeout=300
-            )
-            if r.status_code in (200, 201, 202):
-                data_r = r.json()
-                output = data_r.get("output")
-                if not output:
-                    pid = data_r.get("id")
-                    for _ in range(60):
-                        time.sleep(2)
-                        p = requests.get(f"https://api.replicate.com/v1/predictions/{pid}",
-                            headers={"Authorization": f"Bearer {REPLICATE_API_KEY}"}, timeout=30).json()
-                        if p.get("status") == "succeeded" and p.get("output"):
-                            output = p["output"]; break
-                        elif p.get("status") in ("failed", "canceled"):
-                            break
-                if output:
-                    # output peut être du base64 direct (modèle custom) ou une URL (modèle public)
-                    if isinstance(output, str) and output.startswith("http"):
-                        img_4k = base64.b64encode(requests.get(output, timeout=60).content).decode()
-                    elif isinstance(output, str):
-                        img_4k = output  # base64 direct
-                    elif isinstance(output, list) and output[0].startswith("http"):
-                        img_4k = base64.b64encode(requests.get(output[0], timeout=60).content).decode()
-                    else:
-                        img_4k = output[0] if isinstance(output, list) else output
-                    print("[UPSCALE] ✅ 4K")
-                    return img_4k
-                else:
-                    print(f"[UPSCALE] Pas d'output, retry {attempt}...")
-                    time.sleep(3)
-            else:
-                wait = min(3 * attempt, 30) if r.status_code == 429 else min(2 * attempt, 20)
-                print(f"[UPSCALE] Erreur {r.status_code}, retry dans {wait}s...")
-                time.sleep(wait)
-        except Exception as e:
-            wait = min(2 * attempt, 20)
-            print(f"[UPSCALE] Erreur: {e}, retry dans {wait}s...")
-            time.sleep(wait)
-    print(f"[UPSCALE] ❌ Échec après {MAX_UPSCALE_ATTEMPTS} tentatives")
-    return None
-
+    print("[UPSCALE] Vertex AI Imagen 4...")
+    result = upscale_image_vertex(img_b64)
+    if result:
+        print("[UPSCALE] ✅ 4K Vertex AI")
+        return result
+    print("[UPSCALE] ❌ Vertex AI échoué — image retournée sans upscale")
+    return img_b64
 def call_gemini(img_bytes, mime, name, number, name_below=None, max_retries=5, resolution="1k"):
     """Compatibilité — génère et upscale en une fois (pour generate_single)"""
     result = call_gemini_only(img_bytes, mime, name, number, name_below, max_retries)
     if not result["success"]:
         return result
-    if REPLICATE_API_KEY:
-        upscaled = upscale_image(result["image"])
-        if not upscaled:
-            return {"success": False, "error": "❌ Upscaling 4K impossible. Relance cette image."}
+    upscaled = upscale_image(result["image"])
+    if upscaled:
         result["image"] = upscaled
     return result
 
