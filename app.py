@@ -171,6 +171,8 @@ def _run_bulk_async(session_id, items, user, resolution):
     def gemini_one(item):
         idx = item["_index"]
         try:
+            # Échelonner le démarrage — évite de spammer 50 requêtes simultanées
+            time.sleep(idx * 0.1 % 3)  # délai 0-3s selon l'index
             pos_in_tiktok = idx % TIKTOK_SIZE  # 0-6
             if pos_in_tiktok < 4 and _pepites_list:
                 floc_str = _rnd.choice(_pepites_list)
