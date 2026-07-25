@@ -1434,7 +1434,7 @@ def upscale_image(img_b64):
                 json={"version": "4fa021de8b0fa096ef5b4a541c2f6160d9a6d4c5dab499175e8179122d36aadb", "input": {"image": img_b64}},
                 timeout=300
             )
-            if r.status_code in (200, 201):
+            if r.status_code in (200, 201, 202):
                 data_r = r.json()
                 output = data_r.get("output")
                 if not output:
