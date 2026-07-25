@@ -88,16 +88,22 @@ def upscale_image_vertex(img_b64):
             timeout=120
         )
         
+        print(f"[VERTEX] Status: {resp.status_code}, Response: {resp.text[:300]}")
         if resp.status_code == 200:
             data = resp.json()
             predictions = data.get("predictions", [])
             if predictions:
-                return predictions[0].get("bytesBase64Encoded") or predictions[0].get("image", {}).get("bytesBase64Encoded")
-        
-        print(f"[VERTEX] Erreur {resp.status_code}: {resp.text[:200]}")
+                result = predictions[0].get("bytesBase64Encoded") or predictions[0].get("image", {}).get("bytesBase64Encoded")
+                if result:
+                    return result
+                print(f"[VERTEX] Pas de bytesBase64Encoded dans: {str(predictions[0])[:200]}")
+            else:
+                print(f"[VERTEX] Pas de predictions dans: {str(data)[:200]}")
         return None
     except Exception as e:
         print(f"[VERTEX] Exception: {e}")
+        import traceback
+        traceback.print_exc()
         return None
 from datetime import datetime, timezone, timedelta
 from concurrent.futures import ThreadPoolExecutor
