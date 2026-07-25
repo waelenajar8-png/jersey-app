@@ -1429,7 +1429,7 @@ def upscale_image(img_b64):
         try:
             print(f"[UPSCALE] Tentative {attempt}/{MAX_UPSCALE_ATTEMPTS}...")
             r = requests.post(
-                "https://api.replicate.com/v1/models/nightmareai/real-esrgan/predictions",
+                "https://api.replicate.com/v1/models/waelenajar8-png/real-esrgan-upscaler/predictions",
                 headers={"Authorization": f"Bearer {REPLICATE_API_KEY}", "Content-Type": "application/json", "Prefer": "wait"},
                 json={"input": {"image": f"data:image/png;base64,{img_b64}", "scale": 4, "face_enhance": False}},
                 timeout=300
