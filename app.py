@@ -1431,9 +1431,17 @@ def upscale_image(img_b64):
         try:
             print(f"[UPSCALE] Tentative {attempt}/{MAX_UPSCALE_ATTEMPTS}...")
             r = requests.post(
-                "https://api.replicate.com/v1/predictions",
+                "https://api.replicate.com/v1/models/philz1337x/clarity-upscaler/predictions",
                 headers={"Authorization": f"Bearer {REPLICATE_API_KEY}", "Content-Type": "application/json", "Prefer": "wait"},
-                json={"version": "4fa021de8b0fa096ef5b4a541c2f6160d9a6d4c5dab499175e8179122d36aadb", "input": {"image": img_b64}},
+                json={"input": {
+                    "image": f"data:image/png;base64,{img_b64}",
+                    "scale_factor": 4,
+                    "creativity": 0.1,
+                    "resemblance": 1.0,
+                    "dynamic": 6,
+                    "prompt": "masterpiece, best quality, highres",
+                    "negative_prompt": "(worst quality, low quality, normal quality:2)"
+                }},
                 timeout=300
             )
             if r.status_code in (200, 201, 202):
