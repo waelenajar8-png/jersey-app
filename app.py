@@ -223,11 +223,11 @@ def _run_bulk_async(session_id, items, user, resolution):
     with ThreadPoolExecutor(max_workers=WORKER_COUNT) as ex:
         list(ex.map(gemini_one, items))
 
-    # ── Phase 2 : Replicate séquentiel (une image à la fois) ─────────────
-    print(f"[BULK] Phase 2 — Upscaling 4K séquentiel...")
+    # ── Phase 2 : Replicate en parallèle (4 simultanés max) ─────────────
+    print(f"[BULK] Phase 2 — Upscaling 4K (4 parallèles)...")
     successful = [it for it in items if it.get("_gemini_result", {}).get("success")]
 
-    for item in successful:
+    def upscale_one(item):
         idx = item["_index"]
         img = item["_gemini_result"]["image"]
         try:
@@ -235,11 +235,10 @@ def _run_bulk_async(session_id, items, user, resolution):
                 upscaled = upscale_image(img)
                 if not upscaled:
                     _update_session(session_id, False, error="❌ Upscaling 4K impossible après 30 tentatives.", idx=idx)
-                    continue
+                    return
                 img = upscaled
-            # Passer le flocage tiré dans gemini_one
             _update_session(session_id, True, img, item.get("_floc",""), idx=idx, user=user, template_key=item.get("template_key",""))
-            img = None  # Libérer RAM immédiatement
+            img = None
         except Exception as e:
             print(f"[UPSCALE] Erreur inattendue image {idx}: {e}")
             _update_session(session_id, False, error=str(e), idx=idx)
@@ -248,6 +247,9 @@ def _run_bulk_async(session_id, items, user, resolution):
                 item["_gemini_result"]["image"] = None
             item["_gemini_result"] = None
             gc.collect()
+
+    with ThreadPoolExecutor(max_workers=4) as ex:
+        list(ex.map(upscale_one, successful))
 
     # Créer les TikToks une fois tout terminé
     _finalize_session(session_id, user)
