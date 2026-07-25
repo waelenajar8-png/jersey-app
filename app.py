@@ -1380,7 +1380,7 @@ def build_prompt(name, number, name_below=None):
         parts.append(f'Replace the large back number with "{number}" ({len(number)} digit(s): {digits}). Render ALL digits, none missing. Keep font, color, outline and center position. Scale digit width (not height/stroke) if digit count differs. No added logos or marks.')
     if name_below:
         parts.append(f'Replace the smaller text below the badge with "{name_below}". Keep same position gap, font, size, color and outline.')
-    parts.append("Keep ALL else identical: colors, texture, pattern, outlines, lighting, shadows, background, tags. Only swap text content.")
+    parts.append("Remove any visible tags, labels, stickers or QR codes on the jersey (hang tags, price tags, brand tags). Keep ALL else identical: colors, texture, pattern, outlines, lighting, shadows, background. Only swap text content and remove tags.")
     return " ".join(parts)
 
 def call_gemini_only(img_bytes, mime, name, number, name_below=None, max_retries=5):
