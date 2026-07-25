@@ -65,42 +65,76 @@ def get_vertex_token():
     with urllib.request.urlopen(req) as resp:
         return json.loads(resp.read())["access_token"]
 
-def upscale_image_vertex(img_b64, max_retries=30):
-    """Upscale via Vertex AI Imagen 4 avec retries"""
-    url = f"https://{VERTEX_LOCATION}-aiplatform.googleapis.com/v1/projects/{VERTEX_PROJECT_ID}/locations/{VERTEX_LOCATION}/publishers/google/models/imagen-4.0-upscale-preview:predict"
-    payload = {
-        "instances": [{"image": {"bytesBase64Encoded": img_b64}}],
-        "parameters": {"upscaleConfig": {"upscaleFactor": "x2"}}
-    }
+FAL_API_KEY = os.environ.get("FAL_API_KEY")
+
+def upscale_image_fal(img_b64, max_retries=30):
+    """Upscale 4K via fal.ai SeedVR2 — haute qualité, pas de quota"""
+    if not FAL_API_KEY:
+        return None
+    
     for attempt in range(1, max_retries + 1):
         try:
-            token = get_vertex_token()
+            print(f"[FAL] Tentative {attempt}/{max_retries}...")
+            # Soumettre la requête
             resp = requests.post(
-                url,
-                headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
-                json=payload,
-                timeout=120
+                "https://queue.fal.run/fal-ai/seedvr2/image",
+                headers={
+                    "Authorization": f"Key {FAL_API_KEY}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "image_url": f"data:image/png;base64,{img_b64}",
+                    "scale": 4,
+                    "model": "seedvr2-3b"
+                },
+                timeout=30
             )
-            print(f"[VERTEX] Tentative {attempt}: Status {resp.status_code}")
-            if resp.status_code == 200:
-                data = resp.json()
-                predictions = data.get("predictions", [])
-                if predictions:
-                    result = predictions[0].get("bytesBase64Encoded")
-                    if result:
-                        return result
-            else:
-                print(f"[VERTEX] Erreur {resp.status_code}: {resp.text[:200]}")
-            if attempt < max_retries:
-                wait = min(4 * attempt, 30)
-                print(f"[VERTEX] Retry dans {wait}s...")
-                time.sleep(wait)
+            
+            if resp.status_code not in (200, 201):
+                print(f"[FAL] Erreur {resp.status_code}: {resp.text[:200]}")
+                if attempt < max_retries:
+                    time.sleep(min(4 * attempt, 30))
+                continue
+            
+            data = resp.json()
+            request_id = data.get("request_id")
+            
+            if not request_id:
+                # Résultat direct
+                img_url = data.get("image", {}).get("url")
+                if img_url:
+                    img_data = requests.get(img_url, timeout=60).content
+                    print("[FAL] ✅ 4K")
+                    return base64.b64encode(img_data).decode()
+                continue
+            
+            # Polling pour le résultat
+            for _ in range(60):
+                time.sleep(3)
+                poll = requests.get(
+                    f"https://queue.fal.run/fal-ai/seedvr2/image/requests/{request_id}",
+                    headers={"Authorization": f"Key {FAL_API_KEY}"},
+                    timeout=30
+                )
+                if poll.status_code == 200:
+                    result = poll.json()
+                    status = result.get("status")
+                    if status == "COMPLETED":
+                        img_url = result.get("response", {}).get("image", {}).get("url")
+                        if img_url:
+                            img_data = requests.get(img_url, timeout=60).content
+                            print("[FAL] ✅ 4K")
+                            return base64.b64encode(img_data).decode()
+                        break
+                    elif status in ("FAILED", "CANCELLED"):
+                        print(f"[FAL] Statut: {status}")
+                        break
         except Exception as e:
-            print(f"[VERTEX] Exception tentative {attempt}: {e}")
+            print(f"[FAL] Exception tentative {attempt}: {e}")
             if attempt < max_retries:
-                wait = min(4 * attempt, 30)
-                time.sleep(wait)
-    print(f"[VERTEX] ❌ Échec après {max_retries} tentatives")
+                time.sleep(min(4 * attempt, 30))
+    
+    print(f"[FAL] ❌ Échec après {max_retries} tentatives")
     return None
 from datetime import datetime, timezone, timedelta
 from concurrent.futures import ThreadPoolExecutor
@@ -1516,17 +1550,58 @@ def call_gemini_only(img_bytes, mime, name, number, name_below=None, max_retries
     return {"success": False, "error": last_error}
 
 def upscale_image(img_b64):
-    """Upscale 4K via Vertex AI Imagen 4 uniquement"""
-    if not GOOGLE_CREDENTIALS_JSON:
-        print("[UPSCALE] ⚠️ Pas de credentials Vertex AI — image non upscalée")
+    """Upscale 4K via Real-ESRGAN (modèle privé Replicate)"""
+    if not REPLICATE_API_KEY:
+        print("[UPSCALE] ⚠️ REPLICATE_API_KEY manquant — image non upscalée")
         return img_b64
-    print("[UPSCALE] Vertex AI Imagen 4...")
-    result = upscale_image_vertex(img_b64)
-    if result:
-        print("[UPSCALE] ✅ 4K Vertex AI")
-        return result
-    print("[UPSCALE] ❌ Vertex AI échoué — image retournée sans upscale")
-    return img_b64
+    
+    MAX_UPSCALE_ATTEMPTS = 30
+    attempt = 0
+    while attempt < MAX_UPSCALE_ATTEMPTS:
+        attempt += 1
+        try:
+            print(f"[UPSCALE] Tentative {attempt}/{MAX_UPSCALE_ATTEMPTS}...")
+            r = requests.post(
+                "https://api.replicate.com/v1/predictions",
+                headers={"Authorization": f"Bearer {REPLICATE_API_KEY}", "Content-Type": "application/json", "Prefer": "wait"},
+                json={"version": "4fa021de8b0fa096ef5b4a541c2f6160d9a6d4c5dab499175e8179122d36aadb", "input": {"image": img_b64}},
+                timeout=300
+            )
+            if r.status_code in (200, 201, 202):
+                data_r = r.json()
+                output = data_r.get("output")
+                if not output:
+                    pid = data_r.get("id")
+                    for _ in range(60):
+                        time.sleep(2)
+                        p = requests.get(f"https://api.replicate.com/v1/predictions/{pid}",
+                            headers={"Authorization": f"Bearer {REPLICATE_API_KEY}"}, timeout=30).json()
+                        if p.get("status") == "succeeded" and p.get("output"):
+                            output = p["output"]; break
+                        elif p.get("status") in ("failed", "canceled"):
+                            break
+                if output:
+                    if isinstance(output, str) and output.startswith("http"):
+                        img_4k = base64.b64encode(requests.get(output, timeout=60).content).decode()
+                    elif isinstance(output, str):
+                        img_4k = output
+                    else:
+                        img_4k = output[0] if isinstance(output, list) else output
+                    print("[UPSCALE] ✅ 4K Real-ESRGAN")
+                    return img_4k
+                else:
+                    print(f"[UPSCALE] Pas d'output, retry {attempt}...")
+                    time.sleep(3)
+            else:
+                wait = min(3 * attempt, 30) if r.status_code == 429 else min(2 * attempt, 20)
+                print(f"[UPSCALE] Erreur {r.status_code}, retry dans {wait}s...")
+                time.sleep(wait)
+        except Exception as e:
+            wait = min(2 * attempt, 20)
+            print(f"[UPSCALE] Erreur: {e}, retry dans {wait}s...")
+            time.sleep(wait)
+    print(f"[UPSCALE] ❌ Échec après {MAX_UPSCALE_ATTEMPTS} tentatives")
+    return None
 def call_gemini(img_bytes, mime, name, number, name_below=None, max_retries=5, resolution="1k"):
     """Compatibilité — génère et upscale en une fois (pour generate_single)"""
     result = call_gemini_only(img_bytes, mime, name, number, name_below, max_retries)
