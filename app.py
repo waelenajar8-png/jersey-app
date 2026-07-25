@@ -25,7 +25,7 @@ _job_sessions = {}
 _job_sessions_lock = threading.Lock()
 
 # Nombre de workers parallèles pour la génération
-WORKER_COUNT = 20
+WORKER_COUNT = 10  # Réduit pour éviter OOM sur Railway Hobby
 
 def _get_or_create_session(session_id, total):
     with _job_sessions_lock:
@@ -47,36 +47,52 @@ def _get_or_create_session(session_id, total):
 def _update_session(session_id, success, image_b64=None, floc=None, error=None, idx=None, user=None, template_key=""):
     batch = None
     session_user = None
+
+    # Sauvegarder l'image dans R2 temp AVANT le lock — libère la RAM immédiatement
+    r2_img_key = None
+    if success and image_b64:
+        try:
+            r2_img_key = f"sessions/tmp/{session_id}_{idx}.png"
+            r2_put_image(r2_img_key, base64.b64decode(image_b64))
+            image_b64 = None  # Libérer la RAM immédiatement
+        except Exception as e:
+            print(f"[SESSION] Erreur stockage image temp R2: {e}")
+            r2_img_key = None
+
     with _job_sessions_lock:
         s = _job_sessions.get(session_id)
         if not s:
             return
         s["done"] += 1
-        if success and image_b64:
-            # Stocker seulement métadonnées en RAM (pas l'image) — évite OOM avec 210 images
-            s["results"].append({"image": image_b64, "floc": floc, "orig_index": idx, "template_key": template_key})
-            s["pending_buffer"].append({"image": image_b64, "floc": floc, "template_key": template_key})
+        if success and r2_img_key:
+            s["results"].append({"r2_key": r2_img_key, "floc": floc, "orig_index": idx, "template_key": template_key})
+            s["pending_buffer"].append({"r2_key": r2_img_key, "floc": floc, "template_key": template_key})
         else:
             s["errors"] += 1
-            s["results"].append({"image": None, "floc": floc or "", "orig_index": idx, "error": error or "Erreur inconnue"})
+            s["results"].append({"r2_key": None, "floc": floc or "", "orig_index": idx, "error": error or "Erreur inconnue"})
         if s["done"] >= s["total"]:
             s["status"] = "done"
-        # Créer un TikTok toutes les 7 images — extraction atomique sous lock
         pending = s["pending_buffer"]
         session_user = s.get("user") or user
         if len(pending) >= TIKTOK_SIZE:
             batch = pending[:TIKTOK_SIZE]
             s["pending_buffer"] = pending[TIKTOK_SIZE:]
-    
+
     if batch:
         try:
-            imgs = [r["image"] for r in batch]
+            # Lire les images depuis R2 temp
+            imgs = []
+            for r in batch:
+                try:
+                    obj = get_r2().get_object(Bucket=R2_BUCKET, Key=r["r2_key"])
+                    imgs.append(base64.b64encode(obj["Body"].read()).decode())
+                    # Supprimer le fichier temp R2 après lecture
+                    get_r2().delete_object(Bucket=R2_BUCKET, Key=r["r2_key"])
+                except Exception:
+                    imgs.append(None)
             flocs = [r["floc"] for r in batch]
             tkeys = [r.get("template_key","") for r in batch]
             created, remaining = add_to_buffer_and_create_tiktoks(imgs, flocs, session_user, tkeys)
-            # NE PAS nullifier r["image"] ici — results pointe vers les mêmes dicts
-            # Le frontend a besoin de l'image pour l'afficher
-            # La RAM sera libérée naturellement quand la session est nettoyée
             with _job_sessions_lock:
                 s = _job_sessions.get(session_id)
                 if s:
@@ -100,12 +116,19 @@ def _finalize_session(session_id, user):
     if not pending:
         return
 
-    # Filtrer les images nulles (déjà libérées de la RAM)
-    valid = [r for r in pending if r.get("image")]
+    # Lire les images depuis R2 temp
+    valid = [r for r in pending if r.get("r2_key")]
     if not valid:
         return
 
-    imgs = [r["image"] for r in valid]
+    imgs = []
+    for r in valid:
+        try:
+            obj = get_r2().get_object(Bucket=R2_BUCKET, Key=r["r2_key"])
+            imgs.append(base64.b64encode(obj["Body"].read()).decode())
+            get_r2().delete_object(Bucket=R2_BUCKET, Key=r["r2_key"])
+        except Exception:
+            imgs.append(None)
     flocs = [r["floc"] for r in valid]
     tkeys = [r.get("template_key","") for r in valid]
     try:
@@ -192,12 +215,14 @@ def _run_bulk_async(session_id, items, user, resolution):
                 img = upscaled
             # Passer le flocage tiré dans gemini_one
             _update_session(session_id, True, img, item.get("_floc",""), idx=idx, user=user, template_key=item.get("template_key",""))
+            img = None  # Libérer RAM immédiatement
         except Exception as e:
             print(f"[UPSCALE] Erreur inattendue image {idx}: {e}")
             _update_session(session_id, False, error=str(e), idx=idx)
         finally:
             if item.get("_gemini_result"):
                 item["_gemini_result"]["image"] = None
+            item["_gemini_result"] = None
             gc.collect()
 
     # Créer les TikToks une fois tout terminé
@@ -2302,6 +2327,23 @@ def generate_bulk():
         "workers": WORKER_COUNT,
     })
 
+def _result_with_image(r, fallback_index):
+    """Lit l'image depuis R2 temp pour la retourner au frontend"""
+    img_b64 = None
+    r2_key = r.get("r2_key")
+    if r2_key:
+        try:
+            obj = get_r2().get_object(Bucket=R2_BUCKET, Key=r2_key)
+            img_b64 = base64.b64encode(obj["Body"].read()).decode()
+        except Exception:
+            pass
+    return {
+        "image": img_b64,
+        "floc": r.get("floc",""),
+        "index": r.get("orig_index", fallback_index),
+        "error": r.get("error")
+    }
+
 @app.route("/api/jobs/progress/<session_id>")
 def api_jobs_progress(session_id):
     """Polling endpoint — retourne aussi les nouvelles images depuis last_seen"""
@@ -2338,6 +2380,20 @@ def api_jobs_progress(session_id):
         }
     new_results = snap["new_results"]
     done = snap["done"]; total = snap["total"]
+
+    # Libérer les images déjà envoyées de la RAM
+    if new_results:
+        with _job_sessions_lock:
+            s2 = _job_sessions.get(session_id)
+            if s2:
+                for r in s2["results"][:last_seen + len(new_results)]:
+                    if not r.get("sent"):
+                        r["sent"] = True
+                        # Libérer l'image de la RAM après envoi
+                        # (on garde juste les métadonnées)
+                    elif r.get("image"):
+                        r["image"] = None  # déjà envoyée, libérer RAM
+
     return jsonify({
         "session_id": session_id,
         "total": total,
@@ -2348,7 +2404,7 @@ def api_jobs_progress(session_id):
         "tiktoks_created": snap["tiktoks_created"],
         "buffer_remaining": snap["buffer_remaining"],
         "percent": round(done / total * 100) if total else 0,
-        "new_results": [{"image": r.get("image"), "floc": r.get("floc",""), "index": r.get("orig_index", last_seen + i), "error": r.get("error")} for i, r in enumerate(new_results)],
+        "new_results": [_result_with_image(r, last_seen + i) for i, r in enumerate(new_results)],
         "seen_count": last_seen + len(new_results),
     })
 
