@@ -3,3 +3,4 @@ requests
 gunicorn
 boto3
 piexif
+cryptography
