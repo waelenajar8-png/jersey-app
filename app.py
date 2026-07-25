@@ -77,6 +77,28 @@ def _update_session(session_id, success, image_b64=None, floc=None, error=None, 
         if len(pending) >= TIKTOK_SIZE:
             batch = pending[:TIKTOK_SIZE]
             s["pending_buffer"] = pending[TIKTOK_SIZE:]
+        # Sauvegarder dans R2 toutes les 10 images pour survivre aux crashes
+        done_count = s["done"]
+        total_count = s["total"]
+        session_start = s.get("created_at","")
+        tiktoks_so_far = list(s.get("tiktoks_created",[]))
+
+    # Sauvegarder snapshot dans R2 toutes les 10 images
+    if done_count % 10 == 0 or done_count == total_count:
+        try:
+            r2_put_json(f"sessions/{session_id}.json", {
+                "id": session_id,
+                "user": session_user,
+                "start": session_start,
+                "last_update": datetime.now(timezone.utc).isoformat(),
+                "total": total_count,
+                "done": done_count,
+                "success": done_count - (0),  # approximatif
+                "status": "running" if done_count < total_count else "done",
+                "tiktoks_created": tiktoks_so_far,
+            })
+        except Exception:
+            pass
 
     if batch:
         try:
