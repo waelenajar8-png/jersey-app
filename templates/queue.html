@@ -675,13 +675,19 @@ async function ieDelete(i){
     if(!confirm(`Supprimer l'image ${i+1} définitivement ?`)) return;
     const t=allTiktoks.find(t=>t.r2_key===_ieCurrentKey);
     try{
-        await fetch('/api/queue/delete_image',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:_ieCurrentKey,index:i})});
-        _ieUrls.splice(i,1);
-        if(t) t.image_urls=[..._ieUrls];
+        const res=await fetch('/api/queue/delete_image',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:_ieCurrentKey,index:i})});
+        if(!res.ok){showStatus('❌ Erreur serveur lors de la suppression');return;}
+        // Mettre à jour TOUS les états
+        _ieItems.splice(i,1);
+        _ieUrls=_ieItems.map(it=>it.url);
+        _ieOriginalUrls=_ieItems.map(it=>it.url); // reset pour que saveImgOrder fonctionne
+        if(t){ t.image_urls=[..._ieUrls]; t.thumb_url=_ieUrls[0]||t.thumb_url; }
         renderIeGrid();
+        // Mettre à jour la thumbnail dans la carte
         const imgsGrid=document.getElementById(`imgs-${_ieCurrentId}`);
         if(imgsGrid&&t) imgsGrid.innerHTML=renderImgsGridHtml(t);
-    }catch(e){showStatus('❌ Erreur lors de la suppression');}
+        showStatus(`✅ Image ${i+1} supprimée`);
+    }catch(e){showStatus('❌ Erreur lors de la suppression: '+e.message);}
 }
 
 let _regenIndex=null;
@@ -747,8 +753,36 @@ async function selectRegenTemplate(templateKey){
     if(!templateKey){
         templateKey=(tiktokData.template_keys||[])[i]||'';
         if(!templateKey){
-            showStatus('⚠️ Template original non sauvegardé — choisis un template dans la grille ci-dessus');
-            document.getElementById('regenModal').classList.add('open');
+            // Pas de template sauvegardé — on utilise l'image actuelle comme base
+            // On régénère avec Gemini en utilisant l'URL de l'image existante
+            showStatus('⏳ Régénération avec nouveau flocage...');
+            try{
+                // Télécharger l'image actuelle depuis R2 et la régénérer
+                const imgUrl = _ieUrls[i];
+                if(!imgUrl){ showStatus('❌ Image introuvable'); renderIeGrid(); return; }
+                const imgRes = await fetch(imgUrl);
+                const imgBlob = await imgRes.blob();
+                const file = new File([imgBlob], 'image.png', {type: 'image/png'});
+                const fd = new FormData();
+                fd.append('image', file);
+                fd.append('name', parts[0]||'');
+                fd.append('number', parts[1]||'');
+                fd.append('name_below', parts[2]||'');
+                fd.append('user', document.querySelector('#userChipName')?.textContent||'');
+                fd.append('skip_buffer', 'true');
+                const grid2=document.getElementById('ieGrid');
+                const items2=[...grid2.querySelectorAll('.ie-item')];
+                if(items2[i]) items2[i].innerHTML=`<div style="display:flex;align-items:center;justify-content:center;aspect-ratio:3/4;background:var(--bg-elevated)"><div class="spinner"></div></div>`;
+                const res=await fetch('/generate_single',{method:'POST',body:fd});
+                const d=await res.json();
+                if(!res.ok||d.error){showStatus(`❌ Erreur: ${d.error}`);renderIeGrid();return}
+                _ieItems[i]={url:`data:image/png;base64,${d.image}`,origIndex:_ieItems[i].origIndex};
+                _ieUrls[i]=`data:image/png;base64,${d.image}`;
+                await fetch('/api/queue/replace_image',{method:'POST',headers:{'Content-Type':'application/json'},
+                    body:JSON.stringify({key:_ieCurrentKey,index:i,image:d.image,new_floc:floc})});
+                showStatus('✅ Image régénérée avec nouveau flocage !');
+                renderIeGrid();
+            }catch(e){showStatus(`❌ Erreur: ${e.message}`);renderIeGrid();}
             return;
         }
     }
