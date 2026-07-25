@@ -8,6 +8,97 @@ import requests
 import boto3
 
 REPLICATE_API_KEY = os.environ.get("REPLICATE_API_KEY")
+GOOGLE_CREDENTIALS_JSON = os.environ.get("GOOGLE_CREDENTIALS_JSON")
+VERTEX_PROJECT_ID = "gen-lang-client-0163500565"
+VERTEX_LOCATION = "us-central1"
+
+def get_vertex_token():
+    """Obtenir un token OAuth2 depuis les credentials JSON"""
+    import json, time
+    import urllib.request
+    import urllib.parse
+    creds = json.loads(GOOGLE_CREDENTIALS_JSON)
+    
+    # Créer le JWT
+    import base64
+    import hmac
+    import hashlib
+    
+    now = int(time.time())
+    header = base64.urlsafe_b64encode(json.dumps({"alg":"RS256","typ":"JWT"}).encode()).rstrip(b'=').decode()
+    payload = base64.urlsafe_b64encode(json.dumps({
+        "iss": creds["client_email"],
+        "scope": "https://www.googleapis.com/auth/cloud-platform",
+        "aud": "https://oauth2.googleapis.com/token",
+        "iat": now,
+        "exp": now + 3600
+    }).encode()).rstrip(b'=').decode()
+    
+    # Signer avec la clé privée RSA
+    from cryptography.hazmat.primitives import hashes, serialization
+    from cryptography.hazmat.primitives.asymmetric import padding
+    from cryptography.hazmat.backends import default_backend
+    
+    private_key = serialization.load_pem_private_key(
+        creds["private_key"].encode(),
+        password=None,
+        backend=default_backend()
+    )
+    
+    signing_input = f"{header}.{payload}".encode()
+    signature = private_key.sign(signing_input, padding.PKCS1v15(), hashes.SHA256())
+    sig_b64 = base64.urlsafe_b64encode(signature).rstrip(b'=').decode()
+    
+    jwt = f"{header}.{payload}.{sig_b64}"
+    
+    # Échanger le JWT contre un access token
+    data = urllib.parse.urlencode({
+        "grant_type": "urn:ietf:params:oauth:grant-type:jwt-bearer",
+        "assertion": jwt
+    }).encode()
+    
+    req = urllib.request.Request(
+        "https://oauth2.googleapis.com/token",
+        data=data,
+        headers={"Content-Type": "application/x-www-form-urlencoded"}
+    )
+    with urllib.request.urlopen(req) as resp:
+        return json.loads(resp.read())["access_token"]
+
+def upscale_image_vertex(img_b64):
+    """Upscale 4K via Vertex AI Imagen 4 — vrai 4K natif Google"""
+    try:
+        token = get_vertex_token()
+        url = f"https://{VERTEX_LOCATION}-aiplatform.googleapis.com/v1/projects/{VERTEX_PROJECT_ID}/locations/{VERTEX_LOCATION}/publishers/google/models/imagen-4.0-upscale-preview:predict"
+        
+        payload = {
+            "instances": [{
+                "image": {"bytesBase64Encoded": img_b64}
+            }],
+            "parameters": {
+                "sampleImageSize": "4096",
+                "mode": "upscale"
+            }
+        }
+        
+        resp = requests.post(
+            url,
+            headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+            json=payload,
+            timeout=120
+        )
+        
+        if resp.status_code == 200:
+            data = resp.json()
+            predictions = data.get("predictions", [])
+            if predictions:
+                return predictions[0].get("bytesBase64Encoded") or predictions[0].get("image", {}).get("bytesBase64Encoded")
+        
+        print(f"[VERTEX] Erreur {resp.status_code}: {resp.text[:200]}")
+        return None
+    except Exception as e:
+        print(f"[VERTEX] Exception: {e}")
+        return None
 from datetime import datetime, timezone, timedelta
 from concurrent.futures import ThreadPoolExecutor
 from flask import Flask, render_template, request, Response, jsonify
@@ -1421,7 +1512,16 @@ def call_gemini_only(img_bytes, mime, name, number, name_below=None, max_retries
     return {"success": False, "error": last_error}
 
 def upscale_image(img_b64):
-    """Phase 2 : upscale 4K via Replicate — à appeler séquentiellement"""
+    """Phase 2 : upscale 4K — Vertex AI en priorité, Replicate en fallback"""
+    # Essayer Vertex AI d'abord (vrai 4K natif Google)
+    if GOOGLE_CREDENTIALS_JSON:
+        print("[UPSCALE] Utilisation Vertex AI Imagen 4...")
+        result = upscale_image_vertex(img_b64)
+        if result:
+            print("[UPSCALE] ✅ 4K Vertex AI")
+            return result
+        print("[UPSCALE] Vertex AI échoué, fallback Replicate...")
+    
     if not REPLICATE_API_KEY:
         return img_b64
     MAX_UPSCALE_ATTEMPTS = 30
