@@ -1448,7 +1448,15 @@ def upscale_image(img_b64):
                         elif p.get("status") in ("failed", "canceled"):
                             break
                 if output:
-                    img_4k = base64.b64encode(requests.get(output, timeout=60).content).decode()
+                    # output peut être du base64 direct (modèle custom) ou une URL (modèle public)
+                    if isinstance(output, str) and output.startswith("http"):
+                        img_4k = base64.b64encode(requests.get(output, timeout=60).content).decode()
+                    elif isinstance(output, str):
+                        img_4k = output  # base64 direct
+                    elif isinstance(output, list) and output[0].startswith("http"):
+                        img_4k = base64.b64encode(requests.get(output[0], timeout=60).content).decode()
+                    else:
+                        img_4k = output[0] if isinstance(output, list) else output
                     print("[UPSCALE] ✅ 4K")
                     return img_4k
                 else:
