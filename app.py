@@ -1431,7 +1431,7 @@ def upscale_image(img_b64):
             r = requests.post(
                 "https://api.replicate.com/v1/predictions",
                 headers={"Authorization": f"Bearer {REPLICATE_API_KEY}", "Content-Type": "application/json", "Prefer": "wait"},
-                json={"version": "c9384fcf887e070bd7f80fe86f22f994638360bf48362201f61504547e262b10", "input": {"image": f"data:image/png;base64,{img_b64}", "scale": 4, "face_enhance": False}},
+                json={"version": "c9384fcf887e070bd7f80fe86f22f994638360bf48362201f61504547e262b10", "input": {"image": img_b64}},
                 timeout=300
             )
             if r.status_code in (200, 201):
