@@ -342,8 +342,9 @@ def _run_bulk_async(session_id, items, user, resolution):
             item["_gemini_result"] = None
             gc.collect()
 
-    with ThreadPoolExecutor(max_workers=4) as ex:
-        list(ex.map(upscale_one, successful))
+    # Vertex AI : séquentiel pour éviter les 429 quota
+    for item in successful:
+        upscale_one(item)
 
     # Créer les TikToks une fois tout terminé
     _finalize_session(session_id, user)
