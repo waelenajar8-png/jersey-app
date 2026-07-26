@@ -1834,9 +1834,12 @@ def _do_schedule():
             if not tiktok_data:
                 errors.append(f"TikTok {tiktok.get('number','')} introuvable")
                 continue
-            if tiktok_data.get("status") == "scheduled":
-                errors.append(f"TikTok {tiktok.get('number','')} déjà programmé, ignoré")
+            if tiktok_data.get("status") in ("scheduled", "scheduling"):
+                errors.append(f"TikTok {tiktok.get('number','')} déjà programmé ou en cours, ignoré")
                 continue
+            # Marquer immédiatement comme "en cours" pour éviter les doublons
+            tiktok_data["status"] = "scheduling"
+            r2_put_json(tiktok["r2_key"], tiktok_data)
 
             # Créneau personnalisé ?
             custom = custom_slots.get(tiktok["r2_key"])
