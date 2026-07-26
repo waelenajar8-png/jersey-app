@@ -1915,18 +1915,22 @@ def _do_schedule():
                     "platform_options": {"tiktok": {"add_music": True}}
                 }
                 resp = None
-                for _ in range(3):
+                for attempt_r in range(5):
                     try:
                         resp = requests.post(
                             f"https://robinreach.com/api/v1/posts?api_key={ROBINREACH_API_KEY}&brand_id={brand_id}",
                             headers={"Accept": "application/json", "Content-Type": "application/json"},
                             json=payload, timeout=90
                         )
-                        break
+                        if resp.status_code in (200, 201):
+                            break
+                        print(f"[ROBINREACH] Tentative {attempt_r+1}/5 — status {resp.status_code}, retry...")
+                        time.sleep(3)
                     except requests.exceptions.Timeout:
-                        continue
+                        print(f"[ROBINREACH] Timeout tentative {attempt_r+1}/5, retry...")
+                        time.sleep(3)
                 if resp is None:
-                    return {"error": f"TikTok {tiktok.get('number','')}: Timeout"}
+                    return {"error": f"TikTok {tiktok.get('number','')}: Timeout après 5 tentatives"}
                 print(f"[ROBINREACH] Response {resp.status_code}: {resp.text[:200]}")
                 if resp.status_code not in (200, 201):
                     return {"error": f"TikTok {tiktok.get('number','')}: {resp.text[:200]}"}
