@@ -1736,6 +1736,20 @@ def api_assign():
     r2_put_json(key, t)
     return jsonify({"success": True})
 
+@app.route("/api/queue/unassign_all", methods=["POST"])
+def api_unassign_all():
+    """Désassigne tous les TikToks en une seule passe R2"""
+    keys = sorted(r2_list_keys(PFX_QUEUE))
+    keys = [k for k in keys if "/imgs/" not in k]
+    done = 0
+    for k in keys:
+        t = r2_get_json(k)
+        if t and t.get("account"):
+            t["account"] = None
+            r2_put_json(k, t)
+            done += 1
+    return jsonify({"success": True, "unassigned": done})
+
 @app.route("/api/queue/assign_batch", methods=["POST"])
 def api_assign_batch():
     """Assigne plusieurs TikToks d'un coup — évite les 100 appels R2 séquentiels"""
@@ -2261,10 +2275,12 @@ def api_unschedule():
 
         # Supprimer le post sur RobinReach si on a son ID
         robinreach_post_id = tiktok.get("robinreach_post_id")
-        if robinreach_post_id and ROBINREACH_API_KEY and ROBINREACH_BRAND_ID:
+        tiktok_account = tiktok.get("account", "")
+        brand_id_del = ROBINREACH_BRAND_IDS.get(tiktok_account, ROBINREACH_BRAND_ID)
+        if robinreach_post_id and ROBINREACH_API_KEY and brand_id_del:
             try:
                 del_resp = requests.delete(
-                    f"https://robinreach.com/api/v1/posts/{robinreach_post_id}?api_key={ROBINREACH_API_KEY}&brand_id={ROBINREACH_BRAND_ID}",
+                    f"https://robinreach.com/api/v1/posts/{robinreach_post_id}?api_key={ROBINREACH_API_KEY}&brand_id={brand_id_del}",
                     headers={"Accept": "application/json"},
                     timeout=30
                 )
