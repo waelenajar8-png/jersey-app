@@ -923,6 +923,13 @@ async function flushAssigns(){
     }
 }
 
+// Sauvegarder avant fermeture de page
+window.addEventListener('beforeunload', () => {
+    if(Object.keys(_pendingAssigns).length > 0) {
+        flushAssigns();
+    }
+});
+
 function assign(key, account){
     const t=allTiktoks.find(t=>t.r2_key===key);
     if(t) t.account=account||null;
@@ -1093,6 +1100,7 @@ async function scheduleOne(key){
     _schedulingOneInProgress.add(key);
     const t = allTiktoks.find(t=>t.r2_key===key);
     if(!t||!t.account){_schedulingOneInProgress.delete(key);alert('Assigne d\'abord un compte.');return}
+    _sessionAssigns.add(key);
 
     const btn = document.querySelector(`#c-${t.id} .schedule-one-btn`);
     const statusEl = document.getElementById(`status-${t.id}`);
