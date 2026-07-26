@@ -2769,8 +2769,10 @@ def api_calendar_robinreach():
                 headers={"Accept": "application/json"},
                 timeout=15
             )
+            print(f"[CALENDAR] {account}: status {resp.status_code}")
             if resp.status_code == 200:
                 data = resp.json()
+                print(f"[CALENDAR] {account}: réponse keys={list(data.keys()) if isinstance(data, dict) else 'liste'}, len={len(data) if isinstance(data, list) else 'dict'}")
                 posts = data if isinstance(data, list) else data.get("data", data.get("posts", []))
                 for post in posts:
                     all_posts.append({
