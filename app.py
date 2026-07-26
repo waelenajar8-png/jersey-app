@@ -2776,6 +2776,7 @@ def api_calendar_robinreach():
                 posts = data.get("posts", data.get("data", [])) if isinstance(data, dict) else data
                 print(f"[CALENDAR] {account}: {len(posts)} posts trouvés")
                 for post in posts:
+                    print(f"[CALENDAR POST] keys={list(post.keys())}, publish_time={post.get('publish_time')}, scheduled_at={post.get('scheduled_at')}")
                     all_posts.append({
                         "account": account,
                         "robinreach_id": post.get("id"),
@@ -2783,6 +2784,7 @@ def api_calendar_robinreach():
                         "media_urls": post.get("media_urls", []),
                         "content": post.get("content", ""),
                     })
+                    break  # juste le premier pour le debug
         except Exception as e:
             print(f"[CALENDAR] Erreur RobinReach {account}: {e}")
     
