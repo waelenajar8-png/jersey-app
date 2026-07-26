@@ -1780,17 +1780,35 @@ def api_dispatch():
         r2_put_json(t["r2_key"], {**t, "image_urls": None, "r2_key": None, "account": acc})
     return jsonify({"success":True,"count":len(unassigned)})
 
+_schedule_result = {}
+
 @app.route("/api/queue/schedule", methods=["POST"])
 def api_schedule():
     if not _schedule_lock.acquire(blocking=False):
         return jsonify({"error": "Une programmation est déjà en cours, réessaie dans quelques secondes."}), 429
-    try:
-     return _do_schedule()
-    finally:
-     _schedule_lock.release()
-
-def _do_schedule():
+    
     data = request.json or {}
+    
+    def run_schedule():
+        try:
+            with app.app_context():
+                result = _do_schedule_data(data)
+                _schedule_result["last"] = result
+        finally:
+            _schedule_lock.release()
+    
+    t = threading.Thread(target=run_schedule, daemon=True)
+    t.start()
+    return jsonify({"success": True, "message": "Programmation lancée en arrière-plan", "background": True})
+
+@app.route("/api/queue/schedule/status")
+def api_schedule_status():
+    """Retourne le résultat de la dernière programmation"""
+    return jsonify(_schedule_result.get("last", {"pending": True}))
+
+def _do_schedule_data(data=None):
+    if data is None:
+        data = request.json or {}
     start_date_str = data.get("start_date")
     custom_slots = data.get("custom_slots", {})
     single_key = data.get("single_key")  # programmer un seul TikTok
@@ -2777,7 +2795,12 @@ def api_calendar_robinreach():
                 print(f"[CALENDAR] {account}: {len(posts)} posts trouvés")
                 for post in posts:
                     attachments = post.get("attachments", [])
-                    media_urls = [a.get("url") or a if isinstance(a, str) else a.get("url","") for a in attachments] if attachments else []
+                    media_urls = []
+                    for a in attachments:
+                        if isinstance(a, str):
+                            media_urls.append(a)
+                        elif isinstance(a, dict):
+                            media_urls.append(a.get("url",""))
                     all_posts.append({
                         "account": account,
                         "robinreach_id": post.get("id"),
