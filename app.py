@@ -2754,6 +2754,37 @@ if __name__ == "__main__":
 def calendar_page():
     return render_template("calendar.html")
 
+@app.route("/api/calendar/robinreach")
+def api_calendar_robinreach():
+    """Fetch les posts programmés directement depuis RobinReach pour tous les comptes"""
+    if not ROBINREACH_API_KEY:
+        return jsonify({"error": "RobinReach non configuré"}), 400
+    
+    all_posts = []
+    for account, robinreach_id in ROBINREACH_ACCOUNTS.items():
+        brand_id = ROBINREACH_BRAND_IDS.get(account, ROBINREACH_BRAND_ID)
+        try:
+            resp = requests.get(
+                f"https://robinreach.com/api/v1/posts?api_key={ROBINREACH_API_KEY}&brand_id={brand_id}&status=scheduled&per_page=100",
+                headers={"Accept": "application/json"},
+                timeout=15
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                posts = data if isinstance(data, list) else data.get("data", data.get("posts", []))
+                for post in posts:
+                    all_posts.append({
+                        "account": account,
+                        "robinreach_id": post.get("id"),
+                        "scheduled_at": post.get("publish_time") or post.get("scheduled_at"),
+                        "media_urls": post.get("media_urls", []),
+                        "content": post.get("content", ""),
+                    })
+        except Exception as e:
+            print(f"[CALENDAR] Erreur RobinReach {account}: {e}")
+    
+    return jsonify({"posts": all_posts, "total": len(all_posts)})
+
 @app.route("/api/calendar")
 def api_calendar():
     """Retourne tous les TikToks programmés groupés par compte et par date"""
