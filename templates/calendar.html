@@ -229,6 +229,18 @@ async function init(){
                     status: p.status || 'scheduled'
                 };
             }).filter(Boolean);
+            // Construire les tabs depuis les events RobinReach
+            const accounts = [...new Set(allEvents.map(e=>e.account).filter(Boolean))].sort();
+            const tabs=document.getElementById('accountTabs');
+            tabs.innerHTML=`<div class="account-tab active" data-account="all" onclick="setAccount('all',this)">Tous</div>`;
+            accounts.forEach(acc=>{
+                const tab=document.createElement('div');
+                tab.className='account-tab';
+                tab.dataset.account=acc;
+                tab.onclick=function(){setAccount(acc,this)};
+                tab.textContent=acc;
+                tabs.appendChild(tab);
+            });
             renderCalendar();
             return;
         }
