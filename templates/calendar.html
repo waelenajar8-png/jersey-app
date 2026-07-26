@@ -229,7 +229,7 @@ async function init(){
                     thumb_url: p.media_urls?.[0] || null,
                     number: p.robinreach_id,
                     robinreach_id: p.robinreach_id,
-                    status: 'scheduled'
+                    status: p.status || 'scheduled'
                 };
             }).filter(Boolean);
             renderCalendar();
