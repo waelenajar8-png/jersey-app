@@ -1793,7 +1793,11 @@ def api_schedule():
         try:
             with app.app_context():
                 result = _do_schedule_data(data)
-                _schedule_result["last"] = result
+                # Stocker le dict, pas la Response Flask
+                if hasattr(result, 'get_json'):
+                    _schedule_result["last"] = result.get_json()
+                else:
+                    _schedule_result["last"] = result
         finally:
             _schedule_lock.release()
     
@@ -1804,7 +1808,15 @@ def api_schedule():
 @app.route("/api/queue/schedule/status")
 def api_schedule_status():
     """Retourne le résultat de la dernière programmation"""
-    return jsonify(_schedule_result.get("last", {"pending": True}))
+    result = _schedule_result.get("last")
+    if result is None:
+        return jsonify({"pending": True})
+    # Si c'est un objet Response Flask, extraire les données
+    if hasattr(result, 'get_json'):
+        return result
+    if hasattr(result, 'json'):
+        return result
+    return jsonify(result)
 
 def _do_schedule_data(data=None):
     if data is None:
