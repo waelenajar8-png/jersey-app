@@ -420,12 +420,12 @@ FIXED_CAPTION  = "3 Maillot Acheté 1 Offert 🎁 #volakits #ete #foot"
 # Créneaux de publication en UTC, PAR COMPTE (le principal poste plus souvent que les autres)
 # Conversion heure française (UTC+2 été) → UTC : soustraire 2h
 SCHEDULE_TIMES_BY_ACCOUNT = {
-    "Volakits Main (wael)": ["07:00", "10:30", "14:00", "17:30", "19:30"],  # 9h/12h30/16h/19h30/21h30 Paris — 5x/jour
-    "Volakits 1 (seik)":    ["07:00", "10:30", "14:00", "17:30", "19:30"],
-    "Volakits 2 (momo)":    ["07:00", "10:30", "14:00", "17:30", "19:30"],
-    "Volakits 6 (wassim)":  ["07:00", "10:30", "14:00", "17:30", "19:30"],
+    "Volakits Main (wael)": ["07:00", "10:30", "14:00", "17:30", "19:30"],  # 5x/jour
+    "Volakits 1 (seik)":    ["10:30", "17:30"],  # 2x/jour
+    "Volakits 2 (momo)":    ["10:30", "17:30"],  # 2x/jour
+    "Volakits 6 (wassim)":  ["10:30", "17:30"],  # 2x/jour
 }
-SCHEDULE_TIMES_DEFAULT = ["07:00", "10:30", "14:00", "17:30", "19:30"]  # 5x/jour pour tous
+SCHEDULE_TIMES_DEFAULT = ["10:30", "17:30"]  # 2x/jour par defaut
 
 def get_schedule_times_for_account(account):
     """Retourne les créneaux horaires (UTC) pour un compte donné"""
