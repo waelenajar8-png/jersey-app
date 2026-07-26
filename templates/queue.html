@@ -231,6 +231,15 @@ h1{font-size:24px;margin:0;font-weight:800;letter-spacing:-0.02em}
         <button class="btn-sec" style="padding:6px 12px;font-size:12px" onclick="selectAll()">⭐ Tout → Compte principal</button>
         <button class="btn-sec" style="padding:6px 12px;font-size:12px;display:none" id="deselectBtn" onclick="deselectAll()">✖️ Désélectionner tout</button>
         <span id="selCount"></span>
+        <!-- Sélection rapide N TikToks -->
+        <div style="display:flex;align-items:center;gap:6px;margin-left:auto">
+            <input type="number" id="selectNCount" value="20" min="1" max="500"
+                style="width:60px;padding:5px 8px;background:var(--bg-elevated);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:12px;text-align:center">
+            <select id="selectNAccount" style="padding:5px 8px;background:var(--bg-elevated);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:12px">
+                <option value="">— Compte —</option>
+            </select>
+            <button class="btn-sec" onclick="selectNForAccount()" style="padding:5px 12px;font-size:12px">✅ Sélectionner</button>
+        </div>
     </div>
 
     <div class="filters-row">
@@ -382,6 +391,7 @@ async function loadAll(){
     applyFilters();
     updateCounters();
     setupInfiniteScroll();
+    populateSelectNAccount();
 }
 
 async function loadPage(page){
@@ -1021,7 +1031,17 @@ async function scheduleAll(){
     customSlots={};
 
     if(d.errors?.length){
-        showStatus(`✅ ${d.scheduled}/${total} programmés — ⚠️ ${d.errors.length} erreur(s) : ${d.errors[0]}`);
+        showStatus(`✅ ${d.scheduled}/${total} programmés — ⚠️ ${d.errors.length} échec(s)`);
+        // Afficher bouton pour reprogrammer les échecs
+        setTimeout(async ()=>{
+            const failed = allTiktoks.filter(t=>t.account);
+            if(failed.length>0){
+                const retry = confirm(`${failed.length} TikTok(s) n'ont pas été programmés. Réessayer maintenant ?`);
+                if(retry){
+                    await scheduleAll();
+                }
+            }
+        }, 1500);
     } else {
         showStatus(`✅ ${d.scheduled} TikTok(s) programmés avec succès !`);
     }
@@ -1030,9 +1050,12 @@ async function scheduleAll(){
 }
 
 // ── Programmer un seul TikTok ───────────────────────────────────────────────
+const _schedulingOneInProgress = new Set();
 async function scheduleOne(key){
+    if(_schedulingOneInProgress.has(key)) return;
+    _schedulingOneInProgress.add(key);
     const t = allTiktoks.find(t=>t.r2_key===key);
-    if(!t||!t.account){alert('Assigne d\'abord un compte.');return}
+    if(!t||!t.account){_schedulingOneInProgress.delete(key);alert('Assigne d\'abord un compte.');return}
 
     const btn = document.querySelector(`#c-${t.id} .schedule-one-btn`);
     const statusEl = document.getElementById(`status-${t.id}`);
@@ -1071,7 +1094,36 @@ async function scheduleOne(key){
     }catch(e){
         if(statusEl){statusEl.className='card-status err';statusEl.textContent=`❌ ${e.message}`}
         if(btn) btn.disabled=false;
+    } finally {
+        _schedulingOneInProgress.delete(key);
     }
+}
+
+function populateSelectNAccount(){
+    const sel = document.getElementById('selectNAccount');
+    if(!sel||!accounts.main) return;
+    const all = [accounts.main, ...(accounts.others||[]).filter(a=>a!==accounts.main)].filter(Boolean);
+    sel.innerHTML = '<option value="">— Compte —</option>' + all.map(a=>`<option value="${a}">${a}</option>`).join('');
+}
+
+function selectNForAccount(){
+    const n = parseInt(document.getElementById('selectNCount').value) || 20;
+    const account = document.getElementById('selectNAccount').value;
+    if(!account){ alert('Choisis un compte'); return; }
+    
+    const filtered = getFilteredSorted().filter(t => !t.account || t.account === account);
+    const toSelect = filtered.slice(0, n);
+    
+    if(!toSelect.length){ showStatus('Aucun TikTok disponible'); return; }
+    
+    toSelect.forEach(t => {
+        assign(t.r2_key, account);
+        selectedForMain.add(t.r2_key);
+    });
+    
+    render();
+    updateCounters();
+    showStatus(`✅ ${toSelect.length} TikTok(s) assignés à ${account}`);
 }
 
 function updateCounters(){
