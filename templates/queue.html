@@ -1067,6 +1067,39 @@ async function scheduleAll(){
     });
     const d=await res.json();
 
+    // Si lancé en background, poller le statut
+    if(d.background){
+        showStatus('⏳ Programmation en cours en arrière-plan...');
+        let attempts=0;
+        const poll=setInterval(async()=>{
+            attempts++;
+            try{
+                const sr=await fetch('/api/queue/schedule/status').then(r=>r.json());
+                if(!sr.pending||attempts>90){
+                    clearInterval(poll);
+                    progFill.style.width='100%';
+                    setTimeout(()=>progWrap.classList.remove('show'),600);
+                    _schedulingInProgress=false;
+                    document.getElementById('scheduleBtn').disabled=false;
+                    _sessionAssigns.clear();
+                    customSlots={};
+                    updateCounters();
+                    await loadAll();
+                    if(sr.scheduled!==undefined){
+                        if(sr.errors?.length){
+                            showStatus(`✅ ${sr.scheduled} programmés — ⚠️ ${sr.errors.length} erreur(s)`);
+                        } else {
+                            showStatus(`✅ ${sr.scheduled} TikTok(s) programmés !`);
+                        }
+                    }
+                } else {
+                    showStatus(`⏳ Programmation en cours... ${attempts*2}s`);
+                }
+            }catch(e){}
+        }, 2000);
+        return;
+    }
+
     progFill.style.width='100%';
     setTimeout(()=>progWrap.classList.remove('show'),600);
     _schedulingInProgress=false;
@@ -1075,16 +1108,6 @@ async function scheduleAll(){
 
     if(d.errors?.length){
         showStatus(`✅ ${d.scheduled}/${total} programmés — ⚠️ ${d.errors.length} échec(s)`);
-        // Afficher bouton pour reprogrammer les échecs
-        setTimeout(async ()=>{
-            const failed = allTiktoks.filter(t=>t.account);
-            if(failed.length>0){
-                const retry = confirm(`${failed.length} TikTok(s) n'ont pas été programmés. Réessayer maintenant ?`);
-                if(retry){
-                    await scheduleAll();
-                }
-            }
-        }, 1500);
     } else {
         showStatus(`✅ ${d.scheduled} TikTok(s) programmés avec succès !`);
     }
