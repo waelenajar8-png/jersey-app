@@ -209,7 +209,29 @@ let viewMonth=currentDate.getMonth(); // 0-11
 
 // ── Init ──
 async function init(){
-    const res=await fetch('/api/calendar');
+    // Charger depuis RobinReach (source principale) + R2 (backup)
+    let res;
+    try {
+        res = await fetch('/api/calendar/robinreach');
+        const rr = await res.json();
+        if(rr.posts && rr.posts.length > 0) {
+            // Convertir format RobinReach → format calendrier
+            events = rr.posts.map(p => {
+                const dt = p.scheduled_at ? new Date(p.scheduled_at) : null;
+                return {
+                    account: p.account,
+                    date: dt ? dt.toLocaleDateString('fr-FR', {timeZone:'Europe/Paris'}).split('/').reverse().join('-') : '',
+                    time: dt ? dt.toLocaleTimeString('fr-FR', {timeZone:'Europe/Paris', hour:'2-digit', minute:'2-digit'}).replace(':','h') : '',
+                    thumb_url: p.media_urls?.[0] || null,
+                    number: p.robinreach_id,
+                    robinreach_id: p.robinreach_id
+                };
+            });
+            renderCalendar(events);
+            return;
+        }
+    } catch(e) { console.log('[CAL] RobinReach error, fallback R2'); }
+    res=await fetch('/api/calendar');
     const data=await res.json();
     allEvents=data.events||[];
     scheduleTimes=data.schedule_times||{};
@@ -394,7 +416,7 @@ document.getElementById('dayPopup').addEventListener('click',function(e){if(e.ta
 
 init();
 // Refresh toutes les 5 minutes
-setInterval(init,300000);
+setInterval(init,120000); // refresh toutes les 2 minutes
 </script>
 </body>
 </html>
