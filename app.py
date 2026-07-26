@@ -2784,6 +2784,7 @@ def api_calendar_robinreach():
                         "scheduled_at": post.get("publish_time") or post.get("scheduled_at"),
                         "media_urls": media_urls,
                         "content": post.get("content", ""),
+                        "status": post.get("status", "scheduled"),
                     })
         except Exception as e:
             print(f"[CALENDAR] Erreur RobinReach {account}: {e}")
