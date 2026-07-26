@@ -922,7 +922,7 @@ async function flushAssigns(){
 
 function assign(key, account){
     const t=allTiktoks.find(t=>t.r2_key===key);
-    if(t) t.account=account;
+    if(t) t.account=account||null;
     if(t){
         const card=document.getElementById(`c-${t.id}`);
         if(card){
@@ -936,8 +936,13 @@ function assign(key, account){
             if(scheduleBtn) scheduleBtn.disabled=!account;
         }
     }
+    // Si désélection — retirer de selectedForMain
+    if(!account){
+        selectedForMain.delete(key);
+        checkedForDelete.delete(key);
+    }
     updateCounters();
-    _pendingAssigns[key] = account;
+    _pendingAssigns[key] = account||'';
     if(_assignTimer) clearTimeout(_assignTimer);
     _assignTimer = setTimeout(flushAssigns, 400);
 }
