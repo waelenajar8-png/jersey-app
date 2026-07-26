@@ -909,6 +909,8 @@ function toggleMain(key){
 // Batch assignations — toutes envoyées ensemble après 400ms d'inactivité
 const _pendingAssigns = {};
 let _assignTimer = null;
+// Assignations de la session courante uniquement
+const _sessionAssigns = new Set();
 
 async function flushAssigns(){
     const batch = Object.entries(_pendingAssigns).map(([key, account]) => ({key, account}));
@@ -937,16 +939,17 @@ function assign(key, account){
             if(scheduleBtn) scheduleBtn.disabled=!account;
         }
     }
-    // Gérer selectedForMain selon le compte
+    // Gérer selectedForMain et session selon le compte
     if(!account){
         selectedForMain.delete(key);
         checkedForDelete.delete(key);
+        _sessionAssigns.delete(key);
     } else if(account !== accounts.main){
-        // Réassigné vers un autre compte — retirer de selectedForMain
         selectedForMain.delete(key);
+        _sessionAssigns.add(key);
     } else {
-        // Assigné au main — ajouter à selectedForMain
         selectedForMain.add(key);
+        _sessionAssigns.add(key);
     }
     updateCounters();
     _pendingAssigns[key] = account||'';
@@ -956,16 +959,23 @@ function assign(key, account){
 
 async function unassignAll(){
     if(!confirm('Désassigner tous les comptes de tous les TikToks ?')) return;
-    allTiktoks.forEach(t => {
-        t.account = null;
-        _pendingAssigns[t.r2_key] = '';
-    });
-    selectedForMain.clear();
-    if(_assignTimer) clearTimeout(_assignTimer);
-    await flushAssigns();
-    render();
-    updateCounters();
-    showStatus('✅ Tous les comptes désassignés');
+    showStatus('⏳ Désassignation en cours...');
+    try{
+        const res = await fetch('/api/queue/unassign_all', {method:'POST'});
+        const d = await res.json();
+        // Mettre à jour le cache local
+        allTiktoks.forEach(t => { t.account = null; });
+        selectedForMain.clear();
+        _sessionAssigns.clear();
+        // Vider les assignations en attente
+        Object.keys(_pendingAssigns).forEach(k => delete _pendingAssigns[k]);
+        if(_assignTimer) clearTimeout(_assignTimer);
+        render();
+        updateCounters();
+        showStatus(`✅ ${d.unassigned} TikTok(s) désassignés`);
+    }catch(e){
+        showStatus('❌ Erreur lors de la désassignation');
+    }
 }
 
 function selectAll(){
@@ -1009,8 +1019,8 @@ function setCustomTime(key, value){
 
 // ── Récap avant programmation globale ──────────────────────────────────────
 function confirmScheduleAll(){
-    const assigned=allTiktoks.filter(t=>t.account);
-    if(!assigned.length){alert('Assigne d\'abord un compte à chaque TikTok');return}
+    const assigned=allTiktoks.filter(t=>t.account && _sessionAssigns.has(t.r2_key));
+    if(!assigned.length){alert('Assigne d\'abord un compte à des TikToks dans cette session');return}
     const startDate = document.getElementById('startDate').value;
     const byAccount = {};
     assigned.forEach(t=>{byAccount[t.account]=(byAccount[t.account]||0)+1});
@@ -1031,7 +1041,7 @@ async function scheduleAll(){
     if(_schedulingInProgress) return; // double-clic protection
     _schedulingInProgress=true;
     closeRecap();
-    const assigned=allTiktoks.filter(t=>t.account);
+    const assigned=allTiktoks.filter(t=>t.account && _sessionAssigns.has(t.r2_key));
     const total=assigned.length;
     const startDate=document.getElementById('startDate').value;
     document.getElementById('scheduleBtn').disabled=true;
@@ -1071,6 +1081,7 @@ async function scheduleAll(){
     } else {
         showStatus(`✅ ${d.scheduled} TikTok(s) programmés avec succès !`);
     }
+    _sessionAssigns.clear();
     updateCounters();
     await loadAll();
 }
