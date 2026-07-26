@@ -2773,7 +2773,8 @@ def api_calendar_robinreach():
             if resp.status_code == 200:
                 data = resp.json()
                 print(f"[CALENDAR] {account}: réponse keys={list(data.keys()) if isinstance(data, dict) else 'liste'}, len={len(data) if isinstance(data, list) else 'dict'}")
-                posts = data if isinstance(data, list) else data.get("data", data.get("posts", []))
+                posts = data.get("posts", data.get("data", [])) if isinstance(data, dict) else data
+                print(f"[CALENDAR] {account}: {len(posts)} posts trouvés")
                 for post in posts:
                     all_posts.append({
                         "account": account,
