@@ -2824,8 +2824,9 @@ def api_calendar_robinreach():
                         "status": post.get("status", "scheduled"),
                     })
                 pagination = data.get("pagination", {})
-                total_pages = pagination.get("total_pages", 1)
-                if page >= total_pages:
+                print(f"[CALENDAR PAGE] {account} page {page}: pagination={pagination}")
+                total_pages = pagination.get("total_pages", pagination.get("last_page", pagination.get("pages", 1)))
+                if page >= total_pages or len(posts) < 100:
                     break
                 page += 1
         except Exception as e:
