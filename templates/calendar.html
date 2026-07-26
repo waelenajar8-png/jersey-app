@@ -209,7 +209,31 @@ let viewMonth=currentDate.getMonth(); // 0-11
 
 // ── Init ──
 async function init(){
-    const res=await fetch('/api/calendar');
+    // Charger depuis RobinReach (tous les posts avec pagination)
+    let res;
+    try {
+        const rr = await fetch('/api/calendar/robinreach').then(r=>r.json());
+        if(rr.posts && rr.posts.length > 0) {
+            allEvents = rr.posts.map(p => {
+                const dt = p.scheduled_at ? new Date(p.scheduled_at) : null;
+                if(!dt) return null;
+                const parisDate = new Intl.DateTimeFormat('fr-CA', {timeZone:'Europe/Paris', year:'numeric', month:'2-digit', day:'2-digit'}).format(dt);
+                const parisTime = new Intl.DateTimeFormat('fr-FR', {timeZone:'Europe/Paris', hour:'2-digit', minute:'2-digit'}).format(dt).replace(':','h');
+                return {
+                    account: p.account,
+                    date: parisDate,
+                    time: parisTime,
+                    thumb_url: p.media_urls?.[0] || null,
+                    number: p.robinreach_id,
+                    robinreach_id: p.robinreach_id,
+                    status: p.status || 'scheduled'
+                };
+            }).filter(Boolean);
+            renderCalendar();
+            return;
+        }
+    } catch(e) { console.log('[CAL] RobinReach error, fallback R2'); }
+    res=await fetch('/api/calendar');
     const data=await res.json();
     allEvents=data.events||[];
     scheduleTimes=data.schedule_times||{};
