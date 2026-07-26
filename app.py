@@ -2794,17 +2794,19 @@ def api_calendar_robinreach():
     for account, robinreach_id in ROBINREACH_ACCOUNTS.items():
         brand_id = ROBINREACH_BRAND_IDS.get(account, ROBINREACH_BRAND_ID)
         try:
-            resp = requests.get(
-                f"https://robinreach.com/api/v1/posts?api_key={ROBINREACH_API_KEY}&brand_id={brand_id}&status=scheduled&per_page=100",
-                headers={"Accept": "application/json"},
-                timeout=15
-            )
-            print(f"[CALENDAR] {account}: status {resp.status_code}")
-            if resp.status_code == 200:
+            page = 1
+            while True:
+                resp = requests.get(
+                    f"https://robinreach.com/api/v1/posts?api_key={ROBINREACH_API_KEY}&brand_id={brand_id}&status=scheduled&per_page=100&page={page}",
+                    headers={"Accept": "application/json"},
+                    timeout=15
+                )
+                if resp.status_code != 200:
+                    break
                 data = resp.json()
-                print(f"[CALENDAR] {account}: réponse keys={list(data.keys()) if isinstance(data, dict) else 'liste'}, len={len(data) if isinstance(data, list) else 'dict'}")
-                posts = data.get("posts", data.get("data", [])) if isinstance(data, dict) else data
-                print(f"[CALENDAR] {account}: {len(posts)} posts trouvés")
+                posts = data.get("posts", []) if isinstance(data, dict) else data
+                if not posts:
+                    break
                 for post in posts:
                     attachments = post.get("attachments", [])
                     media_urls = []
@@ -2821,6 +2823,11 @@ def api_calendar_robinreach():
                         "content": post.get("content", ""),
                         "status": post.get("status", "scheduled"),
                     })
+                pagination = data.get("pagination", {})
+                total_pages = pagination.get("total_pages", 1)
+                if page >= total_pages:
+                    break
+                page += 1
         except Exception as e:
             print(f"[CALENDAR] Erreur RobinReach {account}: {e}")
     
