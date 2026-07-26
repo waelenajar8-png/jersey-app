@@ -230,6 +230,7 @@ h1{font-size:24px;margin:0;font-weight:800;letter-spacing:-0.02em}
     <div class="select-row">
         <button class="btn-sec" style="padding:6px 12px;font-size:12px" onclick="selectAll()">⭐ Tout → Compte principal</button>
         <button class="btn-sec" style="padding:6px 12px;font-size:12px;display:none" id="deselectBtn" onclick="deselectAll()">✖️ Désélectionner tout</button>
+        <button class="btn-sec" style="padding:6px 12px;font-size:12px;background:rgba(248,113,113,.1);border-color:rgba(248,113,113,.3);color:var(--danger)" onclick="unassignAll()">🗑️ Tout désassigner</button>
         <span id="selCount"></span>
         <!-- Sélection rapide N TikToks -->
         <div style="display:flex;align-items:center;gap:6px;margin-left:auto">
@@ -936,15 +937,35 @@ function assign(key, account){
             if(scheduleBtn) scheduleBtn.disabled=!account;
         }
     }
-    // Si désélection — retirer de selectedForMain
+    // Gérer selectedForMain selon le compte
     if(!account){
         selectedForMain.delete(key);
         checkedForDelete.delete(key);
+    } else if(account !== accounts.main){
+        // Réassigné vers un autre compte — retirer de selectedForMain
+        selectedForMain.delete(key);
+    } else {
+        // Assigné au main — ajouter à selectedForMain
+        selectedForMain.add(key);
     }
     updateCounters();
     _pendingAssigns[key] = account||'';
     if(_assignTimer) clearTimeout(_assignTimer);
     _assignTimer = setTimeout(flushAssigns, 400);
+}
+
+async function unassignAll(){
+    if(!confirm('Désassigner tous les comptes de tous les TikToks ?')) return;
+    allTiktoks.forEach(t => {
+        t.account = null;
+        _pendingAssigns[t.r2_key] = '';
+    });
+    selectedForMain.clear();
+    if(_assignTimer) clearTimeout(_assignTimer);
+    await flushAssigns();
+    render();
+    updateCounters();
+    showStatus('✅ Tous les comptes désassignés');
 }
 
 function selectAll(){
