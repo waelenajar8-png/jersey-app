@@ -216,18 +216,23 @@ async function init(){
         const rr = await res.json();
         if(rr.posts && rr.posts.length > 0) {
             // Convertir format RobinReach → format calendrier
-            events = rr.posts.map(p => {
+            allEvents = rr.posts.map(p => {
                 const dt = p.scheduled_at ? new Date(p.scheduled_at) : null;
+                if(!dt) return null;
+                // Format date YYYY-MM-DD en heure Paris
+                const parisDate = new Intl.DateTimeFormat('fr-CA', {timeZone:'Europe/Paris', year:'numeric', month:'2-digit', day:'2-digit'}).format(dt);
+                const parisTime = new Intl.DateTimeFormat('fr-FR', {timeZone:'Europe/Paris', hour:'2-digit', minute:'2-digit'}).format(dt).replace(':','h');
                 return {
                     account: p.account,
-                    date: dt ? dt.toLocaleDateString('fr-FR', {timeZone:'Europe/Paris'}).split('/').reverse().join('-') : '',
-                    time: dt ? dt.toLocaleTimeString('fr-FR', {timeZone:'Europe/Paris', hour:'2-digit', minute:'2-digit'}).replace(':','h') : '',
+                    date: parisDate,
+                    time: parisTime,
                     thumb_url: p.media_urls?.[0] || null,
                     number: p.robinreach_id,
-                    robinreach_id: p.robinreach_id
+                    robinreach_id: p.robinreach_id,
+                    status: 'scheduled'
                 };
-            });
-            renderCalendar(events);
+            }).filter(Boolean);
+            renderCalendar();
             return;
         }
     } catch(e) { console.log('[CAL] RobinReach error, fallback R2'); }
