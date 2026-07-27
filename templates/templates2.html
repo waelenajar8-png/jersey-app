@@ -217,7 +217,7 @@ document.getElementById('randSelectBtn').addEventListener('click', () => {
 
 document.getElementById('useSelectedBtn').addEventListener('click', () => {
     const keys = order.filter(k => selected.has(k));
-    localStorage.setItem('selected_templates', JSON.stringify(keys));
+    localStorage.setItem('selected_templates_v2', JSON.stringify(keys));
     window.location.href = '/';
 });
 
