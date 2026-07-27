@@ -1540,21 +1540,28 @@ def get_box_ref_b64():
     global _box_ref_cache
     if _box_ref_cache:
         return _box_ref_cache
+    # Essayer le fichier b64 pré-encodé en priorité
+    for path in ["/app/static/volakits_box_ref_b64.txt", "static/volakits_box_ref_b64.txt"]:
+        try:
+            with open(path, "r") as f:
+                _box_ref_cache = f.read().strip()
+                if _box_ref_cache:
+                    print("[BOX REF] Chargé depuis fichier local")
+                    return _box_ref_cache
+        except Exception:
+            pass
+    # Fallback R2
     try:
         r2 = get_r2()
         if r2:
             obj = r2.get_object(Bucket=R2_BUCKET, Key=KEY_BOX_REF)
             _box_ref_cache = base64.b64encode(obj["Body"].read()).decode()
+            print("[BOX REF] Chargé depuis R2")
             return _box_ref_cache
     except Exception:
         pass
-    # Fallback sur le fichier local
-    try:
-        with open("/app/static/volakits_box_ref.png", "rb") as f:
-            _box_ref_cache = base64.b64encode(f.read()).decode()
-            return _box_ref_cache
-    except Exception:
-        return None
+    print("[BOX REF] ⚠️ Référence boîte introuvable")
+    return None
 
 def call_gemini_only(img_bytes, mime, name, number, name_below=None, max_retries=5, prompt_fn=None):
     """Phase 1 : génère l'image avec Gemini uniquement, sans upscaling"""
