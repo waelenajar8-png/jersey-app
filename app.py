@@ -483,6 +483,7 @@ PFX_QUEUE     = "queue/"
 PFX_SCHEDULED = "scheduled/"
 PFX_TEMPLATES = "templates/"
 PFX_TEMPLATES_V2 = "templates_v2/"
+KEY_BOX_REF = "meta/volakits_box_ref.png"  # Image de référence boîte Volakits pour le générateur v2
 PFX_LOGS      = "logs/"
 KEY_BUFFER    = "buffer/pending.json"
 KEY_COUNTER   = "meta/tiktok_counter.json"
@@ -1531,6 +1532,30 @@ def build_prompt(name, number, name_below=None):
     parts.append("Remove any visible tags, labels, stickers or QR codes on the jersey (hang tags, price tags, brand tags). Keep ALL else identical: colors, texture, pattern, outlines, lighting, shadows, background. Only swap text content and remove tags.")
     return " ".join(parts)
 
+# Cache de la boîte référence en mémoire (chargée une fois depuis R2)
+_box_ref_cache = None
+
+def get_box_ref_b64():
+    """Retourne la photo de la boîte Volakits en base64 (cache mémoire)"""
+    global _box_ref_cache
+    if _box_ref_cache:
+        return _box_ref_cache
+    try:
+        r2 = get_r2()
+        if r2:
+            obj = r2.get_object(Bucket=R2_BUCKET, Key=KEY_BOX_REF)
+            _box_ref_cache = base64.b64encode(obj["Body"].read()).decode()
+            return _box_ref_cache
+    except Exception:
+        pass
+    # Fallback sur le fichier local
+    try:
+        with open("/app/static/volakits_box_ref.png", "rb") as f:
+            _box_ref_cache = base64.b64encode(f.read()).decode()
+            return _box_ref_cache
+    except Exception:
+        return None
+
 def call_gemini_only(img_bytes, mime, name, number, name_below=None, max_retries=5, prompt_fn=None):
     """Phase 1 : génère l'image avec Gemini uniquement, sans upscaling"""
     img_b64 = base64.b64encode(img_bytes).decode()
@@ -1538,10 +1563,16 @@ def call_gemini_only(img_bytes, mime, name, number, name_below=None, max_retries
         prompt = prompt_fn(name, number, name_below)
     else:
         prompt = build_prompt(name, number, name_below)
-    payload = {"contents": [{"parts": [
-        {"text": prompt},
-        {"inline_data": {"mime_type": mime, "data": img_b64}}
-    ]}]}
+    
+    # Pour v2: envoyer aussi la photo de référence de la boîte Volakits
+    parts = [{"text": prompt}, {"inline_data": {"mime_type": mime, "data": img_b64}}]
+    if prompt_fn == build_prompt_v2:
+        box_b64 = get_box_ref_b64()
+        if box_b64:
+            parts.append({"text": "This is the Volakits box reference image — use this exact box design to replace the competitor's box in the main image:"})
+            parts.append({"inline_data": {"mime_type": "image/png", "data": box_b64}})
+    
+    payload = {"contents": [{"parts": parts}]}
     last_error = None
     for attempt_num in range(max_retries + 1):
         try:
@@ -2749,6 +2780,19 @@ def api_template2_image():
         return jsonify({"image": base64.b64encode(data).decode(), "mime": mime})
     except Exception as e:
         return jsonify({"error": str(e)}), 404
+
+@app.route("/api/box_ref/upload", methods=["POST"])
+def api_box_ref_upload():
+    """Upload la photo de référence de la boîte Volakits pour le générateur v2"""
+    global _box_ref_cache
+    f = request.files.get("image")
+    if not f: return jsonify({"error": "Aucune image"}), 400
+    r2 = get_r2()
+    if not r2: return jsonify({"error": "R2 non configuré"}), 500
+    data = f.read()
+    r2.put_object(Bucket=R2_BUCKET, Key=KEY_BOX_REF, Body=data, ContentType=f.mimetype or "image/png")
+    _box_ref_cache = base64.b64encode(data).decode()
+    return jsonify({"success": True})
 
 @app.route("/api/templates2/upload", methods=["POST"])
 def api_templates2_upload():
