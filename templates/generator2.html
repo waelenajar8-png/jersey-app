@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Générateur V2 — Flat Lay</title>
+<title>🟡 Générateur V2 — Flat Lay</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -199,6 +199,8 @@ input[type=file]{display:none}
         <a href="/queue" class="nav-link">📋 File d'attente</a>
         <a href="/scheduled" class="nav-link">✅ Programmés</a>
         <a href="/templates" class="nav-link">🗂️ Templates</a>
+        <a href="/generator2" class="nav-link" style="color:#f59e0b;border:1px solid #f59e0b22">📦 Générateur V2</a>
+        <a href="/templates2" class="nav-link" style="color:#f59e0b;border:1px solid #f59e0b22">📦 Templates V2</a>
         <a href="/stats" class="nav-link">📈 Stats</a>
         <a href="/monitor" class="nav-link">👀 Monitor</a>
         <a href="/remove_box" class="nav-link">🗑️ Supprimer boîte</a>
@@ -251,7 +253,7 @@ input[type=file]{display:none}
     </div>
 
     <div class="btn-row">
-        <button class="btn-main" id="generateBtn">Lancer la génération</button>
+        <button class="btn-main" id="generateBtn" style="background:linear-gradient(135deg,#f59e0b,#d97706)">Lancer la génération</button>
         <button class="btn-main" id="testBtn" style="background:#6366f1">🧪 Test (1 image)</button>
         <button class="btn-sec" id="selectAllImgBtn" style="display:none" onclick="selectAllImages()">☑️ Tout sélectionner</button>
         <button class="btn-sec" id="dlSelBtn" style="display:none" onclick="dlSelected()">⬇️ Télécharger la sélection (<span id="selImgCount">0</span>)</button>
