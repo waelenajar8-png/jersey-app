@@ -199,6 +199,8 @@ input[type=file]{display:none}
         <a href="/queue" class="nav-link">📋 File d'attente</a>
         <a href="/scheduled" class="nav-link">✅ Programmés</a>
         <a href="/templates" class="nav-link">🗂️ Templates</a>
+        <a href="/generator2" class="nav-link" style="color:#f59e0b;border:1px solid #f59e0b22">📦 Générateur V2</a>
+        <a href="/templates2" class="nav-link" style="color:#f59e0b;border:1px solid #f59e0b22">📦 Templates V2</a>
         <a href="/stats" class="nav-link">📈 Stats</a>
         <a href="/monitor" class="nav-link">👀 Monitor</a>
         <a href="/remove_box" class="nav-link">🗑️ Supprimer boîte</a>
@@ -835,7 +837,8 @@ async function retryItem(index){
     fd.append('image',item.file);fd.append('name',item.name);fd.append('number',item.number);fd.append('name_below',item.name_below||'');fd.append('user',userEl.value.trim());
     fd.append('skip_buffer','true'); // évite de créer une image égarée dans un futur TikTok différent
     try{
-        const res=await fetch('/generate_single',{method:'POST',body:fd});
+        const ctrl=new AbortController(); setTimeout(()=>ctrl.abort(),300000);
+        const res=await fetch('/generate_single',{method:'POST',body:fd,signal:ctrl.signal});
         const d=await res.json();incrRPD();
         if(!res.ok||d.error){renderResult({index,error:d.error||'Erreur'});return}
         renderResult({index,image:d.image});
@@ -933,7 +936,10 @@ async function retryAllFailed(){
         fd.append('user', userEl.value.trim());
         fd.append('skip_buffer', 'true');
         try{
-            const res = await fetch('/generate_single',{method:'POST',body:fd});
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 300000); // 5 min timeout
+            const res = await fetch('/generate_single',{method:'POST',body:fd, signal: controller.signal});
+            clearTimeout(timeoutId);
             const d = await res.json();
             incrRPD();
             if(!res.ok||d.error){ renderResult({index:idx,error:d.error||'Erreur'}); }
@@ -941,7 +947,7 @@ async function retryAllFailed(){
                 generatedImages[idx] = {src:`data:image/png;base64,${d.image}`,name:item.name,number:item.number};
                 renderResult({index:idx,image:d.image});
             }
-        }catch(e){ renderResult({index:idx,error:e.message}); }
+        }catch(e){ renderResult({index:idx,error:e.name==='AbortError'?'Timeout — relance à nouveau':e.message}); }
         done++;
         btn.textContent = `⏳ ${done}/${total} relancé(s)...`;
         // Délai entre chaque pour ne pas spammer Replicate
