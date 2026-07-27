@@ -511,7 +511,7 @@ document.getElementById('randTemplatesBtn').addEventListener('click', async()=>{
     document.getElementById('randTemplatesBtn').disabled = true;
     try {
         // Un seul appel API — retourne N templates aléatoires avec leurs images
-        const res = await fetch(`/api/templates22/random?n=${n}`);
+        const res = await fetch(`/api/templates2/random?n=${n}`);
         const d = await res.json();
         if(!d.templates?.length){ hint.textContent='❌ Aucun template trouvé'; return; }
         hint.textContent = `⏳ Préparation de ${d.templates.length} templates...`;
@@ -536,7 +536,7 @@ document.getElementById('randTemplatesBtn').addEventListener('click', async()=>{
 
 // Charger depuis templates R2
 document.getElementById('loadTemplatesBtn').addEventListener('click',async()=>{
-    const keys=JSON.parse(localStorage.getItem('selected_templates')||'[]');
+    const keys=JSON.parse(localStorage.getItem('selected_templates_v2')||'[]');
     if(!keys.length){alert('Aucun template sélectionné. Va sur la page Templates et sélectionne des maillots.');return}
     document.getElementById('templateHint').textContent=`⏳ Chargement de ${keys.length} templates...`;
     const blobs=[];
