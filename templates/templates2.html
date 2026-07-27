@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Templates — Générateur</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root[data-theme="dark"]{
+    --bg:#0a0b0f; --bg-elevated:#0f1117;
+    --panel:#15171e; --panel-hover:#1a1d26;
+    --border:#242832; --border-strong:#323847;
+    --accent:#4ade80; --accent-grad:linear-gradient(135deg,#4ade80,#22d3ee); --accent-dim:rgba(74,222,128,.12);
+    --text:#f1f3f6; --text-dim:#8b93a3; --text-faint:#5b6373;
+    --danger:#f87171; --danger-dim:rgba(248,113,113,.12);
+    --shadow-sm:0 1px 2px rgba(0,0,0,.3);
+    --shadow-md:0 4px 12px rgba(0,0,0,.35),0 1px 3px rgba(0,0,0,.3);
+    --shadow-glow:0 0 0 1px rgba(74,222,128,.15),0 4px 16px rgba(74,222,128,.08);
+}
+:root[data-theme="light"]{
+    --bg:#f7f8fa; --bg-elevated:#ffffff;
+    --panel:#ffffff; --panel-hover:#f9fafb;
+    --border:#e5e7eb; --border-strong:#d1d5db;
+    --accent:#16a34a; --accent-grad:linear-gradient(135deg,#16a34a,#0891b2); --accent-dim:rgba(22,163,74,.08);
+    --text:#0f172a; --text-dim:#64748b; --text-faint:#94a3b8;
+    --danger:#dc2626; --danger-dim:rgba(220,38,38,.08);
+    --shadow-sm:0 1px 2px rgba(15,23,42,.06);
+    --shadow-md:0 4px 12px rgba(15,23,42,.08),0 1px 3px rgba(15,23,42,.06);
+    --shadow-glow:0 0 0 1px rgba(22,163,74,.12),0 4px 16px rgba(22,163,74,.06);
+}
+*{box-sizing:border-box}
+::selection{background:var(--accent);color:#0a0b0f}
+body{margin:0;font-family:'Inter',-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;padding:32px 24px;letter-spacing:-0.01em;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1200px;margin:0 auto}
+@keyframes fadeInUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+.topbar{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:24px;flex-wrap:wrap;gap:12px}
+h1{font-size:24px;margin:0;font-weight:800;letter-spacing:-0.02em}
+.nav{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+@media(max-width:640px){
+    .topbar{flex-direction:column;align-items:stretch}
+    .nav{flex-wrap:nowrap;overflow-x:auto;padding-bottom:4px;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+    .nav::-webkit-scrollbar{display:none}
+    .nav a,.theme-btn{flex-shrink:0}
+}
+.nav a{color:var(--text-dim);text-decoration:none;font-size:13px;font-weight:600;padding:6px 10px;border-radius:8px;transition:all .15s ease}
+.nav a:hover{color:var(--text);background:var(--panel-hover)}
+.btn{padding:11px 20px;background:var(--accent-grad);color:#06170d;border:none;border-radius:11px;font-size:13.5px;font-weight:700;cursor:pointer;box-shadow:var(--shadow-glow);transition:all .18s cubic-bezier(.16,1,.3,1)}
+.btn:hover:not(:disabled){transform:translateY(-1.5px);box-shadow:0 6px 20px rgba(74,222,128,.25),var(--shadow-glow)}
+.btn-sec{padding:10px 18px;background:var(--panel);border:1px solid var(--border);color:var(--text);border-radius:10px;font-size:12.5px;font-weight:600;cursor:pointer;transition:all .15s ease}
+.btn-sec:hover{border-color:var(--border-strong);transform:translateY(-1px);box-shadow:var(--shadow-sm)}
+.btn:disabled{opacity:0.4;cursor:not-allowed;box-shadow:none}
+.theme-btn{background:var(--panel);border:1px solid var(--border);color:var(--text);padding:6px 12px;border-radius:100px;cursor:pointer;font-size:13px;font-weight:600;box-shadow:var(--shadow-sm);transition:all .15s ease}
+.theme-btn:hover{border-color:var(--border-strong);transform:translateY(-1px)}
+.toolbar{display:flex;gap:10px;margin-bottom:20px;flex-wrap:wrap;align-items:center}
+.count{color:var(--text-dim);font-size:13px;font-weight:500}
+.dropzone{border:1.5px dashed var(--border-strong);border-radius:14px;padding:36px;text-align:center;cursor:pointer;color:var(--text-dim);font-size:14px;margin-bottom:20px;transition:all .2s ease;background:var(--bg-elevated)}
+.dropzone:hover{border-color:var(--accent);color:var(--text);background:var(--accent-dim)}
+.dropzone.drag{border-color:var(--accent);background:var(--accent-dim);transform:scale(1.005)}
+input[type=file]{display:none}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:14px}
+.card{background:var(--panel);border:1.5px solid var(--border);border-radius:14px;overflow:hidden;position:relative;cursor:pointer;transition:all .18s cubic-bezier(.16,1,.3,1)}
+.card:hover{border-color:var(--border-strong);transform:translateY(-2px);box-shadow:var(--shadow-md)}
+.card.selected{border-color:var(--accent);box-shadow:var(--shadow-glow)}
+.card img{width:100%;aspect-ratio:3/4;object-fit:cover;display:block;transition:transform .3s ease}
+.card:hover img{transform:scale(1.03)}
+.card-name{padding:8px 10px;font-size:11px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.card-del{position:absolute;top:6px;right:6px;background:rgba(220,38,38,.9);color:#fff;border:none;border-radius:100px;padding:3px 8px;font-size:10px;cursor:pointer;display:none;font-weight:600}
+.card:hover .card-del{display:block}
+.check{position:absolute;top:6px;left:6px;width:20px;height:20px;background:var(--accent-grad);border-radius:6px;display:none;align-items:center;justify-content:center;color:#06170d;font-size:11px;font-weight:700;box-shadow:var(--shadow-sm)}
+.card.selected .check{display:flex}
+.loading{text-align:center;color:var(--text-dim);padding:50px;font-size:14px;font-weight:500}
+.empty{text-align:center;color:var(--text-dim);padding:50px;font-size:14px;font-weight:500}
+.upload-progress{background:var(--accent-dim);border:1px solid rgba(74,222,128,.25);border-radius:12px;padding:13px 18px;margin-bottom:18px;font-size:13px;font-weight:500;display:none}
+</style>
+</head>
+<body>
+<div class="wrap">
+    <div class="topbar">
+        <h1>🗂️ Templates maillots</h1>
+        <div class="nav">
+            <a href="/">🎨 Générateur</a>
+            <a href="/queue">📋 File d'attente</a>
+            <a href="/scheduled">✅ Programmés</a>
+            <a href="/dashboard">📊 Dashboard</a>
+            <a href="/calendar">📅 Calendrier</a>
+            <a href="/stats">📈 Stats</a>
+            <a href="/remove_box">🗑️ Supprimer boîte</a>
+            <button class="theme-btn" id="themeBtn">☀️ Mode clair</button>
+        </div>
+    </div>
+
+    <div class="dropzone" id="dropzone">
+        📁 Clique ou dépose des images pour ajouter des templates
+        <input type="file" id="fileInput" multiple accept="image/*">
+    </div>
+
+    <div class="upload-progress" id="uploadProgress">⏳ Upload en cours...</div>
+
+    <div class="toolbar">
+        <button class="btn-sec" id="shuffleBtn">🔀 Ordre aléatoire</button>
+        <button class="btn-sec" id="selectAllBtn">☑️ Tout sélectionner</button>
+        <button class="btn-sec" id="deselectBtn" style="display:none">✖️ Désélectionner</button>
+        <div style="display:flex;align-items:center;gap:6px">
+            <input type="number" id="randCount" placeholder="ex: 100" min="1" style="width:80px;padding:6px 8px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:12px">
+            <button class="btn-sec" id="randSelectBtn">🎲 Sélectionner aléatoirement</button>
+        </div>
+        <button class="btn" id="useSelectedBtn" style="display:none">✅ Utiliser la sélection (0)</button>
+        <span class="count" id="countLabel">Chargement...</span>
+    </div>
+
+    <div id="grid" class="grid">
+        <div class="loading">⏳ Chargement des templates...</div>
+    </div>
+</div>
+
+<script>
+// Thème
+const html = document.documentElement;
+const themeBtn = document.getElementById('themeBtn');
+let currentTheme = localStorage.getItem('theme') || 'dark';
+applyTheme(currentTheme);
+function applyTheme(t) {
+    currentTheme = t;
+    html.setAttribute('data-theme', t);
+    themeBtn.textContent = t === 'dark' ? '☀️ Mode clair' : '🌙 Mode sombre';
+    localStorage.setItem('theme', t);
+}
+themeBtn.addEventListener('click', () => applyTheme(currentTheme === 'dark' ? 'light' : 'dark'));
+
+let templates = [];
+let selected = new Set();
+let order = [];
+
+async function loadTemplates() {
+    const res = await fetch('/api/templates2');
+    const data = await res.json();
+    templates = data.templates || [];
+    // Restore saved order
+    const savedOrder = JSON.parse(localStorage.getItem('template_order') || '[]');
+    if (savedOrder.length) {
+        order = savedOrder.filter(k => templates.find(t => t.key === k));
+        const remaining = templates.filter(t => !order.includes(t.key)).map(t => t.key);
+        order = [...order, ...remaining];
+    } else {
+        order = templates.map(t => t.key);
+    }
+    renderGrid();
+}
+
+function renderGrid() {
+    const grid = document.getElementById('grid');
+    const countLabel = document.getElementById('countLabel');
+    countLabel.textContent = `${templates.length} template(s)`;
+    if (!templates.length) {
+        grid.innerHTML = '<div class="empty">Aucun template — uploadez des images ci-dessus</div>';
+        return;
+    }
+    const sorted = order.map(k => templates.find(t => t.key === k)).filter(Boolean);
+    grid.innerHTML = sorted.map(t => `
+        <div class="card ${selected.has(t.key) ? 'selected' : ''}" data-key="${t.key}" onclick="toggleSelect('${t.key}')">
+            <div class="check">✓</div>
+            <img src="${t.url}" loading="lazy" alt="${t.name}">
+            <div class="card-name">${t.name}</div>
+            <button class="card-del" onclick="deleteTemplate(event, '${t.key}')">🗑️</button>
+        </div>
+    `).join('');
+    updateSelectionUI();
+}
+
+function toggleSelect(key) {
+    if (selected.has(key)) selected.delete(key);
+    else selected.add(key);
+    renderGrid();
+}
+
+function updateSelectionUI() {
+    const useBtn = document.getElementById('useSelectedBtn');
+    const deselectBtn = document.getElementById('deselectBtn');
+    if (selected.size > 0) {
+        useBtn.style.display = 'inline-block';
+        useBtn.textContent = `✅ Utiliser la sélection (${selected.size})`;
+        deselectBtn.style.display = 'inline-block';
+    } else {
+        useBtn.style.display = 'none';
+        deselectBtn.style.display = 'none';
+    }
+}
+
+document.getElementById('shuffleBtn').addEventListener('click', () => {
+    for (let i = order.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [order[i], order[j]] = [order[j], order[i]];
+    }
+    localStorage.setItem('template_order', JSON.stringify(order));
+    renderGrid();
+});
+
+document.getElementById('selectAllBtn').addEventListener('click', () => {
+    order.forEach(k => selected.add(k));
+    renderGrid();
+});
+
+document.getElementById('deselectBtn').addEventListener('click', () => {
+    selected.clear();
+    renderGrid();
+});
+
+document.getElementById('randSelectBtn').addEventListener('click', () => {
+    const n = parseInt(document.getElementById('randCount').value);
+    if (!n || n < 1) { alert('Entre un nombre valide.'); return; }
+    selected.clear();
+    const shuffled = [...order].sort(() => Math.random() - 0.5);
+    shuffled.slice(0, Math.min(n, order.length)).forEach(k => selected.add(k));
+    renderGrid();
+});
+
+document.getElementById('useSelectedBtn').addEventListener('click', () => {
+    const keys = order.filter(k => selected.has(k));
+    localStorage.setItem('selected_templates', JSON.stringify(keys));
+    window.location.href = '/';
+});
+
+async function deleteTemplate(e, key) {
+    e.stopPropagation();
+    if (!confirm(`Supprimer "${key}" ?`)) return;
+    await fetch('/api/templates2/delete', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({key})
+    });
+    templates = templates.filter(t => t.key !== key);
+    order = order.filter(k => k !== key);
+    selected.delete(key);
+    renderGrid();
+}
+
+// Upload
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('fileInput');
+const uploadProgress = document.getElementById('uploadProgress');
+
+dropzone.addEventListener('click', () => fileInput.click());
+dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('drag'); });
+dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag'));
+dropzone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropzone.classList.remove('drag');
+    uploadFiles(Array.from(e.dataTransfer.files));
+});
+fileInput.addEventListener('change', e => { uploadFiles(Array.from(e.target.files)); e.target.value = ''; });
+
+async function uploadFiles(files) {
+    if (!files.length) return;
+    uploadProgress.style.display = 'block';
+    uploadProgress.textContent = `⏳ Upload de ${files.length} fichier(s)...`;
+    const formData = new FormData();
+    files.forEach(f => formData.append('files', f));
+    const res = await fetch('/api/templates2/upload', { method: 'POST', body: formData });
+    const data = await res.json();
+    uploadProgress.textContent = `✅ ${data.uploaded?.length || 0} fichier(s) uploadé(s)`;
+    setTimeout(() => { uploadProgress.style.display = 'none'; }, 2000);
+    await loadTemplates();
+}
+
+loadTemplates();
+</script>
+</body>
+</html>
