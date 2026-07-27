@@ -335,7 +335,11 @@ def _run_bulk_async(session_id, items, user, resolution):
             fnum  = parts[1] if len(parts) > 1 else "2"
             fbelow = parts[2] if len(parts) > 2 else ""
             item["_floc"] = floc_str  # stocker pour _update_session
-            res = call_gemini_only(item["bytes"], item["mime"], fname, fnum, fbelow)
+            if item.get("variant") == "v2":
+                prompt_fn = build_prompt_v2
+            else:
+                prompt_fn = None
+            res = call_gemini_only(item["bytes"], item["mime"], fname, fnum, fbelow, prompt_fn=prompt_fn)
             item["_gemini_result"] = res
             log_generation(user, res["success"])
             if not res["success"]:
@@ -478,6 +482,7 @@ def api_auth_login():
 PFX_QUEUE     = "queue/"
 PFX_SCHEDULED = "scheduled/"
 PFX_TEMPLATES = "templates/"
+PFX_TEMPLATES_V2 = "templates_v2/"
 PFX_LOGS      = "logs/"
 KEY_BUFFER    = "buffer/pending.json"
 KEY_COUNTER   = "meta/tiktok_counter.json"
@@ -1497,6 +1502,20 @@ def move_to_scheduled(queue_key, account, dt_str, robinreach_post_id=None):
     return True
 
 # ── Prompt Gemini ──────────────────────────────────────────────────────────
+def build_prompt_v2(name, number, name_below=None):
+    """Prompt pour la variante flat lay (maillot à plat sur table avec boîte)"""
+    name_below = (name_below or name).strip().upper()
+    parts = [
+        f"This is a flat lay product photo of a jersey on a table with a gift box.",
+        f"Keep the exact same angle, lighting, blue background, composition and table surface.",
+        f"Replace the existing jersey text/flocking with: top line '{name.upper()}', number '{number}', bottom line '{name_below}'.",
+        f"Replace any existing gift box with a Volakits branded black gift box with 'VOLA KITS.' logo and a black ribbon bow, positioned in the same location as the original box.",
+        f"Remove any visible price tags, hang tags, QR codes or labels on the jersey.",
+        f"Keep ALL else identical: jersey shape, colors, texture, pattern, table surface, shadows, lighting.",
+        f"Only change the text/flocking on the jersey and replace the gift box with Volakits box."
+    ]
+    return " ".join(parts)
+
 def build_prompt(name, number, name_below=None):
     name = name.strip().upper()
     number = number.strip()
@@ -1512,10 +1531,13 @@ def build_prompt(name, number, name_below=None):
     parts.append("Remove any visible tags, labels, stickers or QR codes on the jersey (hang tags, price tags, brand tags). Keep ALL else identical: colors, texture, pattern, outlines, lighting, shadows, background. Only swap text content and remove tags.")
     return " ".join(parts)
 
-def call_gemini_only(img_bytes, mime, name, number, name_below=None, max_retries=5):
+def call_gemini_only(img_bytes, mime, name, number, name_below=None, max_retries=5, prompt_fn=None):
     """Phase 1 : génère l'image avec Gemini uniquement, sans upscaling"""
     img_b64 = base64.b64encode(img_bytes).decode()
-    prompt = build_prompt(name, number, name_below)
+    if prompt_fn:
+        prompt = prompt_fn(name, number, name_below)
+    else:
+        prompt = build_prompt(name, number, name_below)
     payload = {"contents": [{"parts": [
         {"text": prompt},
         {"inline_data": {"mime_type": mime, "data": img_b64}}
@@ -1624,6 +1646,12 @@ def scheduled_page(): return render_template("scheduled.html")
 
 @app.route("/templates")
 def templates_page(): return render_template("templates.html")
+
+@app.route("/generator2")
+def page_generator2(): return render_template("generator2.html")
+
+@app.route("/templates2")
+def page_templates2(): return render_template("templates2.html")
 
 @app.route("/dashboard")
 def dashboard():
@@ -2510,6 +2538,7 @@ def generate_bulk():
     template_keys_raw = request.form.get("template_keys", "[]")
     try: template_keys = json.loads(template_keys_raw)
     except: template_keys = []
+    variant = request.form.get("variant", "v1")  # v1=normal, v2=flat lay
 
     # Les flocages sont générés automatiquement (4 pépites + 3 normaux par TikTok)
     # Plus besoin de flocages manuels — on ignore le champ flocages
@@ -2519,6 +2548,7 @@ def generate_bulk():
             "bytes": f.read(), "mime": f.mimetype or "image/png",
             "name": "", "number": "", "name_below": None,
             "template_key": template_keys[i] if i < len(template_keys) else "",
+            "variant": variant,
         })
 
     # Initialiser la session immédiatement
@@ -2684,6 +2714,90 @@ def api_jobs_cancel(session_id):
     return jsonify({"success": True})
 
 # ── API Templates ───────────────────────────────────────────────────────────
+@app.route("/api/templates2")
+def api_templates2():
+    """Liste les templates de la variante v2 (flat lay)"""
+    r2 = get_r2()
+    if not r2: return jsonify({"templates": []})
+    try:
+        templates = []
+        kwargs = {"Bucket": R2_BUCKET, "Prefix": PFX_TEMPLATES_V2}
+        while True:
+            resp = r2.list_objects_v2(**kwargs)
+            for obj in resp.get("Contents", []):
+                k = obj["Key"]
+                if k.lower().endswith((".png", ".jpg", ".jpeg", ".webp")):
+                    url = r2_presigned(k, expires=3600)
+                    templates.append({"key": k, "name": k.replace(PFX_TEMPLATES_V2, "").rsplit(".", 1)[0], "url": url})
+            if not resp.get("IsTruncated"): break
+            kwargs["ContinuationToken"] = resp["NextContinuationToken"]
+        return jsonify({"templates": templates})
+    except Exception as e:
+        return jsonify({"templates": [], "error": str(e)})
+
+@app.route("/api/template2_image")
+def api_template2_image():
+    """Retourne une image template v2 en base64"""
+    key = request.args.get("key")
+    if not key: return jsonify({"error": "key requis"}), 400
+    r2 = get_r2()
+    if not r2: return jsonify({"error": "R2 non configuré"}), 500
+    try:
+        obj = r2.get_object(Bucket=R2_BUCKET, Key=key)
+        data = obj["Body"].read()
+        mime = "image/png" if key.lower().endswith(".png") else "image/jpeg"
+        return jsonify({"image": base64.b64encode(data).decode(), "mime": mime})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 404
+
+@app.route("/api/templates2/upload", methods=["POST"])
+def api_templates2_upload():
+    """Upload une template v2"""
+    files = request.files.getlist("images")
+    if not files: return jsonify({"error": "Aucune image"}), 400
+    r2 = get_r2()
+    if not r2: return jsonify({"error": "R2 non configuré"}), 500
+    uploaded = []
+    for f in files:
+        if not f.filename: continue
+        key = f"{PFX_TEMPLATES_V2}{f.filename}"
+        r2.put_object(Bucket=R2_BUCKET, Key=key, Body=f.read(), ContentType=f.mimetype or "image/png")
+        uploaded.append(key)
+    return jsonify({"success": True, "uploaded": uploaded})
+
+@app.route("/api/templates2/random")
+def api_templates2_random():
+    """Retourne N templates v2 aléatoires"""
+    import random as _random
+    n = int(request.args.get("n", 50))
+    r2 = get_r2()
+    if not r2: return jsonify({"templates": []})
+    try:
+        all_keys = []
+        kwargs = {"Bucket": R2_BUCKET, "Prefix": PFX_TEMPLATES_V2}
+        while True:
+            resp = r2.list_objects_v2(**kwargs)
+            for obj in resp.get("Contents", []):
+                k = obj["Key"]
+                if k.lower().endswith((".png", ".jpg", ".jpeg", ".webp")):
+                    all_keys.append(k)
+            if not resp.get("IsTruncated"): break
+            kwargs["ContinuationToken"] = resp["NextContinuationToken"]
+        _random.shuffle(all_keys)
+        selected = all_keys[:min(n, len(all_keys))]
+        templates = []
+        for k in selected:
+            try:
+                obj = r2.get_object(Bucket=R2_BUCKET, Key=k)
+                data = obj["Body"].read()
+                mime = "image/png" if k.lower().endswith(".png") else "image/jpeg"
+                templates.append({"key": k, "name": k.replace(PFX_TEMPLATES_V2, "").rsplit(".", 1)[0], "image": base64.b64encode(data).decode(), "mime": mime})
+            except Exception:
+                pass
+        return jsonify({"templates": templates, "total": len(all_keys)})
+    except Exception as e:
+        return jsonify({"templates": [], "error": str(e)})
+
 @app.route("/api/templates")
 def api_templates():
     r2 = get_r2()
