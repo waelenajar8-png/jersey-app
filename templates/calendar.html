@@ -225,8 +225,8 @@ async function init(){
                     date: parisDate,
                     time: parisTime,
                     thumb_url: p.media_urls?.[0] || null,
-                    number: p.robinreach_id,
-                    robinreach_id: p.robinreach_id,
+                    number: p.robinreach_id || p.metricool_id,
+                    post_id: p.robinreach_id || p.metricool_id,
                     status: p.status || 'scheduled'
                 };
             }).filter(Boolean);
