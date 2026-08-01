@@ -594,10 +594,12 @@ function renderCard(t){
                 </select>
                 <select class="account-select" style="margin-top:4px" onchange="setSlot('${t.r2_key}',this.value)">
                     <option value="">⏰ Créneau auto</option>
-                    <option value="12:30">12h30</option>
-                    <option value="16:00">16h00</option>
-                    <option value="19:30">19h30</option>
-                    <option value="21:00">21h00</option>
+                    <option value="10:00">10h00 (Main)</option>
+                    <option value="15:00">15h00 (Main)</option>
+                    <option value="18:30">18h30 (Main)</option>
+                    <option value="21:00">21h00 (Main)</option>
+                    <option value="10:30">10h30 (Autres)</option>
+                    <option value="17:30">17h30 (Autres)</option>
                     <option value="custom">🕐 Heure personnalisée...</option>
                 </select>
                 <input type="datetime-local" class="account-select" id="custom-${t.r2_key.replace(/[^a-z0-9]/gi,'_')}" style="margin-top:4px;display:none" onchange="setCustomTime('${t.r2_key}',this.value)">
