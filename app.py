@@ -440,8 +440,6 @@ R2_ACCESS_KEY = os.environ.get("R2_ACCESS_KEY_ID")
 R2_SECRET_KEY = os.environ.get("R2_SECRET_ACCESS_KEY")
 R2_BUCKET     = os.environ.get("R2_BUCKET", "jersey-templates")
 
-ROBINREACH_API_KEY  = os.environ.get("ROBINREACH_API_KEY")
-ROBINREACH_BRAND_ID = os.environ.get("ROBINREACH_BRAND_ID")  # Volakits Principal
 
 # Metricool API
 METRICOOL_TOKEN = os.environ.get("METRICOOL_TOKEN", "KPKUJFCYPOOCOAMHFLQWQEZWJNVQEPKTYFVBYVPDIVRYUVYDZPJXPVOXGDYGVOXK")
@@ -451,13 +449,6 @@ METRICOOL_ACCOUNTS = {
     # Autres comptes à ajouter plus tard
 }
 
-# Brand IDs par compte
-ROBINREACH_BRAND_IDS = {
-    "Volakits Main (wael)": os.environ.get("ROBINREACH_BRAND_ID", "daabd792abb3921e"),
-    "Volakits 1 (seik)":    "babc56d4969df579",
-    "Volakits 2 (momo)":    "f854dfa3161caf8b",
-    "Volakits 6 (wassim)":  "614afbc8348ab0d5",
-}
 
 # ── Auth utilisateurs ──────────────────────────────────────────────────────
 # Format: { "prenom": "mot_de_passe" }
@@ -1194,13 +1185,8 @@ def read_logs(days=30):
 
 # ── Comptes TikTok (stockés sur R2) ───────────────────────────────────────
 # ── Comptes TikTok RobinReach (IDs réels) ──────────────────────────────────
-ROBINREACH_ACCOUNTS = {
-    "Volakits Main (wael)": 11739,
-    "Volakits 1 (seik)":    11847,
-    "Volakits 2 (momo)":    11848,
-    "Volakits 6 (wassim)":  11846,
-}
 DEFAULT_MAIN_ACCOUNT = "Volakits Main (wael)"
+ALL_ACCOUNTS = list(METRICOOL_ACCOUNTS.keys())
 
 def get_accounts():
     data = r2_get_json(KEY_ACCOUNTS)
@@ -1992,7 +1978,7 @@ def _do_schedule_data(data=None):
 
     # ── Phase 1 : attribuer tous les créneaux en séquence (garanti sans doublons) ──
     # ── Phase 2 : envoyer à RobinReach + sauvegarder R2 en parallèle ──────────────
-    jobs = []  # liste de (tiktok, tiktok_data, account, robinreach_id, dt_str, display_time)
+    jobs = []
 
     for account, tiktoks in by_account.items():
         metricool_blog_id = METRICOOL_ACCOUNTS.get(account, {}).get("blog_id")
@@ -2059,7 +2045,6 @@ def _do_schedule_data(data=None):
                 "metricool_blog_id": metricool_blog_id,
                 "dt_str": dt_str,
                 "display_time": display_time,
-                "brand_id": ROBINREACH_BRAND_IDS.get(account, ROBINREACH_BRAND_ID),
             })
             used_slots.add(dt_str)
             add_used_slot(account, dt_str)
@@ -2069,7 +2054,7 @@ def _do_schedule_data(data=None):
                 if slot_index % len(account_times) == 0:
                     slot_date += timedelta(days=1)
 
-    # ── Phase 2 : RobinReach + R2 en parallèle ────────────────────────────
+    # ── Phase 2 : Metricool + R2 en parallèle ─────────────────────────────
     def process_schedule_job(job):
         tiktok = job["tiktok"]
         tiktok_data = job["tiktok_data"]
@@ -2077,9 +2062,8 @@ def _do_schedule_data(data=None):
         metricool_blog_id = job.get("metricool_blog_id")
         dt_str = job["dt_str"]
         display_time = job["display_time"]
-        brand_id = job["brand_id"]
 
-        # Utiliser Metricool si disponible pour ce compte, sinon RobinReach
+        # Metricool uniquement
         metricool_account = METRICOOL_ACCOUNTS.get(account)
         if metricool_account and metricool_account.get("active") and METRICOOL_TOKEN:
             try:
@@ -2110,15 +2094,15 @@ def _do_schedule_data(data=None):
             return {"error": f"TikTok {tiktok.get('number','')}: Compte '{account}' non configuré sur Metricool"}
 
         try:
-            move_to_scheduled(tiktok["r2_key"], account, dt_str, 
-                tiktok_data.get("robinreach_post_id"), 
+            move_to_scheduled(tiktok["r2_key"], account, dt_str,
+                None,
                 tiktok_data.get("metricool_post_id"))
         except Exception as e:
             print(f"[SCHEDULE] move_to_scheduled error: {e}")
 
         return {"success": True, "tiktok": tiktok.get("number",""), "account": account, "time": display_time}
 
-    # Lancer tous les jobs en parallèle (max 5 simultanés pour pas spammer RobinReach)
+    # Lancer tous les jobs en parallèle (max 5 simultanés)
     with ThreadPoolExecutor(max_workers=5) as ex:
         results_jobs = list(ex.map(process_schedule_job, jobs))
 
@@ -2228,13 +2212,13 @@ def api_delete_image():
 
 @app.route("/api/scheduled/check_status", methods=["POST"])
 def api_check_status():
-    """Vérifie le vrai statut de publication sur Metricool/RobinReach pour des TikToks donnés"""
+    """Vérifie le vrai statut de publication sur Metricool pour des TikToks donnés"""
     data = request.json or {}
     keys = data.get("keys", [])
     if not keys:
         return jsonify({"error": "keys requis"}), 400
-    if not ROBINREACH_API_KEY and not METRICOOL_TOKEN:
-        return jsonify({"error": "Aucune API configurée"}), 400
+    if not METRICOOL_TOKEN:
+        return jsonify({"error": "METRICOOL_TOKEN non configuré"}), 400
 
     results = {}
     for key in keys:
@@ -2246,7 +2230,6 @@ def api_check_status():
         tiktok_account = tiktok.get("account","")
         mc_acc = METRICOOL_ACCOUNTS.get(tiktok_account, {})
         metricool_id = tiktok.get("metricool_post_id")
-        post_id = tiktok.get("robinreach_post_id")
         
         # Vérifier sur Metricool en priorité
         if metricool_id and mc_acc.get("active") and METRICOOL_TOKEN:
@@ -2313,7 +2296,6 @@ def api_fix_slots():
     def reschedule_one(item):
         nonlocal slot_date, slot_index, updated
         key, tiktok_data = item
-        robinreach_post_id = tiktok_data.get("robinreach_post_id")
         metricool_post_id_fix = tiktok_data.get("metricool_post_id")
 
         # Trouver le prochain créneau disponible
@@ -2406,16 +2388,13 @@ def api_unschedule():
     keys = data.get("keys", [])
     if not keys: return jsonify({"error": "keys requis"}), 400
     count = 0
-    robinreach_errors = []
+    errors = []
     for sched_key in keys:
         tiktok = r2_get_json(sched_key)
         if not tiktok: continue
 
-        # Supprimer le post sur RobinReach si on a son ID
-        robinreach_post_id = tiktok.get("robinreach_post_id")
         metricool_post_id = tiktok.get("metricool_post_id")
         tiktok_account = tiktok.get("account", "")
-        brand_id_del = ROBINREACH_BRAND_IDS.get(tiktok_account, ROBINREACH_BRAND_ID)
         metricool_acc = METRICOOL_ACCOUNTS.get(tiktok_account, {})
         
         # Supprimer sur Metricool si applicable
@@ -2464,7 +2443,7 @@ def api_unschedule():
         r2_put_json(queue_key, tiktok)
         r2_delete(sched_key)
         count += 1
-    return jsonify({"success": True, "count": count, "errors": robinreach_errors})
+    return jsonify({"success": True, "count": count, "errors": errors})
 
 @app.route("/api/metricool/accounts")
 def api_metricool_accounts():
@@ -2988,7 +2967,7 @@ def calendar_page():
 
 @app.route("/api/calendar/live")
 def api_calendar_live():
-    """Fetch les posts programmés depuis Metricool et/ou RobinReach pour tous les comptes"""
+    """Fetch les posts programmés depuis Metricool pour tous les comptes"""
     all_posts = []
     
     # Fetcher depuis Metricool pour les comptes actifs
