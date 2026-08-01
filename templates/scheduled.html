@@ -336,7 +336,7 @@ function deselectAll(){
 }
 
 async function unscheduleSingle(key){
-    if(!confirm('Remettre ce TikTok en file d\'attente ? (déprogrammé aussi sur Metricool/RobinReach)')) return;
+    if(!confirm('Remettre ce TikTok en file d\'attente ? (déprogrammé aussi sur Metricool)')) return;
     showStatus('⏳ Déprogrammation en cours...');
     // Retirer la carte instantanément
     const t=tiktoks.find(t=>t.r2_key===key);
@@ -367,7 +367,7 @@ async function unscheduleSingle(key){
 async function fixSlots(){
     const account = document.getElementById('fixSlotsAccount').value;
     if(!account){ alert('Choisis un compte'); return; }
-    if(!confirm(`Recalculer et corriger TOUS les créneaux des TikToks programmés pour "${account}" sur Metricool/RobinReach ?
+    if(!confirm(`Recalculer et corriger TOUS les créneaux des TikToks programmés pour "${account}" sur Metricool ?
 
 Cela va modifier les horaires pour utiliser les 5 créneaux corrects.`)) return;
     const btn = document.querySelector('#fixSlotsBar button[onclick="fixSlots()"]');
@@ -392,7 +392,7 @@ Cela va modifier les horaires pour utiliser les 5 créneaux corrects.`)) return;
 
 async function unscheduleSelected(){
     if(!selected.size){alert('Aucun TikTok sélectionné');return}
-    if(!confirm(`Remettre ${selected.size} TikTok(s) en file d'attente ? (déprogrammés aussi sur Metricool/RobinReach)`)) return;
+    if(!confirm(`Remettre ${selected.size} TikTok(s) en file d'attente ? (déprogrammés aussi sur Metricool)`)) return;
     const btn=document.getElementById('unscheduleSelBtn');
     btn.disabled=true;
     const keys=[...selected];
@@ -477,7 +477,7 @@ async function findDuplicates(){
         dup.tiktoks.forEach(t=>{ msg += `  • TikTok ${t.number}\n`; });
         msg += '\n';
     });
-    msg += 'Va sur Metricool/RobinReach pour vérifier et supprimer les doublons manuellement, ou utilise "Déprogrammer" sur les TikToks en trop ci-dessous.';
+    msg += 'Va sur Metricool pour vérifier et supprimer les doublons manuellement, ou utilise "Déprogrammer" sur les TikToks en trop ci-dessous.';
     alert(msg);
     showStatus(`⚠️ ${d.count} conflit(s) trouvé(s) — voir le détail`);
 }
