@@ -424,12 +424,12 @@ FIXED_CAPTION  = "3 Maillot Acheté 1 Offert 🎁 #volakits #ete #foot"
 # Créneaux de publication en UTC, PAR COMPTE (le principal poste plus souvent que les autres)
 # Conversion heure française (UTC+2 été) → UTC : soustraire 2h
 SCHEDULE_TIMES_BY_ACCOUNT = {
-    "Volakits Main (wael)": ["07:00", "10:30", "14:00", "17:30", "19:30"],  # 5x/jour
-    "Volakits 1 (seik)":    ["10:30", "17:30"],  # 2x/jour
-    "Volakits 2 (momo)":    ["10:30", "17:30"],  # 2x/jour
-    "Volakits 6 (wassim)":  ["10:30", "17:30"],  # 2x/jour
+    "Volakits Main (wael)": ["08:00", "13:00", "16:30", "19:00"],  # 4x/jour — 10h/15h/18h30/21h Paris (UTC+2)
+    "Volakits 1 (seik)":    ["08:30", "15:30"],  # 2x/jour — 10h30/17h30 Paris
+    "Volakits 2 (momo)":    ["08:30", "15:30"],  # 2x/jour
+    "Volakits 6 (wassim)":  ["08:30", "15:30"],  # 2x/jour
 }
-SCHEDULE_TIMES_DEFAULT = ["10:30", "17:30"]  # 2x/jour par defaut
+SCHEDULE_TIMES_DEFAULT = ["08:30", "15:30"]  # 2x/jour par defaut
 
 def get_schedule_times_for_account(account):
     """Retourne les créneaux horaires (UTC) pour un compte donné"""
@@ -442,6 +442,14 @@ R2_BUCKET     = os.environ.get("R2_BUCKET", "jersey-templates")
 
 ROBINREACH_API_KEY  = os.environ.get("ROBINREACH_API_KEY")
 ROBINREACH_BRAND_ID = os.environ.get("ROBINREACH_BRAND_ID")  # Volakits Principal
+
+# Metricool API
+METRICOOL_TOKEN = os.environ.get("METRICOOL_TOKEN", "KPKUJFCYPOOCOAMHFLQWQEZWJNVQEPKTYFVBYVPDIVRYUVYDZPJXPVOXGDYGVOXK")
+METRICOOL_USER_ID = os.environ.get("METRICOOL_USER_ID", "5037969")
+METRICOOL_ACCOUNTS = {
+    "Volakits Main (wael)": {"blog_id": "6542376", "active": True},
+    # Autres comptes à ajouter plus tard
+}
 
 # Brand IDs par compte
 ROBINREACH_BRAND_IDS = {
@@ -1299,6 +1307,65 @@ def add_to_buffer_and_create_tiktoks(new_images_b64, new_flockages, user, new_te
 
 
 # ── TikTok queue ───────────────────────────────────────────────────────────
+def schedule_metricool(image_urls, caption, publish_time_iso, blog_id, timezone="Europe/Paris"):
+    """Programme un post TikTok via l'API Metricool"""
+    if not METRICOOL_TOKEN:
+        return {"success": False, "error": "METRICOOL_TOKEN manquant"}
+    
+    # Normaliser les images (Metricool requiert des mediaId)
+    media_ids = []
+    for url in image_urls:
+        try:
+            resp = requests.get(
+                f"https://app.metricool.com/api/v2/media/normalize?userId={METRICOOL_USER_ID}&blogId={blog_id}",
+                headers={"X-Mc-Auth": METRICOOL_TOKEN, "Content-Type": "application/json"},
+                json={"url": url},
+                timeout=30
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                media_id = data.get("mediaId") or data.get("id")
+                if media_id:
+                    media_ids.append(media_id)
+        except Exception as e:
+            print(f"[METRICOOL] Erreur normalisation image: {e}")
+    
+    if not media_ids:
+        return {"success": False, "error": "Aucune image normalisée"}
+    
+    # Créer le post schedulé
+    payload = {
+        "publicationDate": {
+            "dateTime": publish_time_iso,
+            "timezone": timezone
+        },
+        "text": caption,
+        "providers": ["tiktok"],
+        "media": [{"mediaId": mid} for mid in media_ids],
+        "autoPublish": True,
+        "tiktok": {
+            "addMusic": True,
+            "privacy": "PUBLIC_TO_EVERYONE"
+        }
+    }
+    
+    try:
+        resp = requests.post(
+            f"https://app.metricool.com/api/v2/posts?userId={METRICOOL_USER_ID}&blogId={blog_id}",
+            headers={"X-Mc-Auth": METRICOOL_TOKEN, "Content-Type": "application/json"},
+            json=payload,
+            timeout=60
+        )
+        print(f"[METRICOOL] Response {resp.status_code}: {resp.text[:300]}")
+        if resp.status_code in (200, 201):
+            data = resp.json()
+            post_id = data.get("id") or data.get("postId")
+            return {"success": True, "post_id": post_id}
+        else:
+            return {"success": False, "error": resp.text[:200]}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
 def get_pepites_count_per_tiktok(n_tiktoks, n_pepites):
     """Calcule combien d'images pépites par TikTok (min 1, max 4)"""
     if n_tiktoks == 0 or n_pepites == 0:
@@ -1472,7 +1539,7 @@ def get_scheduled(page=0, per_page=20):
         if d: result.append(_enrich_tiktok(d, k))
     return result, total
 
-def move_to_scheduled(queue_key, account, dt_str, robinreach_post_id=None):
+def move_to_scheduled(queue_key, account, dt_str, robinreach_post_id=None, metricool_post_id=None):
     print(f"[MOVE] Moving {queue_key} -> scheduled, account={account}, dt={dt_str}")
     data = r2_get_json(queue_key)
     if not data:
@@ -1482,6 +1549,7 @@ def move_to_scheduled(queue_key, account, dt_str, robinreach_post_id=None):
     data["account"] = account
     data["scheduled_at"] = dt_str
     data["robinreach_post_id"] = robinreach_post_id
+    data["metricool_post_id"] = metricool_post_id
     # Déplacer les images vers scheduled/imgs/
     new_img_keys = []
     for old_k in data.get("image_keys", []):
@@ -2011,7 +2079,34 @@ def _do_schedule_data(data=None):
         display_time = job["display_time"]
         brand_id = job["brand_id"]
 
-        if ROBINREACH_API_KEY and brand_id:
+        # Utiliser Metricool si disponible pour ce compte, sinon RobinReach
+        metricool_account = METRICOOL_ACCOUNTS.get(account)
+        if metricool_account and metricool_account.get("active") and METRICOOL_TOKEN:
+            try:
+                image_urls = [r2_presigned(k, expires=604800) for k in tiktok.get("image_keys", [])]
+                image_urls = [u for u in image_urls if u]
+                # Convertir dt_str en format local Paris pour Metricool
+                from datetime import datetime
+                from zoneinfo import ZoneInfo
+                paris_tz = ZoneInfo("Europe/Paris")
+                dt_utc = datetime.fromisoformat(dt_str.replace("Z","")).replace(tzinfo=timezone.utc) if "Z" in dt_str else datetime.fromisoformat(dt_str)
+                if dt_utc.tzinfo is None:
+                    dt_utc = dt_utc.replace(tzinfo=timezone.utc)
+                dt_paris = dt_utc.astimezone(paris_tz)
+                publish_time_local = dt_paris.strftime("%Y-%m-%dT%H:%M:%S")
+                result = schedule_metricool(
+                    image_urls=image_urls,
+                    caption=FIXED_CAPTION,
+                    publish_time_iso=publish_time_local,
+                    blog_id=metricool_account["blog_id"]
+                )
+                if not result["success"]:
+                    return {"error": f"TikTok {tiktok.get('number','')}: {result['error']}"}
+                tiktok_data["metricool_post_id"] = result.get("post_id")
+                print(f"[METRICOOL] ✅ TikTok {tiktok.get('number','')} programmé")
+            except Exception as e:
+                return {"error": f"TikTok {tiktok.get('number','')}: {str(e)}"}
+        elif ROBINREACH_API_KEY and brand_id:
             try:
                 image_urls = [r2_presigned(k, expires=604800) for k in tiktok.get("image_keys", [])]
                 image_urls = [u for u in image_urls if u]
@@ -2053,7 +2148,9 @@ def _do_schedule_data(data=None):
                 return {"error": f"TikTok {tiktok.get('number','')}: {str(e)}"}
 
         try:
-            move_to_scheduled(tiktok["r2_key"], account, dt_str, tiktok_data.get("robinreach_post_id"))
+            move_to_scheduled(tiktok["r2_key"], account, dt_str, 
+                tiktok_data.get("robinreach_post_id"), 
+                tiktok_data.get("metricool_post_id"))
         except Exception as e:
             print(f"[SCHEDULE] move_to_scheduled error: {e}")
 
@@ -2371,8 +2468,23 @@ def api_unschedule():
 
         # Supprimer le post sur RobinReach si on a son ID
         robinreach_post_id = tiktok.get("robinreach_post_id")
+        metricool_post_id = tiktok.get("metricool_post_id")
         tiktok_account = tiktok.get("account", "")
         brand_id_del = ROBINREACH_BRAND_IDS.get(tiktok_account, ROBINREACH_BRAND_ID)
+        metricool_acc = METRICOOL_ACCOUNTS.get(tiktok_account, {})
+        
+        # Supprimer sur Metricool si applicable
+        if metricool_post_id and metricool_acc.get("active") and METRICOOL_TOKEN:
+            try:
+                del_resp = requests.delete(
+                    f"https://app.metricool.com/api/v2/posts/{metricool_post_id}?userId={METRICOOL_USER_ID}&blogId={metricool_acc['blog_id']}",
+                    headers={"X-Mc-Auth": METRICOOL_TOKEN},
+                    timeout=15
+                )
+                print(f"[METRICOOL DELETE] Post {metricool_post_id}: {del_resp.status_code}")
+            except Exception as e:
+                print(f"[METRICOOL DELETE] Erreur: {e}")
+        
         if robinreach_post_id and ROBINREACH_API_KEY and brand_id_del:
             try:
                 del_resp = requests.delete(
@@ -2951,9 +3063,49 @@ def calendar_page():
 
 @app.route("/api/calendar/robinreach")
 def api_calendar_robinreach():
-    """Fetch les posts programmés directement depuis RobinReach pour tous les comptes"""
+    """Fetch les posts programmés depuis Metricool et/ou RobinReach pour tous les comptes"""
+    all_posts = []
+    
+    # Fetcher depuis Metricool pour les comptes actifs
+    for account, mc_acc in METRICOOL_ACCOUNTS.items():
+        if not mc_acc.get("active") or not METRICOOL_TOKEN:
+            continue
+        try:
+            page = 1
+            while True:
+                resp = requests.get(
+                    f"https://app.metricool.com/api/v2/posts?userId={METRICOOL_USER_ID}&blogId={mc_acc['blog_id']}&status=scheduled&page={page}&pageSize=100",
+                    headers={"X-Mc-Auth": METRICOOL_TOKEN},
+                    timeout=15
+                )
+                if resp.status_code != 200:
+                    break
+                data = resp.json()
+                posts = data if isinstance(data, list) else data.get("posts", data.get("data", []))
+                if not posts:
+                    break
+                for post in posts:
+                    pub_time = post.get("publicationDate", {})
+                    scheduled_at = pub_time.get("dateTime") if isinstance(pub_time, dict) else pub_time
+                    all_posts.append({
+                        "account": account,
+                        "metricool_id": post.get("id"),
+                        "scheduled_at": scheduled_at,
+                        "media_urls": [m.get("url","") for m in post.get("media", []) if isinstance(m, dict)],
+                        "content": post.get("text", ""),
+                        "status": "scheduled",
+                    })
+                pagination = data.get("pagination", {}) if isinstance(data, dict) else {}
+                total_pages = pagination.get("total_pages", pagination.get("totalPages", 1))
+                if page >= total_pages:
+                    break
+                page += 1
+        except Exception as e:
+            print(f"[CALENDAR] Erreur Metricool {account}: {e}")
+    
+    # Fetcher depuis RobinReach pour les comptes sans Metricool
     if not ROBINREACH_API_KEY:
-        return jsonify({"error": "RobinReach non configuré"}), 400
+        return jsonify({"posts": all_posts, "total": len(all_posts)})
     
     all_posts = []
     for account, robinreach_id in ROBINREACH_ACCOUNTS.items():
