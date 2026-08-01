@@ -1209,7 +1209,7 @@ def get_accounts():
     # Valeur par défaut si rien configuré
     return {
         "main": DEFAULT_MAIN_ACCOUNT,
-        "others": [k for k in ROBINREACH_ACCOUNTS if k != DEFAULT_MAIN_ACCOUNT]
+        "others": [k for k in METRICOOL_ACCOUNTS if k != DEFAULT_MAIN_ACCOUNT]
     }
 
 def save_accounts(data):
@@ -1818,7 +1818,7 @@ def api_buffer_clear():
 @app.route("/api/accounts")
 def api_get_accounts():
     data = get_accounts()
-    data["available"] = list(ROBINREACH_ACCOUNTS.keys())
+    data["available"] = list(METRICOOL_ACCOUNTS.keys())
     return jsonify(data)
 
 @app.route("/api/accounts", methods=["POST"])
@@ -1995,9 +1995,9 @@ def _do_schedule_data(data=None):
     jobs = []  # liste de (tiktok, tiktok_data, account, robinreach_id, dt_str, display_time)
 
     for account, tiktoks in by_account.items():
-        robinreach_id = ROBINREACH_ACCOUNTS.get(account)
-        print(f"[SCHEDULE] account='{account}' robinreach_id={robinreach_id}")
-        if not robinreach_id:
+        metricool_blog_id = METRICOOL_ACCOUNTS.get(account, {}).get("blog_id")
+        print(f"[SCHEDULE] account='{account}' metricool_blog_id={metricool_blog_id}")
+        if not metricool_blog_id:
             for t in tiktoks:
                 errors.append(f"Compte '{account}' non reconnu (TikTok {t.get('number','')})")
             continue
@@ -2056,7 +2056,7 @@ def _do_schedule_data(data=None):
                 "tiktok": tiktok,
                 "tiktok_data": tiktok_data,
                 "account": account,
-                "robinreach_id": robinreach_id,
+                "metricool_blog_id": metricool_blog_id,
                 "dt_str": dt_str,
                 "display_time": display_time,
                 "brand_id": ROBINREACH_BRAND_IDS.get(account, ROBINREACH_BRAND_ID),
@@ -2074,7 +2074,7 @@ def _do_schedule_data(data=None):
         tiktok = job["tiktok"]
         tiktok_data = job["tiktok_data"]
         account = job["account"]
-        robinreach_id = job["robinreach_id"]
+        metricool_blog_id = job.get("metricool_blog_id")
         dt_str = job["dt_str"]
         display_time = job["display_time"]
         brand_id = job["brand_id"]
@@ -2106,46 +2106,8 @@ def _do_schedule_data(data=None):
                 print(f"[METRICOOL] ✅ TikTok {tiktok.get('number','')} programmé")
             except Exception as e:
                 return {"error": f"TikTok {tiktok.get('number','')}: {str(e)}"}
-        elif ROBINREACH_API_KEY and brand_id:
-            try:
-                image_urls = [r2_presigned(k, expires=604800) for k in tiktok.get("image_keys", [])]
-                image_urls = [u for u in image_urls if u]
-                payload = {
-                    "content": FIXED_CAPTION,
-                    "media_urls": image_urls,
-                    "social_profile_ids": [robinreach_id],
-                    "publish_time": dt_str,
-                    "status": "scheduled",
-                    "timezone": "UTC",
-                    "platform_options": {"tiktok": {"add_music": True}}
-                }
-                resp = None
-                for attempt_r in range(5):
-                    try:
-                        resp = requests.post(
-                            f"https://robinreach.com/api/v1/posts?api_key={ROBINREACH_API_KEY}&brand_id={brand_id}",
-                            headers={"Accept": "application/json", "Content-Type": "application/json"},
-                            json=payload, timeout=90
-                        )
-                        if resp.status_code in (200, 201):
-                            break
-                        print(f"[ROBINREACH] Tentative {attempt_r+1}/5 — status {resp.status_code}, retry...")
-                        time.sleep(3)
-                    except requests.exceptions.Timeout:
-                        print(f"[ROBINREACH] Timeout tentative {attempt_r+1}/5, retry...")
-                        time.sleep(3)
-                if resp is None:
-                    return {"error": f"TikTok {tiktok.get('number','')}: Timeout après 5 tentatives"}
-                print(f"[ROBINREACH] Response {resp.status_code}: {resp.text[:200]}")
-                if resp.status_code not in (200, 201):
-                    return {"error": f"TikTok {tiktok.get('number','')}: {resp.text[:200]}"}
-                try:
-                    rd = resp.json()
-                    tiktok_data["robinreach_post_id"] = rd.get("id") or rd.get("post_id") or rd.get("data",{}).get("id")
-                except Exception:
-                    pass
-            except Exception as e:
-                return {"error": f"TikTok {tiktok.get('number','')}: {str(e)}"}
+        else:
+            return {"error": f"TikTok {tiktok.get('number','')}: Compte '{account}' non configuré sur Metricool"}
 
         try:
             move_to_scheduled(tiktok["r2_key"], account, dt_str, 
@@ -2266,13 +2228,13 @@ def api_delete_image():
 
 @app.route("/api/scheduled/check_status", methods=["POST"])
 def api_check_status():
-    """Vérifie le vrai statut de publication sur RobinReach pour des TikToks donnés"""
+    """Vérifie le vrai statut de publication sur Metricool/RobinReach pour des TikToks donnés"""
     data = request.json or {}
     keys = data.get("keys", [])
     if not keys:
         return jsonify({"error": "keys requis"}), 400
-    if not ROBINREACH_API_KEY or not ROBINREACH_BRAND_ID:
-        return jsonify({"error": "RobinReach non configuré"}), 400
+    if not ROBINREACH_API_KEY and not METRICOOL_TOKEN:
+        return jsonify({"error": "Aucune API configurée"}), 400
 
     results = {}
     for key in keys:
@@ -2280,27 +2242,30 @@ def api_check_status():
         if not tiktok:
             results[key] = {"status": "introuvable"}
             continue
+        
+        tiktok_account = tiktok.get("account","")
+        mc_acc = METRICOOL_ACCOUNTS.get(tiktok_account, {})
+        metricool_id = tiktok.get("metricool_post_id")
         post_id = tiktok.get("robinreach_post_id")
-        if not post_id:
-            results[key] = {"status": "pas_d_id"}
-            continue
-        try:
-            resp = requests.get(
-                f"https://robinreach.com/api/v1/posts/{post_id}?api_key={ROBINREACH_API_KEY}&brand_id={ROBINREACH_BRAND_ID}",
-                headers={"Accept": "application/json"},
-                timeout=15
-            )
-            if resp.status_code == 200:
-                post_data = resp.json()
-                real_status = post_data.get("status") or post_data.get("post_status") or "inconnu"
-                results[key] = {"status": real_status, "raw": post_data}
-                # Mettre à jour le statut réel dans notre stockage
-                tiktok["real_status"] = real_status
-                r2_put_json(key, tiktok)
-            else:
-                results[key] = {"status": "erreur_api", "code": resp.status_code}
-        except Exception as e:
-            results[key] = {"status": "erreur", "error": str(e)}
+        
+        # Vérifier sur Metricool en priorité
+        if metricool_id and mc_acc.get("active") and METRICOOL_TOKEN:
+            try:
+                resp = requests.get(
+                    f"https://app.metricool.com/api/v2/posts/{metricool_id}?userId={METRICOOL_USER_ID}&blogId={mc_acc['blog_id']}",
+                    headers={"X-Mc-Auth": METRICOOL_TOKEN}, timeout=10
+                )
+                if resp.status_code == 200:
+                    d = resp.json()
+                    real_status = d.get("status", "scheduled")
+                    results[key] = {"status": real_status, "real_status": real_status}
+                    tiktok["real_status"] = real_status
+                    r2_put_json(key, tiktok)
+                    continue
+            except Exception as e:
+                print(f"[CHECK_STATUS METRICOOL] {e}")
+        
+        results[key] = {"status": "pas_d_id_metricool"}
 
     return jsonify({"results": results})
 
@@ -2349,8 +2314,7 @@ def api_fix_slots():
         nonlocal slot_date, slot_index, updated
         key, tiktok_data = item
         robinreach_post_id = tiktok_data.get("robinreach_post_id")
-        brand_id = ROBINREACH_BRAND_IDS.get(account, ROBINREACH_BRAND_ID)
-        robinreach_id = ROBINREACH_ACCOUNTS.get(account)
+        metricool_post_id_fix = tiktok_data.get("metricool_post_id")
 
         # Trouver le prochain créneau disponible
         while True:
@@ -2366,46 +2330,27 @@ def api_fix_slots():
         new_dt_str = slot_dt.isoformat()
         used_slots.add(new_dt_str)
 
-        # Mettre à jour sur RobinReach
-        if robinreach_post_id and ROBINREACH_API_KEY and brand_id:
+        # Mettre à jour sur Metricool si applicable
+        metricool_post_id_fix = tiktok_data.get("metricool_post_id")
+        mc_acc_fix = METRICOOL_ACCOUNTS.get(account, {})
+        if metricool_post_id_fix and mc_acc_fix.get("active") and METRICOOL_TOKEN:
             try:
+                from zoneinfo import ZoneInfo
+                paris_tz_fix = ZoneInfo("Europe/Paris")
+                dt_utc_fix = datetime.fromisoformat(new_dt_str.replace("Z","")).replace(tzinfo=timezone.utc)
+                dt_paris_fix = dt_utc_fix.astimezone(paris_tz_fix)
+                new_dt_paris = dt_paris_fix.strftime("%Y-%m-%dT%H:%M:%S")
                 resp = requests.patch(
-                    f"https://robinreach.com/api/v1/posts/{robinreach_post_id}?api_key={ROBINREACH_API_KEY}&brand_id={brand_id}",
-                    headers={"Accept": "application/json", "Content-Type": "application/json"},
-                    json={"publish_time": new_dt_str, "timezone": "UTC"},
+                    f"https://app.metricool.com/api/v2/posts/{metricool_post_id_fix}?userId={METRICOOL_USER_ID}&blogId={mc_acc_fix['blog_id']}",
+                    headers={"X-Mc-Auth": METRICOOL_TOKEN, "Content-Type": "application/json"},
+                    json={"publicationDate": {"dateTime": new_dt_paris, "timezone": "Europe/Paris"}},
                     timeout=30
                 )
-                print(f"[FIX_SLOTS] Post {robinreach_post_id} → {new_dt_str}: {resp.status_code}")
-                if resp.status_code not in (200, 201):
-                    # Si PATCH pas supporté, essayer de supprimer et recréer
-                    image_urls = [r2_presigned(k, expires=604800) for k in tiktok_data.get("image_keys", [])]
-                    requests.delete(
-                        f"https://robinreach.com/api/v1/posts/{robinreach_post_id}?api_key={ROBINREACH_API_KEY}&brand_id={brand_id}",
-                        timeout=15
-                    )
-                    new_resp = requests.post(
-                        f"https://robinreach.com/api/v1/posts?api_key={ROBINREACH_API_KEY}&brand_id={brand_id}",
-                        headers={"Accept": "application/json", "Content-Type": "application/json"},
-                        json={
-                            "content": FIXED_CAPTION,
-                            "media_urls": image_urls,
-                            "social_profile_ids": [robinreach_id],
-                            "publish_time": new_dt_str,
-                            "status": "scheduled",
-                            "timezone": "UTC",
-                            "platform_options": {"tiktok": {"add_music": True}}
-                        },
-                        timeout=90
-                    )
-                    if new_resp.status_code in (200, 201):
-                        try:
-                            new_id = new_resp.json().get("id") or new_resp.json().get("post_id")
-                            tiktok_data["robinreach_post_id"] = new_id
-                        except Exception:
-                            pass
+                print(f"[FIX_SLOTS METRICOOL] Post {metricool_post_id_fix} → {new_dt_paris}: {resp.status_code}")
             except Exception as e:
-                errors.append(f"TikTok {tiktok_data.get('number','')}: {e}")
-                return
+                print(f"[FIX_SLOTS METRICOOL] Erreur: {e}")
+
+        # RobinReach supprimé — Metricool uniquement (fix_slots)
 
         # Mettre à jour dans R2
         tiktok_data["scheduled_at"] = new_dt_str
@@ -2456,7 +2401,7 @@ def api_find_duplicates():
 
 @app.route("/api/scheduled/unschedule", methods=["POST"])
 def api_unschedule():
-    """Remet des TikToks programmés dans la file d'attente ET supprime de RobinReach"""
+    """Remet des TikToks programmés dans la file d'attente ET supprime de Metricool"""
     data = request.json
     keys = data.get("keys", [])
     if not keys: return jsonify({"error": "keys requis"}), 400
@@ -2485,18 +2430,7 @@ def api_unschedule():
             except Exception as e:
                 print(f"[METRICOOL DELETE] Erreur: {e}")
         
-        if robinreach_post_id and ROBINREACH_API_KEY and brand_id_del:
-            try:
-                del_resp = requests.delete(
-                    f"https://robinreach.com/api/v1/posts/{robinreach_post_id}?api_key={ROBINREACH_API_KEY}&brand_id={brand_id_del}",
-                    headers={"Accept": "application/json"},
-                    timeout=30
-                )
-                print(f"[ROBINREACH DELETE] Post {robinreach_post_id}: {del_resp.status_code}")
-                if del_resp.status_code not in (200, 204):
-                    robinreach_errors.append(f"Post {robinreach_post_id}: {del_resp.text[:100]}")
-            except Exception as e:
-                robinreach_errors.append(f"Post {robinreach_post_id}: {str(e)}")
+        # RobinReach supprimé — Metricool uniquement
 
         # Libérer le créneau dans l'index pour qu'il redevienne disponible
         old_account = tiktok.get("account")
@@ -2525,26 +2459,17 @@ def api_unschedule():
         tiktok["account"] = None
         tiktok["scheduled_at"] = None
         tiktok["robinreach_post_id"] = None
+        tiktok["metricool_post_id"] = None
         queue_key = sched_key.replace(PFX_SCHEDULED, PFX_QUEUE)
         r2_put_json(queue_key, tiktok)
         r2_delete(sched_key)
         count += 1
-    return jsonify({"success": True, "count": count, "robinreach_errors": robinreach_errors})
+    return jsonify({"success": True, "count": count, "errors": robinreach_errors})
 
-@app.route("/api/robinreach/profiles")
-def api_robinreach_profiles():
-    """Diagnostic : liste les profils sociaux connectés sur RobinReach avec leurs IDs"""
-    if not ROBINREACH_API_KEY or not ROBINREACH_BRAND_ID:
-        return jsonify({"error": "ROBINREACH_API_KEY ou ROBINREACH_BRAND_ID manquant dans les variables Railway"}), 400
-    try:
-        resp = requests.get(
-            f"https://robinreach.com/api/v1/social_profiles?api_key={ROBINREACH_API_KEY}&brand_id={ROBINREACH_BRAND_ID}",
-            headers={"Accept": "application/json"},
-            timeout=30
-        )
-        return jsonify({"status_code": resp.status_code, "raw_response": resp.text[:2000]})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+@app.route("/api/metricool/accounts")
+def api_metricool_accounts():
+    """Liste les comptes Metricool configurés"""
+    return jsonify({"accounts": [{"name": k, "blog_id": v["blog_id"], "active": v.get("active", False)} for k,v in METRICOOL_ACCOUNTS.items()]})
 
 @app.route("/api/queue/delete", methods=["POST"])
 def api_delete():
@@ -3061,8 +2986,8 @@ if __name__ == "__main__":
 def calendar_page():
     return render_template("calendar.html")
 
-@app.route("/api/calendar/robinreach")
-def api_calendar_robinreach():
+@app.route("/api/calendar/live")
+def api_calendar_live():
     """Fetch les posts programmés depuis Metricool et/ou RobinReach pour tous les comptes"""
     all_posts = []
     
@@ -3103,51 +3028,7 @@ def api_calendar_robinreach():
         except Exception as e:
             print(f"[CALENDAR] Erreur Metricool {account}: {e}")
     
-    # Fetcher depuis RobinReach pour les comptes sans Metricool
-    if not ROBINREACH_API_KEY:
-        return jsonify({"posts": all_posts, "total": len(all_posts)})
-    
-    all_posts = []
-    for account, robinreach_id in ROBINREACH_ACCOUNTS.items():
-        brand_id = ROBINREACH_BRAND_IDS.get(account, ROBINREACH_BRAND_ID)
-        try:
-            page = 1
-            while True:
-                resp = requests.get(
-                    f"https://robinreach.com/api/v1/posts?api_key={ROBINREACH_API_KEY}&brand_id={brand_id}&status=scheduled&per_page=100&page={page}",
-                    headers={"Accept": "application/json"},
-                    timeout=15
-                )
-                if resp.status_code != 200:
-                    break
-                data = resp.json()
-                posts = data.get("posts", []) if isinstance(data, dict) else data
-                if not posts:
-                    break
-                for post in posts:
-                    attachments = post.get("attachments", [])
-                    media_urls = []
-                    for a in attachments:
-                        if isinstance(a, str):
-                            media_urls.append(a)
-                        elif isinstance(a, dict):
-                            media_urls.append(a.get("url",""))
-                    all_posts.append({
-                        "account": account,
-                        "robinreach_id": post.get("id"),
-                        "scheduled_at": post.get("publish_time") or post.get("scheduled_at"),
-                        "media_urls": media_urls,
-                        "content": post.get("content", ""),
-                        "status": post.get("status", "scheduled"),
-                    })
-                pagination = data.get("pagination", {})
-                total_pages = pagination.get("total_pages", 1)
-                if page >= total_pages:
-                    break
-                page += 1
-        except Exception as e:
-            print(f"[CALENDAR] Erreur RobinReach {account}: {e}")
-    
+    # RobinReach supprimé — Metricool uniquement
     return jsonify({"posts": all_posts, "total": len(all_posts)})
 
 @app.route("/api/calendar")
@@ -3202,7 +3083,7 @@ def api_calendar():
         })
     
     # Stats par compte
-    accounts_list = list(ROBINREACH_ACCOUNTS.keys())
+    accounts_list = list(METRICOOL_ACCOUNTS.keys())
     
     return jsonify({
         "events": events,
