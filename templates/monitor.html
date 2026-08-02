@@ -86,6 +86,7 @@ h1{font-size:24px;margin:0;font-weight:800;letter-spacing:-0.02em}
         </div>
         <div class="nav">
             <a href="/">🎨 Générateur</a>
+            <a href="/generator2" style="color:#f59e0b">📦 Gén. V2</a>
             <a href="/queue">📋 File d'attente</a>
             <a href="/scheduled">✅ Programmés</a>
             <a href="/stats">📈 Stats</a>
@@ -93,6 +94,25 @@ h1{font-size:24px;margin:0;font-weight:800;letter-spacing:-0.02em}
     </div>
 
     <div id="activeSessions"></div>
+
+    <!-- Stats Metricool + Posts ratés -->
+    <div class="history-section" id="metricoolSection">
+        <div class="history-title">📊 Metricool — Posts récents</div>
+        <div id="metricoolStats" style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:12px">
+            <div style="background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:12px 16px;min-width:120px">
+                <div style="font-size:11px;color:var(--text-dim)">Programmés</div>
+                <div id="mcScheduled" style="font-size:22px;font-weight:800;color:var(--accent)">—</div>
+            </div>
+            <div style="background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:12px 16px;min-width:120px">
+                <div style="font-size:11px;color:var(--text-dim)">Posts ratés</div>
+                <div id="mcFailed" style="font-size:22px;font-weight:800;color:var(--danger)">—</div>
+            </div>
+        </div>
+        <div id="failedPostsList" style="display:none">
+            <div style="font-size:12px;font-weight:700;color:var(--danger);margin-bottom:6px">⚠️ Posts en échec :</div>
+            <div id="failedPostsContent"></div>
+        </div>
+    </div>
 
     <div class="history-section">
         <div class="history-title">📋 Sessions récentes</div>
@@ -239,11 +259,36 @@ async function loadHistory(){
     }catch(e){}
 }
 
+async function loadMetricoolStats(){
+    try{
+        const calRes = await fetch('/api/calendar/live');
+        const calData = await calRes.json();
+        const posts = calData.posts || [];
+        document.getElementById('mcScheduled').textContent = posts.length;
+        
+        const failRes = await fetch('/api/metricool/failed_posts');
+        const failData = await failRes.json();
+        const failed = failData.failed || [];
+        document.getElementById('mcFailed').textContent = failed.length;
+        if(failed.length > 0){
+            document.getElementById('failedPostsList').style.display='block';
+            document.getElementById('failedPostsContent').innerHTML = failed.slice(0,5).map(f=>
+                `<div style="background:rgba(248,113,113,.1);border:1px solid rgba(248,113,113,.2);border-radius:8px;padding:8px 10px;margin-bottom:6px;font-size:11px">
+                    <b>${f.account}</b> · ${f.scheduled_at ? new Date(f.scheduled_at).toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit',timeZone:'Europe/Paris'}) : '?'}
+                    <br><span style="color:var(--danger)">${f.error||'Erreur inconnue'}</span>
+                </div>`
+            ).join('');
+        }
+    }catch(e){}
+}
+
 // Polling toutes les 3s pour les sessions actives
 loadActiveSessions();
 loadHistory();
+loadMetricoolStats();
 setInterval(loadActiveSessions, 3000);
 setInterval(loadHistory, 30000);
+setInterval(loadMetricoolStats, 60000);
 </script>
 </body>
 </html>
