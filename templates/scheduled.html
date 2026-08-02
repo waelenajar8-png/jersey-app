@@ -161,6 +161,7 @@ h1{font-size:24px;margin:0;font-weight:800;letter-spacing:-0.02em}
         <button class="btn-sec" style="background:rgba(251,191,36,.15);border-color:rgba(251,191,36,.4);color:var(--warn)" onclick="findDuplicates()">⚠️ Détecter doublons</button>
         <button class="btn-sec" style="background:rgba(251,191,36,.1);border-color:rgba(251,191,36,.3);color:#fbbf24" onclick="showFixSlotsBar()">🔧 Corriger les créneaux</button>
         <button class="btn-danger" onclick="unscheduleAll()" style="margin-left:auto">↩️ Tout déprogrammer</button>
+        <button class="btn" onclick="recoverRobinreach()" style="background:rgba(251,191,36,.15);border:1px solid rgba(251,191,36,.3);color:#fbbf24;margin-left:8px">🔄 Récupérer TikToks échoués</button>
     </div>
 
     <div class="filters" id="filters">
@@ -426,6 +427,28 @@ async function unscheduleSelected(){
         showStatus(`❌ Erreur réseau — réessaie`);
     }
     btn.disabled=false;
+}
+
+async function recoverRobinreach(){
+    const account = document.getElementById('accountFilter')?.value || null;
+    const msg = account 
+        ? `Récupérer tous les TikToks échoués du compte "${account}" dans la file d'attente ?`
+        : "Récupérer TOUS les TikToks programmés échoués dans la file d'attente ?";
+    if(!confirm(msg)) return;
+    const res = await fetch('/api/scheduled/recover_robinreach', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({account: account || null})
+    });
+    const d = await res.json();
+    if(d.success){
+        const details = Object.entries(d.by_account || {}).map(([k,v])=>`${k}: ${v}`).join(', ');
+        alert(`✅ ${d.recovered} TikTok(s) récupérés !
+${details}`);
+        await loadScheduled();
+    } else {
+        alert('❌ Erreur: ' + (d.error || 'Inconnue'));
+    }
 }
 
 async function unscheduleAll(){
