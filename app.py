@@ -1347,7 +1347,8 @@ def schedule_metricool(image_urls, caption, publish_time_iso, blog_id, timezone=
     if not media_ids:
         return {"success": False, "error": "Aucune image normalisée"}
     
-    # Créer le post schedulé
+    # Créer le post schedulé avec URLs normalisées directement
+    print(f"[METRICOOL] Payload media: {media_ids[:2]}")
     payload = {
         "publicationDate": {
             "dateTime": publish_time_iso,
@@ -1355,7 +1356,7 @@ def schedule_metricool(image_urls, caption, publish_time_iso, blog_id, timezone=
         },
         "text": caption,
         "providers": [{"network": "tiktok"}],
-        "media": [{"url": mid} if mid.startswith("http") else {"mediaId": mid} for mid in media_ids],
+        "media": [{"url": url, "type": "image"} for url in media_ids],
         "autoPublish": True,
         "tiktok": {
             "addMusic": True,
