@@ -2001,6 +2001,11 @@ def api_schedule():
                     _schedule_result["last"] = result.get_json()
                 else:
                     _schedule_result["last"] = result
+        except Exception as e:
+            import traceback
+            print(f"[SCHEDULE] ❌ Exception dans run_schedule: {e}")
+            traceback.print_exc()
+            _schedule_result["last"] = {"scheduled": 0, "errors": [str(e)]}
         finally:
             _schedule_lock.release()
     
