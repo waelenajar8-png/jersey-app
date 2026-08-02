@@ -232,6 +232,7 @@ h1{font-size:24px;margin:0;font-weight:800;letter-spacing:-0.02em}
         <button class="btn-sec" style="padding:6px 12px;font-size:12px" onclick="selectAll()">⭐ Tout → Compte principal</button>
         <button class="btn-sec" style="padding:6px 12px;font-size:12px;display:none" id="deselectBtn" onclick="deselectAll()">✖️ Désélectionner tout</button>
         <button class="btn-sec" style="padding:6px 12px;font-size:12px;background:rgba(248,113,113,.1);border-color:rgba(248,113,113,.3);color:var(--danger)" onclick="unassignAll()">🗑️ Tout désassigner</button>
+        <button class="btn-sec" onclick="showAutopilot()" style="padding:6px 12px;font-size:12px;background:rgba(139,92,246,.15);border-color:rgba(139,92,246,.3);color:#a78bfa">🚁 Pilote auto</button>
         <span id="selCount"></span>
         <!-- Sélection rapide N TikToks -->
         <div style="display:flex;align-items:center;gap:6px;margin-left:auto">
@@ -581,6 +582,7 @@ function renderCard(t){
                         TikTok ${t.number} <span style="font-size:10px;color:var(--text-dim)">${t.image_keys?.length||0} images</span>
                     </div>
                     <div class="card-meta">${t.user} · ${date}</div>
+                    ${t.recovered ? `<div style="font-size:10px;color:#fbbf24;background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.3);border-radius:6px;padding:2px 6px;margin-top:3px;display:inline-block">⚠️ Récupéré · prévu le ${t.recovered_original_date ? new Date(t.recovered_original_date).toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit',timeZone:'Europe/Paris'}) : '?'} · ${t.recovered_original_account||'?'}</div>` : ''}
                 </div>
                 ${t.account?`<span class="account-tag">${t.account}</span>`:''}
             </div>
@@ -926,6 +928,40 @@ async function flushAssigns(){
     }
 }
 
+async function showAutopilot(){
+    const days = parseInt(prompt('Remplir combien de jours ?', '7'));
+    if(!days || isNaN(days)) return;
+    showStatus('⏳ Calcul du plan...');
+    const res = await fetch('/api/autopilot/plan', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({days})});
+    const d = await res.json();
+    if(!d.plan){showStatus('❌ Erreur');return}
+    
+    let msg = `📊 Plan pour ${days} jours :
+
+`;
+    for(const [acc, info] of Object.entries(d.plan)){
+        msg += `${acc}:
+  Besoin: ${info.needed} TikToks
+  Programmés: ${info.scheduled}
+  En attente: ${info.in_queue}
+  Manque: ${info.missing} TikToks (${info.images_to_generate} images)
+
+`;
+    }
+    msg += `Total: ${d.total_images_to_generate} images à générer`;
+    
+    if(d.total_images_to_generate === 0){
+        alert('✅ Tout est déjà rempli pour ' + days + ' jours !');
+        return;
+    }
+    
+    const go = confirm(msg + "\n\nVeux-tu dispatcher les TikToks existants maintenant ?");
+    if(go){
+        await dispatchAuto();
+    }
+    showStatus(`📊 Plan calculé: ${d.total_tiktoks_missing} TikToks manquants`);
+}
+
 // Sauvegarder avant fermeture de page
 window.addEventListener('beforeunload', () => {
     if(Object.keys(_pendingAssigns).length > 0) {
@@ -995,16 +1031,18 @@ function selectAll(){
 function deselectAll(){selectedForMain.clear();render()}
 
 async function dispatchAuto(){
-    if(!accounts.others?.length){alert('Configure d\'abord tes autres comptes (bouton ⚙️ Comptes)');return}
     try{
-        const res=await fetch('/api/queue/dispatch',{method:'POST',headers:{'Content-Type':'application/json'},
-            body:JSON.stringify({accounts:accounts.others})});
-        if(!res.ok){showStatus(`❌ Erreur serveur (${res.status}) — réessaie`);return}
-        const d=await res.json();
-        showStatus(`✅ ${d.count} TikTok(s) dispatchés sur ${accounts.others.join(', ')}`);
+        const res = await fetch('/api/queue/dispatch_smart', {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'});
+        const d = await res.json();
+        if(!d.success){showStatus('❌ Erreur dispatch');return}
+        if(d.count === 0){showStatus('✅ Tous les TikToks sont déjà assignés');return}
+        const details = Object.entries(d.by_account||{}).map(([acc,n])=>`${acc}: ${n}`).join(' | ');
+        showStatus(`✅ ${d.count} TikToks répartis — ${details}`);
         await loadAll();
+        render();
+        updateCounters();
     }catch(e){
-        showStatus(`❌ Erreur réseau : ${e.message} — vérifie ta connexion et réessaie`);
+        showStatus(`❌ Erreur: ${e.message}`);
     }
 }
 
@@ -1034,8 +1072,42 @@ function confirmScheduleAll(){
     const startDate = document.getElementById('startDate').value;
     const byAccount = {};
     assigned.forEach(t=>{byAccount[t.account]=(byAccount[t.account]||0)+1});
-    let html = `<p style="font-size:13px;color:var(--text-dim)">Tu vas programmer <b>${assigned.length}</b> TikTok(s) à partir du <b>${startDate||'aujourd\'hui'}</b> :</p>`;
-    html += '<div class="recap-list">' + Object.entries(byAccount).map(([acc,n])=>`<div class="recap-item"><span>${acc}</span><span>${n} TikTok(s)</span></div>`).join('') + '</div>';
+    // Preview calendrier — calculer les créneaux exacts
+    const slotsByAccount = {
+        "Volakits Main (wael)": ["10:00","15:00","18:30","21:00"],
+        "Volakits 1 (seik)": ["10:30","17:30"],
+        "Volakits 2 (momo)": ["10:30","17:30"],
+        "Volakits 6 (wassim)": ["10:30","17:30"]
+    };
+    
+    let previewSlots = [];
+    let startD = startDate ? new Date(startDate) : new Date();
+    for(const [acc, n] of Object.entries(byAccount)){
+        const slots = slotsByAccount[acc] || ["10:00","17:00"];
+        let slotIdx = 0, d = new Date(startD);
+        for(let i=0; i<n; i++){
+            const [h,m] = slots[slotIdx%slots.length].split(':');
+            const dt = new Date(d);
+            dt.setHours(parseInt(h), parseInt(m), 0);
+            previewSlots.push({acc, dt});
+            slotIdx++;
+            if(slotIdx%slots.length===0) d.setDate(d.getDate()+1);
+        }
+    }
+    previewSlots.sort((a,b)=>a.dt-b.dt);
+    
+    // Preview simplifié
+    let previewLines = previewSlots.slice(0,6).map(s=>{
+        const h = s.dt.getHours();
+        const m = String(s.dt.getMinutes()).padStart(2,"0");
+        const day = s.dt.toLocaleDateString("fr-FR",{weekday:"short",day:"2-digit",month:"2-digit"});
+        return day + " " + h + "h" + m + " - " + s.acc.split(" ")[0];
+    });
+    if(previewSlots.length>6) previewLines.push("+" + (previewSlots.length-6) + " autres...");
+    
+    let html = "<p style='font-size:13px;color:var(--text-dim)'>Tu vas programmer <b>" + assigned.length + "</b> TikTok(s) à partir du <b>" + (startDate||"aujourd'hui") + "</b> :</p>";
+    html += '<div class="recap-list">' + Object.entries(byAccount).map(([acc,n])=>'<div class="recap-item"><span>' + acc + '</span><span>' + n + ' TikTok(s)</span></div>').join('') + '</div>';
+    html += '<div style="margin-top:10px;font-size:11px;color:var(--text-dim)"><b>📅 Aperçu :</b><br>' + previewLines.join('<br>') + '</div>';
     // Détection conflit simple : même compte + créneau custom identique
     const customEntries = Object.entries(customSlots);
     if(customEntries.length){
