@@ -2152,7 +2152,7 @@ def _do_schedule_data(data=None):
             try:
                 image_urls = [r2_presigned(k, expires=604800) for k in tiktok.get("image_keys", [])]
                 image_urls = [u for u in image_urls if u]
-                # Convertir dt_str en format local Paris pour Metricool
+                print(f"[METRICOOL] {len(image_urls)} images à envoyer pour TikTok {tiktok.get('number','')}")
                 from datetime import datetime
                 from zoneinfo import ZoneInfo
                 paris_tz = ZoneInfo("Europe/Paris")
