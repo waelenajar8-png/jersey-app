@@ -1329,10 +1329,18 @@ def schedule_metricool(image_urls, caption, publish_time_iso, blog_id, timezone=
             )
             print(f"[METRICOOL] Normalisation image {i+1}: status={resp.status_code} resp={resp.text[:200]}")
             if resp.status_code == 200:
-                data = resp.json()
-                media_id = data.get("mediaId") or data.get("id") or data.get("hash")
-                if media_id:
-                    media_ids.append(media_id)
+                # Metricool retourne l'URL directement en texte brut
+                media_url = resp.text.strip()
+                if media_url and media_url.startswith("http"):
+                    media_ids.append(media_url)
+                else:
+                    try:
+                        data = resp.json()
+                        media_id = data.get("mediaId") or data.get("id") or data.get("hash") or data.get("url")
+                        if media_id:
+                            media_ids.append(media_id)
+                    except Exception:
+                        pass
         except Exception as e:
             print(f"[METRICOOL] Erreur normalisation image {i+1}: {e}")
     
@@ -1347,7 +1355,7 @@ def schedule_metricool(image_urls, caption, publish_time_iso, blog_id, timezone=
         },
         "text": caption,
         "providers": ["tiktok"],
-        "media": [{"mediaId": mid} for mid in media_ids],
+        "media": [{"url": mid} if mid.startswith("http") else {"mediaId": mid} for mid in media_ids],
         "autoPublish": True,
         "tiktok": {
             "addMusic": True,
