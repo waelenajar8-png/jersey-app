@@ -370,7 +370,7 @@ async function fixSlots(){
     if(!account){ alert('Choisis un compte'); return; }
     if(!confirm(`Recalculer et corriger TOUS les créneaux des TikToks programmés pour "${account}" sur Metricool ?
 
-Cela va modifier les horaires pour utiliser les 5 créneaux corrects.`)) return;
+Cela va modifier les horaires pour utiliser les créneaux corrects.`)) return;
     const btn = document.querySelector('#fixSlotsBar button[onclick="fixSlots()"]');
     btn.disabled=true; btn.textContent='⏳ Correction en cours...';
     showStatus(`⏳ Correction des créneaux pour ${account}...`);
