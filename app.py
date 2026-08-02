@@ -1319,7 +1319,7 @@ def schedule_metricool(image_urls, caption, publish_time_iso, blog_id, timezone=
     
     # Normaliser les images (Metricool requiert des mediaId)
     media_ids = []
-    for url in image_urls:
+    for i, url in enumerate(image_urls):
         try:
             resp = requests.post(
                 f"https://app.metricool.com/api/v2/media/normalize?userId={METRICOOL_USER_ID}&blogId={blog_id}",
@@ -1327,13 +1327,14 @@ def schedule_metricool(image_urls, caption, publish_time_iso, blog_id, timezone=
                 json={"url": url},
                 timeout=30
             )
+            print(f"[METRICOOL] Normalisation image {i+1}: status={resp.status_code} resp={resp.text[:200]}")
             if resp.status_code == 200:
                 data = resp.json()
                 media_id = data.get("mediaId") or data.get("id")
                 if media_id:
                     media_ids.append(media_id)
         except Exception as e:
-            print(f"[METRICOOL] Erreur normalisation image: {e}")
+            print(f"[METRICOOL] Erreur normalisation image {i+1}: {e}")
     
     if not media_ids:
         return {"success": False, "error": "Aucune image normalisée"}
