@@ -1373,7 +1373,7 @@ def schedule_metricool(image_urls, caption, publish_time_iso, blog_id, timezone=
         print(f"[METRICOOL] Response {resp.status_code}: {resp.text[:300]}")
         if resp.status_code in (200, 201):
             data = resp.json()
-            post_id = data.get("id") or data.get("postId")
+            post_id = data.get("id") or data.get("postId") or (data.get("data") or {}).get("id")
             return {"success": True, "post_id": post_id}
         else:
             return {"success": False, "error": resp.text[:200]}
