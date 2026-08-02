@@ -457,6 +457,7 @@ def get_schedule_times_for_account(account):
     return SCHEDULE_TIMES_BY_ACCOUNT.get(account, SCHEDULE_TIMES_DEFAULT)
 
 R2_ENDPOINT   = os.environ.get("R2_ENDPOINT")
+R2_PUBLIC_URL = os.environ.get("R2_PUBLIC_URL", "https://pub-2041419f649b434681cde993145feaee.r2.dev")
 R2_ACCESS_KEY = os.environ.get("R2_ACCESS_KEY_ID")
 R2_SECRET_KEY = os.environ.get("R2_SECRET_ACCESS_KEY")
 R2_BUCKET     = os.environ.get("R2_BUCKET", "jersey-templates")
@@ -2169,8 +2170,8 @@ def _do_schedule_data(data=None):
         print(f"[SCHEDULE DEBUG] account='{account}' metricool_account={metricool_account} token_ok={bool(METRICOOL_TOKEN)}")
         if metricool_account and metricool_account.get("active") and METRICOOL_TOKEN:
             try:
-                image_urls = [r2_presigned(k, expires=604800) for k in tiktok.get("image_keys", [])]
-                image_urls = [u for u in image_urls if u]
+                # Utiliser URLs publiques R2 pour Metricool (les URLs présignées privées ne sont pas accessibles)
+                image_urls = [f"{R2_PUBLIC_URL}/{k}" for k in tiktok.get("image_keys", []) if k]
                 print(f"[METRICOOL] {len(image_urls)} images à envoyer pour TikTok {tiktok.get('number','')}")
                 print(f"[METRICOOL] URL exemple: {image_urls[0][:100] if image_urls else 'AUCUNE'}")
                 from zoneinfo import ZoneInfo
