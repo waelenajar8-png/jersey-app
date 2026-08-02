@@ -1999,6 +1999,7 @@ def api_schedule():
         return jsonify({"error": "Une programmation est déjà en cours, réessaie dans quelques secondes."}), 429
     
     data = request.json or {}
+    _schedule_result["last"] = {"pending": True}  # reset avant de lancer
     
     def run_schedule():
         try:
