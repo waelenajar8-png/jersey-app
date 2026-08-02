@@ -342,6 +342,27 @@ def _run_bulk_async(session_id, items, user, resolution):
             res = call_gemini_only(item["bytes"], item["mime"], fname, fnum, fbelow, prompt_fn=prompt_fn)
             item["_gemini_result"] = res
             log_generation(user, res["success"])
+            # Marquer la template comme utilisée (lock seulement sur le cache mémoire)
+            if res.get("success") and item.get("template_key"):
+                flush_now = False
+                keys_to_flush = []
+                with _used_templates_lock:
+                    _used_templates_cache.append(item["template_key"])
+                    if len(_used_templates_cache) >= 10:
+                        keys_to_flush = list(_used_templates_cache)
+                        _used_templates_cache.clear()
+                        flush_now = True
+                if flush_now:
+                    try:
+                        used = r2_get_json("meta/templates_used.json") or {"keys": []}
+                        keys_list = used.get("keys", [])
+                        for tk in keys_to_flush:
+                            if tk in keys_list: keys_list.remove(tk)
+                            keys_list.insert(0, tk)
+                        used["keys"] = keys_list[:200]
+                        r2_put_json("meta/templates_used.json", used)
+                    except Exception:
+                        pass
             if not res["success"]:
                 _update_session(session_id, False, error=res.get("error"), idx=idx)
         except Exception as e:
@@ -380,7 +401,7 @@ def _run_bulk_async(session_id, items, user, resolution):
             item["_gemini_result"] = None
             gc.collect()
 
-    # Vertex AI : séquentiel pour éviter les 429 quota
+    # Real-ESRGAN séquentiel pour éviter la surcharge
     for item in successful:
         upscale_one(item)
 
@@ -442,7 +463,7 @@ R2_BUCKET     = os.environ.get("R2_BUCKET", "jersey-templates")
 
 
 # Metricool API
-METRICOOL_TOKEN = os.environ.get("METRICOOL_TOKEN", "KPKUJFCYPOOCOAMHFLQWQEZWJNVQEPKTYFVBYVPDIVRYUVYDZPJXPVOXGDYGVOXK")
+METRICOOL_TOKEN = os.environ.get("METRICOOL_TOKEN")  # À définir dans Railway
 METRICOOL_USER_ID = os.environ.get("METRICOOL_USER_ID", "5037969")
 METRICOOL_ACCOUNTS = {
     "Volakits Main (wael)": {"blog_id": "6542376", "active": True},
@@ -1302,7 +1323,7 @@ def schedule_metricool(image_urls, caption, publish_time_iso, blog_id, timezone=
     media_ids = []
     for url in image_urls:
         try:
-            resp = requests.get(
+            resp = requests.post(
                 f"https://app.metricool.com/api/v2/media/normalize?userId={METRICOOL_USER_ID}&blogId={blog_id}",
                 headers={"X-Mc-Auth": METRICOOL_TOKEN, "Content-Type": "application/json"},
                 json={"url": url},
@@ -1363,6 +1384,8 @@ def get_pepites_count_per_tiktok(n_tiktoks, n_pepites):
 _pepites_deck_lock = threading.Lock()
 _pepites_deck_mem = []      # paquet en mémoire — évite appels R2 à chaque TikTok
 _normaux_cache = []         # liste normaux en cache mémoire
+_used_templates_lock = threading.Lock()
+_used_templates_cache = []  # buffer des templates utilisées (flush toutes les 10)
 
 def _load_flocages_cache():
     """Charge les listes depuis R2 une seule fois au démarrage/reset"""
@@ -1938,11 +1961,11 @@ def api_dispatch_smart():
             by_account[acc] = by_account.get(acc, 0) + 1
             idx += 1
     
-    # Sauvegarder en batch
+    # Sauvegarder les assignations (pending_dict pour accès O(1))
+    pending_dict = {k: t for k, t in pending}
     if batch:
-        r2_put_json("meta/pending_assigns.json", batch)
         for key, acc in batch.items():
-            t = r2_get_json(key)
+            t = pending_dict.get(key)
             if t:
                 t["account"] = acc
                 r2_put_json(key, t)
@@ -2562,39 +2585,44 @@ def api_autopilot_plan():
     data = request.json or {}
     days = int(data.get("days", 7))
     
+    from datetime import timedelta
     all_accounts = list(METRICOOL_ACCOUNTS.keys())
+    now = datetime.now(timezone.utc)
+    cutoff = now + timedelta(days=days)
     plan = {}
     total_needed = 0
+    
+    # Charger scheduled et queue une seule fois
+    scheduled_keys = [k for k in r2_list_keys(PFX_SCHEDULED) if "/imgs/" not in k]
+    queue_keys = [k for k in r2_list_keys(PFX_QUEUE) if "/imgs/" not in k]
+    
+    # Construire index par compte
+    scheduled_by_acc = {}
+    for k in scheduled_keys:
+        t = r2_get_json(k)
+        if not t: continue
+        acc = t.get("account","")
+        sat = t.get("scheduled_at","")
+        if not sat: continue
+        try:
+            dt = datetime.fromisoformat(sat)
+            if dt.tzinfo is None: dt = dt.replace(tzinfo=timezone.utc)
+            if now <= dt <= cutoff:
+                scheduled_by_acc[acc] = scheduled_by_acc.get(acc, 0) + 1
+        except Exception: pass
+    
+    queue_by_acc = {}
+    for k in queue_keys:
+        t = r2_get_json(k)
+        if not t: continue
+        acc = t.get("account","")
+        if acc: queue_by_acc[acc] = queue_by_acc.get(acc, 0) + 1
     
     for acc in all_accounts:
         slots_per_day = len(get_schedule_times_for_account(acc))
         tiktoks_needed = slots_per_day * days
-        
-        # Compter les TikToks déjà programmés pour ce compte (prochains N jours)
-        from datetime import timedelta
-        now = datetime.now(timezone.utc)
-        cutoff = now + timedelta(days=days)
-        scheduled_keys = r2_list_keys(PFX_SCHEDULED)
-        already_scheduled = 0
-        for k in scheduled_keys:
-            if "/imgs/" in k: continue
-            t = r2_get_json(k)
-            if not t: continue
-            if t.get("account") != acc: continue
-            sat = t.get("scheduled_at","")
-            if sat:
-                try:
-                    dt = datetime.fromisoformat(sat)
-                    if dt.tzinfo is None: dt = dt.replace(tzinfo=timezone.utc)
-                    if now <= dt <= cutoff:
-                        already_scheduled += 1
-                except Exception: pass
-        
-        # TikToks en file d'attente assignés à ce compte
-        queue_keys = r2_list_keys(PFX_QUEUE)
-        in_queue = sum(1 for k in queue_keys if "/imgs/" not in k and 
-                      (r2_get_json(k) or {}).get("account") == acc)
-        
+        already_scheduled = scheduled_by_acc.get(acc, 0)
+        in_queue = queue_by_acc.get(acc, 0)
         missing = max(0, tiktoks_needed - already_scheduled - in_queue)
         plan[acc] = {
             "needed": tiktoks_needed,
@@ -2619,7 +2647,6 @@ def api_metricool_failed_posts():
         return jsonify({"failed": [], "error": "METRICOOL_TOKEN manquant"})
     
     failed = []
-    now = datetime.now(timezone.utc)
     
     for account, mc_acc in METRICOOL_ACCOUNTS.items():
         if not mc_acc.get("active"): continue
@@ -3050,7 +3077,19 @@ def api_templates2_random():
                     all_keys.append(k)
             if not resp.get("IsTruncated"): break
             kwargs["ContinuationToken"] = resp["NextContinuationToken"]
-        _random.shuffle(all_keys)
+        # Rotation intelligente — éviter les templates récemment utilisées
+        try:
+            used_data = r2_get_json("meta/templates_used.json") or {}
+            used_keys = set(used_data.get("keys", [])[:50])  # les 50 dernières
+            # Séparer non-utilisées et utilisées
+            fresh = [k for k in all_keys if k not in used_keys]
+            recent = [k for k in all_keys if k in used_keys]
+            _random.shuffle(fresh)
+            _random.shuffle(recent)
+            # Prioriser les fraîches, compléter avec les récentes si besoin
+            all_keys = fresh + recent
+        except Exception:
+            _random.shuffle(all_keys)
         selected = all_keys[:min(n, len(all_keys))]
         templates = []
         for k in selected:
@@ -3119,7 +3158,19 @@ def api_templates_random():
                     all_keys.append(k)
             if not resp.get("IsTruncated"): break
             kwargs["ContinuationToken"] = resp["NextContinuationToken"]
-        _random.shuffle(all_keys)
+        # Rotation intelligente — éviter les templates récemment utilisées
+        try:
+            used_data = r2_get_json("meta/templates_used.json") or {}
+            used_keys = set(used_data.get("keys", [])[:50])  # les 50 dernières
+            # Séparer non-utilisées et utilisées
+            fresh = [k for k in all_keys if k not in used_keys]
+            recent = [k for k in all_keys if k in used_keys]
+            _random.shuffle(fresh)
+            _random.shuffle(recent)
+            # Prioriser les fraîches, compléter avec les récentes si besoin
+            all_keys = fresh + recent
+        except Exception:
+            _random.shuffle(all_keys)
         selected = all_keys[:min(n, len(all_keys))]
         templates = []
         for k in selected:
