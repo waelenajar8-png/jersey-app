@@ -3202,6 +3202,19 @@ def api_templates_upload():
         uploaded.append(key)
     return jsonify({"uploaded":uploaded})
 
+@app.route("/api/templates2/delete", methods=["POST"])
+def api_templates2_delete():
+    """Supprime une template v2"""
+    key = (request.json or {}).get("key")
+    if not key: return jsonify({"error": "key requis"}), 400
+    r2 = get_r2()
+    if not r2: return jsonify({"error": "R2 non configuré"}), 500
+    try:
+        r2.delete_object(Bucket=R2_BUCKET, Key=key)
+        return jsonify({"success": True})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 @app.route("/api/templates/delete", methods=["POST"])
 def api_templates_delete():
     key = (request.json or {}).get("key")
