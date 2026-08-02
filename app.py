@@ -2055,8 +2055,8 @@ def _do_schedule_data(data=None):
     if start_date_str:
         try:
             y,mo,d = map(int, start_date_str.split("-"))
-            from datetime import date as date_cls
-            start_date = date_cls(y,mo,d)
+            from datetime import date as _date_cls
+            start_date = _date_cls(y,mo,d)
         except Exception:
             start_date = now.date()
     else:
@@ -2106,7 +2106,6 @@ def _do_schedule_data(data=None):
             if tiktok_data.get("status") in ("scheduled", "scheduling"):
                 # Si "scheduling" depuis plus de 10 min c'est bloqué — on reset
                 if tiktok_data.get("status") == "scheduling":
-                    from datetime import timedelta
                     status_ts = tiktok_data.get("scheduling_at","")
                     try:
                         ts = datetime.fromisoformat(status_ts)
@@ -2630,7 +2629,6 @@ def api_autopilot_plan():
     data = request.json or {}
     days = int(data.get("days", 7))
     
-    from datetime import timedelta
     all_accounts = list(METRICOOL_ACCOUNTS.keys())
     now = datetime.now(timezone.utc)
     cutoff = now + timedelta(days=days)
