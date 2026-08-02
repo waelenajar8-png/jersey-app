@@ -1354,7 +1354,7 @@ def schedule_metricool(image_urls, caption, publish_time_iso, blog_id, timezone=
             "timezone": timezone
         },
         "text": caption,
-        "providers": ["tiktok"],
+        "providers": [{"network": "tiktok"}],
         "media": [{"url": mid} if mid.startswith("http") else {"mediaId": mid} for mid in media_ids],
         "autoPublish": True,
         "tiktok": {
