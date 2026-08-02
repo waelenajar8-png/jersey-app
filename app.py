@@ -1888,6 +1888,67 @@ def api_assign_batch():
         done += 1
     return jsonify({"success": True, "updated": done})
 
+@app.route("/api/queue/dispatch_smart", methods=["POST"])
+def api_dispatch_smart():
+    """Auto-dispatch intelligent — répartit les TikToks proportionnellement aux créneaux de chaque compte"""
+    r2 = get_r2()
+    if not r2: return jsonify({"error": "R2 non configuré"}), 500
+    
+    # Calculer le ratio de créneaux par compte
+    all_accounts = list(METRICOOL_ACCOUNTS.keys())
+    total_slots = sum(len(get_schedule_times_for_account(a)) for a in all_accounts)
+    
+    # Charger tous les TikToks en attente non assignés
+    keys = sorted(r2_list_keys(PFX_QUEUE))
+    keys = [k for k in keys if "/imgs/" not in k]
+    pending = []
+    for k in keys:
+        t = r2_get_json(k)
+        if t and t.get("status") == "pending" and not t.get("account"):
+            pending.append((k, t))
+    
+    if not pending:
+        return jsonify({"success": True, "count": 0, "by_account": {}, "message": "Aucun TikTok non assigné"})
+    
+    # Répartir proportionnellement
+    assignments = {}
+    for acc in all_accounts:
+        ratio = len(get_schedule_times_for_account(acc)) / total_slots
+        assignments[acc] = max(1, round(len(pending) * ratio))
+    
+    # Ajuster pour avoir exactement len(pending) assignments
+    total_assigned = sum(assignments.values())
+    diff = len(pending) - total_assigned
+    if diff > 0:
+        assignments[all_accounts[0]] += diff
+    elif diff < 0:
+        assignments[all_accounts[0]] = max(0, assignments[all_accounts[0]] + diff)
+    
+    # Assigner les TikToks
+    idx = 0
+    by_account = {}
+    batch = {}
+    for acc in all_accounts:
+        count = assignments[acc]
+        for i in range(count):
+            if idx >= len(pending): break
+            key, tiktok = pending[idx]
+            tiktok["account"] = acc
+            batch[key] = acc
+            by_account[acc] = by_account.get(acc, 0) + 1
+            idx += 1
+    
+    # Sauvegarder en batch
+    if batch:
+        r2_put_json("meta/pending_assigns.json", batch)
+        for key, acc in batch.items():
+            t = r2_get_json(key)
+            if t:
+                t["account"] = acc
+                r2_put_json(key, t)
+    
+    return jsonify({"success": True, "count": idx, "by_account": by_account})
+
 @app.route("/api/queue/dispatch", methods=["POST"])
 def api_dispatch():
     data = request.json; accounts = data.get("accounts",[])
@@ -2401,13 +2462,19 @@ def api_recover_robinreach():
         if account_filter and account != account_filter:
             continue
         
-        # Remettre dans la file d'attente
+        # Remettre dans la file d'attente avec note de récupération
         queue_key = sched_key.replace(PFX_SCHEDULED, PFX_QUEUE)
+        original_date = tiktok.get("scheduled_at", "")
+        original_account = tiktok.get("account", "")
         tiktok["status"] = "pending"
         tiktok["account"] = None
         tiktok["scheduled_at"] = None
         tiktok["robinreach_post_id"] = None
         tiktok["metricool_post_id"] = None
+        tiktok["recovered"] = True
+        tiktok["recovered_at"] = datetime.now(timezone.utc).isoformat()
+        tiktok["recovered_original_date"] = original_date
+        tiktok["recovered_original_account"] = original_account
         
         # Copier vers queue/, supprimer de scheduled/
         r2_put_json(queue_key, tiktok)
@@ -2488,6 +2555,95 @@ def api_unschedule():
         r2_delete(sched_key)
         count += 1
     return jsonify({"success": True, "count": count, "errors": errors})
+
+@app.route("/api/autopilot/plan", methods=["POST"])
+def api_autopilot_plan():
+    """Calcule combien de TikToks manquent pour remplir N jours sur tous les comptes"""
+    data = request.json or {}
+    days = int(data.get("days", 7))
+    
+    all_accounts = list(METRICOOL_ACCOUNTS.keys())
+    plan = {}
+    total_needed = 0
+    
+    for acc in all_accounts:
+        slots_per_day = len(get_schedule_times_for_account(acc))
+        tiktoks_needed = slots_per_day * days
+        
+        # Compter les TikToks déjà programmés pour ce compte (prochains N jours)
+        from datetime import timedelta
+        now = datetime.now(timezone.utc)
+        cutoff = now + timedelta(days=days)
+        scheduled_keys = r2_list_keys(PFX_SCHEDULED)
+        already_scheduled = 0
+        for k in scheduled_keys:
+            if "/imgs/" in k: continue
+            t = r2_get_json(k)
+            if not t: continue
+            if t.get("account") != acc: continue
+            sat = t.get("scheduled_at","")
+            if sat:
+                try:
+                    dt = datetime.fromisoformat(sat)
+                    if dt.tzinfo is None: dt = dt.replace(tzinfo=timezone.utc)
+                    if now <= dt <= cutoff:
+                        already_scheduled += 1
+                except Exception: pass
+        
+        # TikToks en file d'attente assignés à ce compte
+        queue_keys = r2_list_keys(PFX_QUEUE)
+        in_queue = sum(1 for k in queue_keys if "/imgs/" not in k and 
+                      (r2_get_json(k) or {}).get("account") == acc)
+        
+        missing = max(0, tiktoks_needed - already_scheduled - in_queue)
+        plan[acc] = {
+            "needed": tiktoks_needed,
+            "scheduled": already_scheduled,
+            "in_queue": in_queue,
+            "missing": missing,
+            "images_to_generate": missing * TIKTOK_SIZE
+        }
+        total_needed += missing * TIKTOK_SIZE
+    
+    return jsonify({
+        "days": days,
+        "plan": plan,
+        "total_tiktoks_missing": sum(v["missing"] for v in plan.values()),
+        "total_images_to_generate": total_needed
+    })
+
+@app.route("/api/metricool/failed_posts")
+def api_metricool_failed_posts():
+    """Vérifie sur Metricool les posts qui auraient dû être publiés mais ne l'ont pas été"""
+    if not METRICOOL_TOKEN:
+        return jsonify({"failed": [], "error": "METRICOOL_TOKEN manquant"})
+    
+    failed = []
+    now = datetime.now(timezone.utc)
+    
+    for account, mc_acc in METRICOOL_ACCOUNTS.items():
+        if not mc_acc.get("active"): continue
+        try:
+            resp = requests.get(
+                f"https://app.metricool.com/api/v2/posts?userId={METRICOOL_USER_ID}&blogId={mc_acc['blog_id']}&status=failed&pageSize=50",
+                headers={"X-Mc-Auth": METRICOOL_TOKEN},
+                timeout=15
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                posts = data if isinstance(data, list) else data.get("posts", [])
+                for post in posts:
+                    failed.append({
+                        "account": account,
+                        "post_id": post.get("id"),
+                        "scheduled_at": post.get("publicationDate", {}).get("dateTime") if isinstance(post.get("publicationDate"), dict) else post.get("publicationDate"),
+                        "error": post.get("error") or post.get("errorMessage", "Erreur inconnue"),
+                        "content": post.get("text","")[:100]
+                    })
+        except Exception as e:
+            print(f"[FAILED_POSTS] {account}: {e}")
+    
+    return jsonify({"failed": failed, "count": len(failed)})
 
 @app.route("/api/metricool/accounts")
 def api_metricool_accounts():
@@ -2931,6 +3087,19 @@ def api_templates():
         return jsonify({"templates":all_keys})
     except Exception as e:
         return jsonify({"templates":[],"error":str(e)})
+
+@app.route("/api/templates/used", methods=["POST"])
+def api_mark_template_used():
+    """Marque une template comme utilisée récemment"""
+    key = (request.json or {}).get("key")
+    if not key: return jsonify({"error": "key requis"}), 400
+    used = r2_get_json("meta/templates_used.json") or {"keys": [], "max": 100}
+    keys_list = used.get("keys", [])
+    if key in keys_list: keys_list.remove(key)
+    keys_list.insert(0, key)
+    used["keys"] = keys_list[:200]  # garder les 200 dernières
+    r2_put_json("meta/templates_used.json", used)
+    return jsonify({"success": True})
 
 @app.route("/api/templates/random")
 def api_templates_random():
