@@ -2381,6 +2381,50 @@ def api_find_duplicates():
 
     return jsonify({"duplicates": duplicates, "count": len(duplicates)})
 
+@app.route("/api/scheduled/recover_robinreach", methods=["POST"])
+def api_recover_robinreach():
+    """Remet dans la file d'attente tous les TikToks programmés via RobinReach (qui ont échoué)"""
+    data = request.json or {}
+    account_filter = data.get("account")  # optionnel — filtrer par compte
+    
+    keys = sorted(r2_list_keys(PFX_SCHEDULED))
+    keys = [k for k in keys if "/imgs/" not in k]
+    
+    recovered = 0
+    by_account = {}
+    
+    for sched_key in keys:
+        tiktok = r2_get_json(sched_key)
+        if not tiktok: continue
+        
+        account = tiktok.get("account", "")
+        if account_filter and account != account_filter:
+            continue
+        
+        # Remettre dans la file d'attente
+        queue_key = sched_key.replace(PFX_SCHEDULED, PFX_QUEUE)
+        tiktok["status"] = "pending"
+        tiktok["account"] = None
+        tiktok["scheduled_at"] = None
+        tiktok["robinreach_post_id"] = None
+        tiktok["metricool_post_id"] = None
+        
+        # Copier vers queue/, supprimer de scheduled/
+        r2_put_json(queue_key, tiktok)
+        try:
+            get_r2().delete_object(Bucket=R2_BUCKET, Key=sched_key)
+        except Exception:
+            pass
+        
+        by_account[account] = by_account.get(account, 0) + 1
+        recovered += 1
+    
+    # Vider l'index des créneaux utilisés
+    if recovered > 0:
+        r2_put_json(KEY_USED_SLOTS, {})
+    
+    return jsonify({"success": True, "recovered": recovered, "by_account": by_account})
+
 @app.route("/api/scheduled/unschedule", methods=["POST"])
 def api_unschedule():
     """Remet des TikToks programmés dans la file d'attente ET supprime de Metricool"""
