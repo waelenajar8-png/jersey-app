@@ -274,7 +274,7 @@ async function loadMetricoolStats(){
             document.getElementById('failedPostsList').style.display='block';
             document.getElementById('failedPostsContent').innerHTML = failed.slice(0,5).map(f=>
                 `<div style="background:rgba(248,113,113,.1);border:1px solid rgba(248,113,113,.2);border-radius:8px;padding:8px 10px;margin-bottom:6px;font-size:11px">
-                    <b>${f.account}</b> · ${f.scheduled_at ? new Date(f.scheduled_at).toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit',timeZone:'Europe/Paris'}) : '?'}
+                    <b>${f.account}</b> · ${f.scheduled_at ? new Date(f.scheduled_at).toLocaleString('fr-FR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit',timeZone:'Europe/Paris'}) : '?'}
                     <br><span style="color:var(--danger)">${f.error||'Erreur inconnue'}</span>
                 </div>`
             ).join('');
