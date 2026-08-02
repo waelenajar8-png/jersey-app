@@ -1210,13 +1210,11 @@ DEFAULT_MAIN_ACCOUNT = "Volakits Main (wael)"
 ALL_ACCOUNTS = list(METRICOOL_ACCOUNTS.keys())
 
 def get_accounts():
-    data = r2_get_json(KEY_ACCOUNTS)
-    if data and data.get("main"):
-        return data
-    # Valeur par défaut si rien configuré
+    """Retourne les comptes depuis METRICOOL_ACCOUNTS (source unique de vérité)"""
     return {
         "main": DEFAULT_MAIN_ACCOUNT,
-        "others": [k for k in METRICOOL_ACCOUNTS if k != DEFAULT_MAIN_ACCOUNT]
+        "others": [k for k in METRICOOL_ACCOUNTS if k != DEFAULT_MAIN_ACCOUNT],
+        "available": list(METRICOOL_ACCOUNTS.keys())
     }
 
 def save_accounts(data):
