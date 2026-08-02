@@ -2172,25 +2172,30 @@ def _do_schedule_data(data=None):
                 image_urls = [r2_presigned(k, expires=604800) for k in tiktok.get("image_keys", [])]
                 image_urls = [u for u in image_urls if u]
                 print(f"[METRICOOL] {len(image_urls)} images à envoyer pour TikTok {tiktok.get('number','')}")
-                from datetime import datetime
+                print(f"[METRICOOL] URL exemple: {image_urls[0][:100] if image_urls else 'AUCUNE'}")
                 from zoneinfo import ZoneInfo
-                paris_tz = ZoneInfo("Europe/Paris")
+                paris_tz_local = ZoneInfo("Europe/Paris")
                 dt_utc = datetime.fromisoformat(dt_str.replace("Z","")).replace(tzinfo=timezone.utc) if "Z" in dt_str else datetime.fromisoformat(dt_str)
                 if dt_utc.tzinfo is None:
                     dt_utc = dt_utc.replace(tzinfo=timezone.utc)
-                dt_paris = dt_utc.astimezone(paris_tz)
+                dt_paris = dt_utc.astimezone(paris_tz_local)
                 publish_time_local = dt_paris.strftime("%Y-%m-%dT%H:%M:%S")
+                print(f"[METRICOOL] Date: {publish_time_local}, blog_id: {metricool_account['blog_id']}")
                 result = schedule_metricool(
                     image_urls=image_urls,
                     caption=FIXED_CAPTION,
                     publish_time_iso=publish_time_local,
                     blog_id=metricool_account["blog_id"]
                 )
+                print(f"[METRICOOL] Résultat: {result}")
                 if not result["success"]:
                     return {"error": f"TikTok {tiktok.get('number','')}: {result['error']}"}
                 tiktok_data["metricool_post_id"] = result.get("post_id")
                 print(f"[METRICOOL] ✅ TikTok {tiktok.get('number','')} programmé")
             except Exception as e:
+                import traceback
+                print(f"[METRICOOL] ❌ Exception: {e}")
+                traceback.print_exc()
                 return {"error": f"TikTok {tiktok.get('number','')}: {str(e)}"}
         else:
             return {"error": f"TikTok {tiktok.get('number','')}: Compte '{account}' non configuré sur Metricool"}
