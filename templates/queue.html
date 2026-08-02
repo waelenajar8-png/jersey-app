@@ -582,7 +582,7 @@ function renderCard(t){
                         TikTok ${t.number} <span style="font-size:10px;color:var(--text-dim)">${t.image_keys?.length||0} images</span>
                     </div>
                     <div class="card-meta">${t.user} · ${date}</div>
-                    ${t.recovered ? `<div style="font-size:10px;color:#fbbf24;background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.3);border-radius:6px;padding:2px 6px;margin-top:3px;display:inline-block">⚠️ Récupéré · prévu le ${t.recovered_original_date ? new Date(t.recovered_original_date).toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit',timeZone:'Europe/Paris'}) : '?'} · ${t.recovered_original_account||'?'}</div>` : ''}
+                    ${t.recovered ? `<div style="font-size:10px;color:#fbbf24;background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.3);border-radius:6px;padding:2px 6px;margin-top:3px;display:inline-block">⚠️ Récupéré · prévu le ${t.recovered_original_date ? new Date(t.recovered_original_date).toLocaleString('fr-FR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit',timeZone:'Europe/Paris'}) : '?'} · ${t.recovered_original_account||'?'}</div>` : ''}
                 </div>
                 ${t.account?`<span class="account-tag">${t.account}</span>`:''}
             </div>
@@ -714,7 +714,7 @@ async function pickRandomFloc(){
     // Charger la bibliothèque si pas encore fait
     if(!_flocLibrary.length){
         try{
-            const res=await fetch('/api/flockages');
+            const res=await fetch('/api/flocages');
             const d=await res.json();
             _flocLibrary=d.flockages||[];
         }catch(e){showStatus('❌ Erreur chargement bibliothèque');return;}
