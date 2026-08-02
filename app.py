@@ -2149,6 +2149,7 @@ def _do_schedule_data(data=None):
 
         # Metricool uniquement
         metricool_account = METRICOOL_ACCOUNTS.get(account)
+        print(f"[SCHEDULE DEBUG] account='{account}' metricool_account={metricool_account} token_ok={bool(METRICOOL_TOKEN)}")
         if metricool_account and metricool_account.get("active") and METRICOOL_TOKEN:
             try:
                 image_urls = [r2_presigned(k, expires=604800) for k in tiktok.get("image_keys", [])]
