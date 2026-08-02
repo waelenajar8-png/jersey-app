@@ -2081,10 +2081,28 @@ def _do_schedule_data(data=None):
                 errors.append(f"TikTok {tiktok.get('number','')} introuvable")
                 continue
             if tiktok_data.get("status") in ("scheduled", "scheduling"):
-                errors.append(f"TikTok {tiktok.get('number','')} déjà programmé ou en cours, ignoré")
-                continue
+                # Si "scheduling" depuis plus de 10 min c'est bloqué — on reset
+                if tiktok_data.get("status") == "scheduling":
+                    from datetime import timedelta
+                    status_ts = tiktok_data.get("scheduling_at","")
+                    try:
+                        ts = datetime.fromisoformat(status_ts)
+                        if (datetime.now(timezone.utc) - ts).total_seconds() > 600:
+                            tiktok_data["status"] = "pending"
+                            r2_put_json(tiktok["r2_key"], tiktok_data)
+                            print(f"[SCHEDULE] TikTok {tiktok.get('number','')} scheduling bloqué → reset")
+                        else:
+                            errors.append(f"TikTok {tiktok.get('number','')} déjà en cours, ignoré")
+                            continue
+                    except Exception:
+                        tiktok_data["status"] = "pending"
+                        r2_put_json(tiktok["r2_key"], tiktok_data)
+                else:
+                    errors.append(f"TikTok {tiktok.get('number','')} déjà programmé, ignoré")
+                    continue
             # Marquer immédiatement comme "en cours" pour éviter les doublons
             tiktok_data["status"] = "scheduling"
+            tiktok_data["scheduling_at"] = datetime.now(timezone.utc).isoformat()
             r2_put_json(tiktok["r2_key"], tiktok_data)
 
             # Créneau personnalisé ?
