@@ -1322,16 +1322,15 @@ def schedule_metricool(image_urls, caption, publish_time_iso, blog_id, timezone=
     media_ids = []
     for i, url in enumerate(image_urls):
         try:
-            resp = requests.post(
-                f"https://app.metricool.com/api/v2/media/normalize?userId={METRICOOL_USER_ID}&blogId={blog_id}",
-                headers={"X-Mc-Auth": METRICOOL_TOKEN, "Content-Type": "application/json"},
-                json={"url": url},
+            resp = requests.get(
+                f"https://app.metricool.com/api/actions/normalize/image/url?url={url}&userId={METRICOOL_USER_ID}&blogId={blog_id}",
+                headers={"X-Mc-Auth": METRICOOL_TOKEN},
                 timeout=30
             )
             print(f"[METRICOOL] Normalisation image {i+1}: status={resp.status_code} resp={resp.text[:200]}")
             if resp.status_code == 200:
                 data = resp.json()
-                media_id = data.get("mediaId") or data.get("id")
+                media_id = data.get("mediaId") or data.get("id") or data.get("hash")
                 if media_id:
                     media_ids.append(media_id)
         except Exception as e:
@@ -1358,7 +1357,7 @@ def schedule_metricool(image_urls, caption, publish_time_iso, blog_id, timezone=
     
     try:
         resp = requests.post(
-            f"https://app.metricool.com/api/v2/posts?userId={METRICOOL_USER_ID}&blogId={blog_id}",
+            f"https://app.metricool.com/api/v2/scheduler/posts?userId={METRICOOL_USER_ID}&blogId={blog_id}",
             headers={"X-Mc-Auth": METRICOOL_TOKEN, "Content-Type": "application/json"},
             json=payload,
             timeout=60
