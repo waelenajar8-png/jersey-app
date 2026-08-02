@@ -2088,6 +2088,15 @@ def _do_schedule_data(data=None):
         used_slots = set(used_slots_idx.get(account, []))
         slot_date = start_date
         slot_index = 0
+        # Si tous les créneaux d'aujourd'hui sont pris, commencer demain
+        account_times = get_schedule_times_for_account(account)
+        today_slots = set()
+        for ht in account_times:
+            h2,m2 = map(int, ht.split(":"))
+            sd = datetime(slot_date.year,slot_date.month,slot_date.day,h2,m2,tzinfo=timezone.utc).isoformat()
+            today_slots.add(sd)
+        if today_slots.issubset(used_slots):
+            slot_date += timedelta(days=1)
 
         for tiktok in tiktoks:
             tiktok_data = r2_get_json(tiktok["r2_key"])
