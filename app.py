@@ -1330,8 +1330,23 @@ def schedule_metricool(image_urls, caption, publish_time_iso, blog_id, timezone=
                 print(f"[METRICOOL] Erreur téléchargement image {i+1}: {img_resp.status_code}")
                 continue
             
+            # Convertir en JPEG (TikTok n'accepte pas PNG)
+            try:
+                from PIL import Image
+                import io
+                img = Image.open(io.BytesIO(img_resp.content)).convert("RGB")
+                buf = io.BytesIO()
+                img.save(buf, format="JPEG", quality=95)
+                img_bytes = buf.getvalue()
+                mime = "image/jpeg"
+                ext = "jpg"
+            except Exception:
+                img_bytes = img_resp.content
+                mime = "image/jpeg"
+                ext = "jpg"
+            
             # Uploader sur les serveurs Metricool
-            files = {"picture": (f"image_{i+1}.png", img_resp.content, "image/png")}
+            files = {"picture": (f"image_{i+1}.{ext}", img_bytes, mime)}
             data = {"userId": METRICOOL_USER_ID, "blogId": blog_id}
             upload_resp = requests.post(
                 f"https://app.metricool.com/api/utils/upload",
