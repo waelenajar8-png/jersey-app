@@ -2029,12 +2029,16 @@ def api_schedule():
             with app.app_context():
                 result = _do_schedule_data(data)
                 # Stocker le dict, pas la Response Flask
-                if hasattr(result, 'get_json'):
+                if isinstance(result, tuple):
+                    resp_obj, status = result[0], result[1]
+                    content = resp_obj.get_json()
+                    print(f"[SCHEDULE] Résultat tuple status={status}: {content}")
+                    _schedule_result["last"] = content if status == 200 else {"scheduled": 0, "errors": [str(content)]}
+                elif hasattr(result, 'get_json'):
                     _schedule_result["last"] = result.get_json()
-                    print(f"[SCHEDULE] Résultat final: {_schedule_result['last']}")
                 else:
                     _schedule_result["last"] = result
-                    print(f"[SCHEDULE] Résultat final: {result}")
+                print(f"[SCHEDULE] Résultat final stocké: {_schedule_result['last']}")
         except Exception as e:
             import traceback
             print(f"[SCHEDULE] ❌ Exception dans run_schedule: {e}")
