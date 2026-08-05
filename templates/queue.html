@@ -254,6 +254,7 @@ h1{font-size:24px;margin:0;font-weight:800;letter-spacing:-0.02em}
             <option value="date_asc">Tri : plus ancien</option>
         </select>
         <span id="userFilters"></span>
+        <span id="accountFilters" style="margin-left:8px"></span>
     </div>
 
     <div id="grid" class="grid">
@@ -369,6 +370,7 @@ let checkedForDelete=new Set();
 let accounts={main:'',others:[]};
 let customSlots={};
 let currentUserFilter='all';
+let currentAccountFilter='all';
 let currentSearch='';
 let currentSort='num_asc';
 let _cacheLoaded=false;
@@ -395,6 +397,7 @@ async function loadAll(){
     updateCounters();
     setupInfiniteScroll();
     populateSelectNAccount();
+    updateAccountFilters();
 }
 
 async function loadPage(page){
@@ -446,6 +449,24 @@ function updateUserFilters(){
         users.map(u=>`<button class="filter-chip ${currentUserFilter===u?'active':''}" onclick="setUserFilter('${u}')">${u}</button>`).join('');
 }
 
+function setAccountFilter(a){
+    currentAccountFilter = a;
+    document.querySelectorAll('#accountFilters .filter-chip').forEach(b=>b.classList.remove('active'));
+    document.querySelectorAll('#accountFilters .filter-chip').forEach(b=>{
+        if(b.dataset.account===a) b.classList.add('active');
+    });
+    render();
+    updateCounters();
+}
+
+function updateAccountFilters(){
+    const el = document.getElementById('accountFilters');
+    if(!el || !accounts.main) return;
+    const all = [accounts.main, ...(accounts.others||[]).filter(a=>a!==accounts.main)].filter(Boolean);
+    el.innerHTML = `<button class="filter-chip ${currentAccountFilter==='all'?'active':''}" data-account="all" onclick="setAccountFilter('all')">📋 Tous les comptes</button>` +
+        all.map(a=>`<button class="filter-chip ${currentAccountFilter===a?'active':''}" data-account="${a}" onclick="setAccountFilter('${a}')">${a.split(' ')[0]} ${a.split('(')[1]?.replace(')','')}</button>`).join('');
+}
+
 function setUserFilter(u){
     currentUserFilter = u;
     updateUserFilters();
@@ -461,6 +482,7 @@ function applyFilters(){
 function getFilteredSorted(){
     let list = [...allTiktoks];
     if(currentUserFilter !== 'all') list = list.filter(t => t.user === currentUserFilter);
+    if(currentAccountFilter !== 'all') list = list.filter(t => t.account === currentAccountFilter);
     if(currentSearch) list = list.filter(t => 
         String(t.number).includes(currentSearch) || 
         (t.flockages||[]).some(f => f.toLowerCase().includes(currentSearch.toLowerCase()))
