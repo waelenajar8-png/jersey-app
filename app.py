@@ -1322,27 +1322,28 @@ def schedule_metricool(image_urls, caption, publish_time_iso, blog_id, timezone=
     media_ids = []
     for i, url in enumerate(image_urls):
         try:
-            resp = requests.get(
-                f"https://app.metricool.com/api/actions/normalize/image/url?url={url}&userId={METRICOOL_USER_ID}&blogId={blog_id}",
+            # Télécharger l'image depuis R2
+            img_resp = requests.get(url, timeout=30)
+            if img_resp.status_code != 200:
+                print(f"[METRICOOL] Erreur téléchargement image {i+1}: {img_resp.status_code}")
+                continue
+            
+            # Uploader sur les serveurs Metricool
+            files = {"file": (f"image_{i+1}.png", img_resp.content, "image/png")}
+            upload_resp = requests.post(
+                f"https://app.metricool.com/api/utils/upload?userId={METRICOOL_USER_ID}&blogId={blog_id}",
                 headers={"X-Mc-Auth": METRICOOL_TOKEN},
-                timeout=30
+                files=files,
+                timeout=60
             )
-            print(f"[METRICOOL] Normalisation image {i+1}: status={resp.status_code} resp={resp.text[:200]}")
-            if resp.status_code == 200:
-                # Metricool retourne l'URL directement en texte brut
-                media_url = resp.text.strip()
-                if media_url and media_url.startswith("http"):
+            print(f"[METRICOOL] Upload image {i+1}: status={upload_resp.status_code} resp={upload_resp.text[:200]}")
+            if upload_resp.status_code == 200:
+                data = upload_resp.json()
+                media_url = data.get("url") or data.get("mediaUrl") or data.get("fileUrl")
+                if media_url:
                     media_ids.append(media_url)
-                else:
-                    try:
-                        data = resp.json()
-                        media_id = data.get("mediaId") or data.get("id") or data.get("hash") or data.get("url")
-                        if media_id:
-                            media_ids.append(media_id)
-                    except Exception:
-                        pass
         except Exception as e:
-            print(f"[METRICOOL] Erreur normalisation image {i+1}: {e}")
+            print(f"[METRICOOL] Erreur upload image {i+1}: {e}")
     
     if not media_ids:
         return {"success": False, "error": "Aucune image normalisée"}
