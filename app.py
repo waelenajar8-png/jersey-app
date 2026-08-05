@@ -1340,10 +1340,17 @@ def schedule_metricool(image_urls, caption, publish_time_iso, blog_id, timezone=
             )
             print(f"[METRICOOL] Upload image {i+1}: status={upload_resp.status_code} resp={upload_resp.text[:200]}")
             if upload_resp.status_code == 200:
-                data = upload_resp.json()
-                media_url = data.get("url") or data.get("mediaUrl") or data.get("fileUrl")
-                if media_url:
-                    media_ids.append(media_url)
+                resp_text = upload_resp.text.strip()
+                if resp_text.startswith("http"):
+                    media_ids.append(resp_text)
+                else:
+                    try:
+                        d = upload_resp.json()
+                        media_url = d.get("url") or d.get("mediaUrl") or d.get("fileUrl")
+                        if media_url:
+                            media_ids.append(media_url)
+                    except Exception:
+                        pass
         except Exception as e:
             print(f"[METRICOOL] Erreur upload image {i+1}: {e}")
     
@@ -2760,9 +2767,16 @@ def api_metricool_test():
             )
             upload_results.append({"status": r.status_code, "resp": r.text[:300]})
             if r.status_code == 200:
-                d = r.json()
-                media_url = d.get("url") or d.get("mediaUrl") or d.get("fileUrl") or str(d)
-                media_urls.append(media_url)
+                resp_text = r.text.strip()
+                if resp_text.startswith("http"):
+                    media_urls.append(resp_text)
+                else:
+                    try:
+                        d = r.json()
+                        media_url = d.get("url") or d.get("mediaUrl") or str(d)
+                        media_urls.append(media_url)
+                    except Exception:
+                        pass
         except Exception as e:
             upload_results.append({"error": str(e)})
     
