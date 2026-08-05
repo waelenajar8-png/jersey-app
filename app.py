@@ -468,7 +468,9 @@ METRICOOL_TOKEN = os.environ.get("METRICOOL_TOKEN")  # À définir dans Railway
 METRICOOL_USER_ID = os.environ.get("METRICOOL_USER_ID", "5037969")
 METRICOOL_ACCOUNTS = {
     "Volakits Main (wael)": {"blog_id": "6542376", "active": True},
-    # Autres comptes à ajouter plus tard
+    "Volakits 1 (seik)":    {"blog_id": "6675120", "active": True},
+    "Volakits 2 (momo)":    {"blog_id": "6675158", "active": True},
+    "Volakits 6 (wassim)":  {"blog_id": "6675169", "active": True},
 }
 
 
