@@ -2626,11 +2626,11 @@ def api_unschedule():
         if metricool_post_id and metricool_acc.get("active") and METRICOOL_TOKEN:
             try:
                 del_resp = requests.delete(
-                    f"https://app.metricool.com/api/v2/posts/{metricool_post_id}?userId={METRICOOL_USER_ID}&blogId={metricool_acc['blog_id']}",
+                    f"https://app.metricool.com/api/v2/scheduler/posts/{metricool_post_id}?userId={METRICOOL_USER_ID}&blogId={metricool_acc['blog_id']}",
                     headers={"X-Mc-Auth": METRICOOL_TOKEN},
                     timeout=15
                 )
-                print(f"[METRICOOL DELETE] Post {metricool_post_id}: {del_resp.status_code}")
+                print(f"[METRICOOL DELETE] Post {metricool_post_id}: {del_resp.status_code} {del_resp.text[:100]}")
             except Exception as e:
                 print(f"[METRICOOL DELETE] Erreur: {e}")
         
