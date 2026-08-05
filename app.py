@@ -2742,8 +2742,7 @@ def api_metricool_test():
     )
     
     # Test: uploader un média via multipart
-    import urllib.request
-    img_data = urllib.request.urlopen(TEST_URL).read()
+    img_data = requests.get(TEST_URL, headers={"User-Agent": "Mozilla/5.0"}, timeout=30).content
     files = {"file": ("image.png", img_data, "image/png")}
     resp_upload = requests.post(
         f"https://app.metricool.com/api/v2/media?userId={USER_ID}&blogId={BLOG_ID}",
