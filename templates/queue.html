@@ -1150,7 +1150,7 @@ async function scheduleAll(){
             attempts++;
             try{
                 const sr=await fetch('/api/queue/schedule/status').then(r=>r.json());
-                if(sr.scheduled !== undefined || attempts > 150){
+                if(sr.scheduled !== undefined || attempts > 300){
                     clearInterval(poll);
                     progFill.style.width='100%';
                     setTimeout(()=>progWrap.classList.remove('show'),600);
@@ -1160,18 +1160,20 @@ async function scheduleAll(){
                     customSlots={};
                     updateCounters();
                     await loadAll();
-                    if(sr.scheduled!==undefined){
+                    if(sr.scheduled !== undefined){
                         if(sr.errors?.length){
                             showStatus(`✅ ${sr.scheduled} programmés — ⚠️ ${sr.errors.length} erreur(s)`);
                         } else {
                             showStatus(`✅ ${sr.scheduled} TikTok(s) programmés !`);
                         }
+                    } else {
+                        showStatus('✅ Programmation terminée — vérifie les TikToks programmés');
                     }
                 } else {
                     showStatus(`⏳ Programmation en cours... ${attempts*2}s`);
                 }
             }catch(e){}
-        }, 2000);
+        }, 3000);  // poll toutes les 3s
         return;
     }
 
