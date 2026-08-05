@@ -1329,11 +1329,13 @@ def schedule_metricool(image_urls, caption, publish_time_iso, blog_id, timezone=
                 continue
             
             # Uploader sur les serveurs Metricool
-            files = {"file": (f"image_{i+1}.png", img_resp.content, "image/png")}
+            files = {"picture": (f"image_{i+1}.png", img_resp.content, "image/png")}
+            data = {"userId": METRICOOL_USER_ID, "blogId": blog_id}
             upload_resp = requests.post(
-                f"https://app.metricool.com/api/utils/upload?userId={METRICOOL_USER_ID}&blogId={blog_id}",
+                f"https://app.metricool.com/api/utils/upload",
                 headers={"X-Mc-Auth": METRICOOL_TOKEN},
                 files=files,
+                data=data,
                 timeout=60
             )
             print(f"[METRICOOL] Upload image {i+1}: status={upload_resp.status_code} resp={upload_resp.text[:200]}")
@@ -2747,11 +2749,13 @@ def api_metricool_test():
     for i, url in enumerate(TEST_URLS):
         try:
             img = requests.get(url, timeout=30)
-            files = {"file": (f"image_{i+1}.png", img.content, "image/png")}
+            files = {"picture": (f"image_{i+1}.png", img.content, "image/png")}
+            data = {"userId": USER_ID, "blogId": BLOG_ID}
             r = requests.post(
-                f"https://app.metricool.com/api/utils/upload?userId={USER_ID}&blogId={BLOG_ID}",
+                f"https://app.metricool.com/api/utils/upload",
                 headers={"X-Mc-Auth": TOKEN},
                 files=files,
+                data=data,
                 timeout=60
             )
             upload_results.append({"status": r.status_code, "resp": r.text[:300]})
