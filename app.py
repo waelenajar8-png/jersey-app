@@ -2746,30 +2746,53 @@ def api_metricool_test():
     )
     normalized_url = resp1.text.strip()
     
-    # Test: récupérer la liste des médias uploadés sur Metricool
-    resp_media = requests.get(
-        f"https://app.metricool.com/api/v2/media?userId={USER_ID}&blogId={BLOG_ID}&pageSize=5",
-        headers={"X-Mc-Auth": TOKEN},
-        timeout=30
-    )
+    # Test normalisation + création post complet
+    normalized_urls = []
+    for test_url in [
+        "https://pub-2041419f649b434681cde993145feaee.r2.dev/queue/imgs/tiktok_0295_01.png",
+        "https://pub-2041419f649b434681cde993145feaee.r2.dev/queue/imgs/tiktok_0295_02.png",
+    ]:
+        r = requests.get(
+            f"https://app.metricool.com/api/actions/normalize/image/url?url={test_url}&userId={USER_ID}&blogId={BLOG_ID}",
+            headers={"X-Mc-Auth": TOKEN},
+            timeout=30
+        )
+        if r.status_code == 200:
+            normalized_urls.append(r.text.strip())
     
-    # Test: uploader un média via multipart
-    img_data = requests.get(TEST_URL, headers={"User-Agent": "Mozilla/5.0"}, timeout=30).content
-    files = {"file": ("image.png", img_data, "image/png")}
-    resp_upload = requests.post(
-        f"https://app.metricool.com/api/v2/media?userId={USER_ID}&blogId={BLOG_ID}",
-        headers={"X-Mc-Auth": TOKEN},
-        files=files,
+    print(f"URLs normalisées: {normalized_urls}")
+    
+    payload = {
+        "publicationDate": {"dateTime": "2026-08-15T10:00:00", "timezone": "Europe/Paris"},
+        "text": "Test bot images",
+        "firstCommentText": "",
+        "providers": [{"network": "tiktok"}],
+        "media": normalized_urls,
+        "mediaAltText": [None] * len(normalized_urls),
+        "autoPublish": False,
+        "shortener": False,
+        "draft": False,
+        "hasNotReadNotes": False,
+        "tiktokData": {
+            "disableComment": False,
+            "disableDuet": False,
+            "disableStitch": False,
+            "autoAddMusic": True,
+            "privacyOption": "public_to_everyone",
+            "photoCoverIndex": 0
+        }
+    }
+    resp2 = requests.post(
+        f"https://app.metricool.com/api/v2/scheduler/posts?userId={USER_ID}&blogId={BLOG_ID}",
+        headers={"X-Mc-Auth": TOKEN, "Content-Type": "application/json"},
+        json=payload,
         timeout=60
     )
     
     return jsonify({
-        "normalize_status": resp1.status_code,
-        "normalize_response": resp1.text[:200],
-        "media_list_status": resp_media.status_code,
-        "media_list": resp_media.text[:400],
-        "upload_status": resp_upload.status_code,
-        "upload_response": resp_upload.text[:400],
+        "normalized_urls": normalized_urls,
+        "post_status": resp2.status_code,
+        "post_response": resp2.text[:800],
     })
 
 @app.route("/api/metricool/accounts")
