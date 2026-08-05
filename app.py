@@ -2734,27 +2734,31 @@ def api_metricool_test():
     )
     normalized_url = resp1.text.strip()
     
-    # Test payload avec URL normalisée
-    payload = {
-        "publicationDate": {"dateTime": "2026-08-10T10:00:00", "timezone": "Europe/Paris"},
-        "text": "Test bot",
-        "providers": [{"network": "tiktok"}],
-        "media": [{"url": normalized_url}],
-        "autoPublish": False
-    }
-    resp2 = requests.post(
-        f"https://app.metricool.com/api/v2/scheduler/posts?userId={USER_ID}&blogId={BLOG_ID}",
-        headers={"X-Mc-Auth": TOKEN, "Content-Type": "application/json"},
-        json=payload,
+    # Test: récupérer la liste des médias uploadés sur Metricool
+    resp_media = requests.get(
+        f"https://app.metricool.com/api/v2/media?userId={USER_ID}&blogId={BLOG_ID}&pageSize=5",
+        headers={"X-Mc-Auth": TOKEN},
+        timeout=30
+    )
+    
+    # Test: uploader un média via multipart
+    import urllib.request
+    img_data = urllib.request.urlopen(TEST_URL).read()
+    files = {"file": ("image.png", img_data, "image/png")}
+    resp_upload = requests.post(
+        f"https://app.metricool.com/api/v2/media?userId={USER_ID}&blogId={BLOG_ID}",
+        headers={"X-Mc-Auth": TOKEN},
+        files=files,
         timeout=60
     )
     
     return jsonify({
         "normalize_status": resp1.status_code,
-        "normalize_response": resp1.text[:300],
-        "post_status": resp2.status_code,
-        "post_response": resp2.text[:500],
-        "payload_sent": payload
+        "normalize_response": resp1.text[:200],
+        "media_list_status": resp_media.status_code,
+        "media_list": resp_media.text[:400],
+        "upload_status": resp_upload.status_code,
+        "upload_response": resp_upload.text[:400],
     })
 
 @app.route("/api/metricool/accounts")
