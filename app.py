@@ -2739,7 +2739,7 @@ def api_metricool_test():
         "publicationDate": {"dateTime": "2026-08-10T10:00:00", "timezone": "Europe/Paris"},
         "text": "Test bot",
         "providers": [{"network": "tiktok"}],
-        "media": [{"url": normalized_url, "type": "image"}],
+        "media": [{"url": normalized_url}],
         "autoPublish": False
     }
     resp2 = requests.post(
