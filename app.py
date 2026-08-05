@@ -1368,7 +1368,11 @@ def schedule_metricool(image_urls, caption, publish_time_iso, blog_id, timezone=
             "disableDuet": False,
             "disableStitch": False,
             "autoAddMusic": True,
-            "privacy": "PUBLIC_TO_EVERYONE"
+            "privacyOption": "public_to_everyone",
+            "photoCoverIndex": 0,
+            "isAigc": False,
+            "commercialContentOwnBrand": False,
+            "commercialContentThirdParty": False
         }
     }
     
