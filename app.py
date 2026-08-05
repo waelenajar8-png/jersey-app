@@ -2717,6 +2717,46 @@ def api_metricool_failed_posts():
     
     return jsonify({"failed": failed, "count": len(failed)})
 
+@app.route("/api/metricool/test")
+def api_metricool_test():
+    """Test endpoint Metricool — diagnostic"""
+    import json
+    TOKEN = METRICOOL_TOKEN
+    USER_ID = METRICOOL_USER_ID
+    BLOG_ID = "6542376"
+    TEST_URL = "https://pub-2041419f649b434681cde993145feaee.r2.dev/queue/imgs/tiktok_0295_01.png"
+    
+    # Test normalisation
+    resp1 = requests.get(
+        f"https://app.metricool.com/api/actions/normalize/image/url?url={TEST_URL}&userId={USER_ID}&blogId={BLOG_ID}",
+        headers={"X-Mc-Auth": TOKEN},
+        timeout=30
+    )
+    normalized_url = resp1.text.strip()
+    
+    # Test payload avec URL normalisée
+    payload = {
+        "publicationDate": {"dateTime": "2026-08-10T10:00:00", "timezone": "Europe/Paris"},
+        "text": "Test bot",
+        "providers": [{"network": "tiktok"}],
+        "media": [{"url": normalized_url, "type": "image"}],
+        "autoPublish": False
+    }
+    resp2 = requests.post(
+        f"https://app.metricool.com/api/v2/scheduler/posts?userId={USER_ID}&blogId={BLOG_ID}",
+        headers={"X-Mc-Auth": TOKEN, "Content-Type": "application/json"},
+        json=payload,
+        timeout=60
+    )
+    
+    return jsonify({
+        "normalize_status": resp1.status_code,
+        "normalize_response": resp1.text[:300],
+        "post_status": resp2.status_code,
+        "post_response": resp2.text[:500],
+        "payload_sent": payload
+    })
+
 @app.route("/api/metricool/accounts")
 def api_metricool_accounts():
     """Liste les comptes Metricool configurés"""
