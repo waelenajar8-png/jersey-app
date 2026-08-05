@@ -2732,44 +2732,46 @@ def api_metricool_failed_posts():
 
 @app.route("/api/metricool/test")
 def api_metricool_test():
-    """Test endpoint Metricool — diagnostic"""
-    import json
+    """Test endpoint Metricool — diagnostic upload"""
     TOKEN = METRICOOL_TOKEN
     USER_ID = METRICOOL_USER_ID
     BLOG_ID = "6542376"
-    TEST_URL = "https://pub-2041419f649b434681cde993145feaee.r2.dev/queue/imgs/tiktok_0295_01.png"
-    
-    # Test normalisation
-    resp1 = requests.get(
-        f"https://app.metricool.com/api/actions/normalize/image/url?url={TEST_URL}&userId={USER_ID}&blogId={BLOG_ID}",
-        headers={"X-Mc-Auth": TOKEN},
-        timeout=30
-    )
-    normalized_url = resp1.text.strip()
-    
-    # Test normalisation + création post complet
-    normalized_urls = []
-    for test_url in [
+    TEST_URLS = [
         "https://pub-2041419f649b434681cde993145feaee.r2.dev/queue/imgs/tiktok_0295_01.png",
         "https://pub-2041419f649b434681cde993145feaee.r2.dev/queue/imgs/tiktok_0295_02.png",
-    ]:
-        r = requests.get(
-            f"https://app.metricool.com/api/actions/normalize/image/url?url={test_url}&userId={USER_ID}&blogId={BLOG_ID}",
-            headers={"X-Mc-Auth": TOKEN},
-            timeout=30
-        )
-        if r.status_code == 200:
-            normalized_urls.append(r.text.strip())
+    ]
     
-    print(f"URLs normalisées: {normalized_urls}")
+    media_urls = []
+    upload_results = []
+    
+    for i, url in enumerate(TEST_URLS):
+        try:
+            img = requests.get(url, timeout=30)
+            files = {"file": (f"image_{i+1}.png", img.content, "image/png")}
+            r = requests.post(
+                f"https://app.metricool.com/api/utils/upload?userId={USER_ID}&blogId={BLOG_ID}",
+                headers={"X-Mc-Auth": TOKEN},
+                files=files,
+                timeout=60
+            )
+            upload_results.append({"status": r.status_code, "resp": r.text[:300]})
+            if r.status_code == 200:
+                d = r.json()
+                media_url = d.get("url") or d.get("mediaUrl") or d.get("fileUrl") or str(d)
+                media_urls.append(media_url)
+        except Exception as e:
+            upload_results.append({"error": str(e)})
+    
+    if not media_urls:
+        return jsonify({"error": "Upload failed", "upload_results": upload_results})
     
     payload = {
-        "publicationDate": {"dateTime": "2026-08-15T10:00:00", "timezone": "Europe/Paris"},
+        "publicationDate": {"dateTime": "2026-08-20T10:00:00", "timezone": "Europe/Paris"},
         "text": "Test bot images",
         "firstCommentText": "",
         "providers": [{"network": "tiktok"}],
-        "media": normalized_urls,
-        "mediaAltText": [None] * len(normalized_urls),
+        "media": media_urls,
+        "mediaAltText": [None] * len(media_urls),
         "autoPublish": False,
         "shortener": False,
         "draft": False,
@@ -2783,7 +2785,7 @@ def api_metricool_test():
             "photoCoverIndex": 0
         }
     }
-    resp2 = requests.post(
+    resp = requests.post(
         f"https://app.metricool.com/api/v2/scheduler/posts?userId={USER_ID}&blogId={BLOG_ID}",
         headers={"X-Mc-Auth": TOKEN, "Content-Type": "application/json"},
         json=payload,
@@ -2791,9 +2793,10 @@ def api_metricool_test():
     )
     
     return jsonify({
-        "normalized_urls": normalized_urls,
-        "post_status": resp2.status_code,
-        "post_response": resp2.text[:800],
+        "upload_results": upload_results,
+        "media_urls": media_urls,
+        "post_status": resp.status_code,
+        "post_response": resp.text[:800],
     })
 
 @app.route("/api/metricool/accounts")
