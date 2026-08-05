@@ -2031,8 +2031,10 @@ def api_schedule():
                 # Stocker le dict, pas la Response Flask
                 if hasattr(result, 'get_json'):
                     _schedule_result["last"] = result.get_json()
+                    print(f"[SCHEDULE] Résultat final: {_schedule_result['last']}")
                 else:
                     _schedule_result["last"] = result
+                    print(f"[SCHEDULE] Résultat final: {result}")
         except Exception as e:
             import traceback
             print(f"[SCHEDULE] ❌ Exception dans run_schedule: {e}")
