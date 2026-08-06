@@ -2248,11 +2248,6 @@ def _do_schedule_data(data=None):
             used_slots.add(dt_str)
             add_used_slot(account, dt_str)
 
-            if not use_custom:
-                slot_index += 1
-                if slot_index % len(account_times) == 0:
-                    slot_date += timedelta(days=1)
-
     # ── Phase 2 : Metricool + R2 en parallèle ─────────────────────────────
     def process_schedule_job(job):
         tiktok = job["tiktok"]
