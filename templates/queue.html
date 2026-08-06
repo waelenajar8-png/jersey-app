@@ -1184,6 +1184,7 @@ async function scheduleAll(){
             attempts++;
             try{
                 const sr=await fetch('/api/queue/schedule/status').then(r=>r.json());
+                console.log('[POLL]', attempts, JSON.stringify(sr).substring(0,100));
                 if(sr.pending === false || sr.success === true || attempts > 300){
                     clearInterval(poll);
                     progFill.style.width='100%';
