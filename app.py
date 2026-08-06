@@ -2599,6 +2599,7 @@ def api_recover_robinreach():
         tiktok["scheduled_at"] = None
         tiktok["robinreach_post_id"] = None
         tiktok["metricool_post_id"] = None
+        tiktok["real_status"] = None
         tiktok["recovered"] = True
         tiktok["recovered_at"] = datetime.now(timezone.utc).isoformat()
         tiktok["recovered_original_date"] = original_date
