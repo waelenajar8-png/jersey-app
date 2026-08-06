@@ -1369,7 +1369,13 @@ def schedule_metricool(image_urls, caption, publish_time_iso, blog_id, timezone=
             print(f"[METRICOOL] Erreur upload image {i+1}: {e}")
     
     if not media_ids:
-        return {"success": False, "error": "Aucune image normalisée"}
+        return {"success": False, "error": "Aucune image convertie en JPEG"}
+    
+    if len(media_ids) < len(image_urls):
+        print(f"[METRICOOL] ⚠️ Seulement {len(media_ids)}/{len(image_urls)} images converties")
+    
+    if len(media_ids) < 7:
+        return {"success": False, "error": f"Seulement {len(media_ids)}/7 images valides — TikTok non programmé"}
     
     # Créer le post schedulé avec le bon format Metricool
     print(f"[METRICOOL] Payload media: {media_ids[:2]}")
