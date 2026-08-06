@@ -2355,6 +2355,7 @@ def _do_schedule_data(data=None):
 
     return jsonify({
         "success": True,
+        "pending": False,
         "scheduled": scheduled_count,
         "details": scheduled_details,
         "errors": errors
