@@ -634,8 +634,8 @@ function renderCard(t){
                     <option value="15:00">15h00 (Main)</option>
                     <option value="18:30">18h30 (Main)</option>
                     <option value="21:00">21h00 (Main)</option>
-                    <option value="10:30">10h30 (Autres)</option>
-                    <option value="17:30">17h30 (Autres)</option>
+                    <option value="14:00">16h00 (Autres)</option>
+                    <option value="18:30">20h30 (Autres)</option>
                     <option value="custom">🕐 Heure personnalisée...</option>
                 </select>
                 <input type="datetime-local" class="account-select" id="custom-${t.r2_key.replace(/[^a-z0-9]/gi,'_')}" style="margin-top:4px;display:none" onchange="setCustomTime('${t.r2_key}',this.value)">
@@ -1108,10 +1108,10 @@ function confirmScheduleAll(){
     assigned.forEach(t=>{byAccount[t.account]=(byAccount[t.account]||0)+1});
     // Preview calendrier — calculer les créneaux exacts
     const slotsByAccount = {
-        "Volakits Main (wael)": ["10:00","15:00","18:30","21:00"],
-        "Volakits 1 (seik)": ["10:30","17:30"],
-        "Volakits 2 (momo)": ["10:30","17:30"],
-        "Volakits 6 (wassim)": ["10:30","17:30"]
+        "Volakits Main (wael)": ["08:00","13:00","16:30","19:00"],
+        "Volakits 1 (seik)": ["14:00","18:30"],
+        "Volakits 2 (momo)": ["14:00","18:30"],
+        "Volakits 6 (wassim)": ["14:00","18:30"]
     };
     
     let previewSlots = [];
