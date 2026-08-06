@@ -1172,7 +1172,7 @@ async function scheduleAll(){
             attempts++;
             try{
                 const sr=await fetch('/api/queue/schedule/status').then(r=>r.json());
-                if(sr.scheduled !== undefined || attempts > 300){
+                if(sr.pending === false || (sr.scheduled !== undefined && !sr.pending) || attempts > 300){
                     clearInterval(poll);
                     progFill.style.width='100%';
                     setTimeout(()=>progWrap.classList.remove('show'),600);
