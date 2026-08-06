@@ -3527,3 +3527,52 @@ def api_calendar():
             for acc in accounts_list
         }
     })
+
+
+def _auto_check_statuses():
+    """Vérifie automatiquement les statuts Metricool toutes les heures"""
+    import time as _time
+    _time.sleep(60)  # attendre 1 minute au démarrage
+    while True:
+        try:
+            with app.app_context():
+                if METRICOOL_TOKEN:
+                    keys = [k for k in r2_list_keys(PFX_SCHEDULED) if "/imgs/" not in k]
+                    updated = 0
+                    for key in keys:
+                        tiktok = r2_get_json(key)
+                        if not tiktok: continue
+                        mc_id = tiktok.get("metricool_post_id")
+                        if not mc_id: continue
+                        acc = tiktok.get("account","")
+                        mc_acc = METRICOOL_ACCOUNTS.get(acc, {})
+                        if not mc_acc.get("active"): continue
+                        try:
+                            resp = requests.get(
+                                f"https://app.metricool.com/api/v2/scheduler/posts/{mc_id}?userId={METRICOOL_USER_ID}&blogId={mc_acc['blog_id']}",
+                                headers={"X-Mc-Auth": METRICOOL_TOKEN},
+                                timeout=10
+                            )
+                            if resp.status_code == 200:
+                                data = resp.json().get("data", {})
+                                providers = data.get("providers", [])
+                                new_status = providers[0].get("status","") if providers else ""
+                                if new_status and new_status != tiktok.get("real_status"):
+                                    tiktok["real_status"] = new_status
+                                    r2_put_json(key, tiktok)
+                                    updated += 1
+                            elif resp.status_code == 404:
+                                # Post publié — plus dans scheduler
+                                tiktok["real_status"] = "PUBLISHED"
+                                r2_put_json(key, tiktok)
+                                updated += 1
+                        except Exception:
+                            pass
+                    if updated:
+                        print(f"[AUTO_STATUS] {updated} statuts mis à jour")
+        except Exception as e:
+            print(f"[AUTO_STATUS] Erreur: {e}")
+        _time.sleep(3600)  # toutes les heures
+
+# Lancer le thread de vérification automatique des statuts
+threading.Thread(target=_auto_check_statuses, daemon=True).start()
