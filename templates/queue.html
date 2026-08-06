@@ -1192,7 +1192,7 @@ async function scheduleAll(){
                         showStatus('✅ Programmation terminée — vérifie les TikToks programmés');
                     }
                 } else {
-                    showStatus(`⏳ Upload images en cours... ${attempts*3}s`);
+                    showStatus(`⏳ Programmation en cours... ${sr.progress||''} TikToks — ${attempts*3}s`);
                 }
             }catch(e){}
         }, 3000);  // poll toutes les 3s
