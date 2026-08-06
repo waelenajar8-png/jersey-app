@@ -2168,17 +2168,11 @@ def _do_schedule_data(data=None):
 
         used_slots_idx = get_used_slots_index()
         used_slots = set(used_slots_idx.get(account, []))
-        slot_date = start_date
-        slot_index = 0
-        # Si tous les créneaux d'aujourd'hui sont pris, commencer demain
         account_times = get_schedule_times_for_account(account)
-        today_slots = set()
-        for ht in account_times:
-            h2,m2 = map(int, ht.split(":"))
-            sd = datetime(slot_date.year,slot_date.month,slot_date.day,h2,m2,tzinfo=timezone.utc).isoformat()
-            today_slots.add(sd)
-        if today_slots.issubset(used_slots):
-            slot_date += timedelta(days=1)
+        
+        # Repartir depuis maintenant pour trouver les trous
+        scan_date = start_date
+        scan_index = 0
 
         for tiktok in tiktoks:
             tiktok_data = r2_get_json(tiktok["r2_key"])
@@ -2225,22 +2219,18 @@ def _do_schedule_data(data=None):
                     use_custom = False
 
             if not use_custom:
-                account_times = get_schedule_times_for_account(account)
+                # Scanner depuis le début pour trouver le premier trou disponible
                 while True:
-                    h,m = map(int, account_times[slot_index % len(account_times)].split(":"))
-                    slot_dt = datetime(slot_date.year,slot_date.month,slot_date.day,h,m,tzinfo=timezone.utc)
+                    h,m = map(int, account_times[scan_index % len(account_times)].split(":"))
+                    slot_dt = datetime(scan_date.year,scan_date.month,scan_date.day,h,m,tzinfo=timezone.utc)
                     slot_iso = slot_dt.isoformat()
                     is_future_enough = slot_dt > now + timedelta(minutes=30)
                     if is_future_enough and slot_iso not in used_slots:
-                        # Réserver ce créneau immédiatement pour éviter les trous
                         used_slots.add(slot_iso)
-                        slot_index += 1
-                        if slot_index % len(account_times) == 0:
-                            slot_date += timedelta(days=1)
                         break
-                    slot_index += 1
-                    if slot_index % len(account_times) == 0:
-                        slot_date += timedelta(days=1)
+                    scan_index += 1
+                    if scan_index % len(account_times) == 0:
+                        scan_date += timedelta(days=1)
 
             dt_str = slot_dt.isoformat()
             paris_dt = slot_dt.astimezone(paris_tz)
