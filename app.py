@@ -2166,7 +2166,8 @@ def _do_schedule_data(data=None):
                 errors.append(f"Compte '{account}' non reconnu (TikTok {t.get('number','')})")
             continue
 
-        used_slots_idx = get_used_slots_index()
+        # Forcer un rebuild complet pour avoir les vrais créneaux occupés
+        used_slots_idx = rebuild_used_slots_index()
         used_slots = set(used_slots_idx.get(account, []))
         account_times = get_schedule_times_for_account(account)
         
