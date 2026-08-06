@@ -1330,13 +1330,20 @@ def schedule_metricool(image_urls, caption, publish_time_iso, blog_id, timezone=
                 print(f"[METRICOOL] Erreur téléchargement image {i+1}: {img_resp.status_code}")
                 continue
             
-            # Les images sont déjà en JPEG depuis la génération
-            img_bytes = img_resp.content
-            ext = "jpg" if url.endswith(".jpg") else "png"
-            mime = "image/jpeg" if ext == "jpg" else "image/png"
+            # Toujours convertir en JPEG pour TikTok (PNG non accepté)
+            try:
+                from PIL import Image
+                import io
+                img = Image.open(io.BytesIO(img_resp.content)).convert("RGB")
+                buf = io.BytesIO()
+                img.save(buf, format="JPEG", quality=95)
+                img_bytes = buf.getvalue()
+            except Exception as e:
+                print(f"[METRICOOL] ❌ Conversion JPEG échouée image {i+1}: {e} — image ignorée")
+                continue  # Skip cette image plutôt que d'envoyer du PNG
             
             # Uploader sur les serveurs Metricool
-            files = {"picture": (f"image_{i+1}.{ext}", img_bytes, mime)}
+            files = {"picture": (f"image_{i+1}.jpg", img_bytes, "image/jpeg")}
             data = {"userId": METRICOOL_USER_ID, "blogId": blog_id}
             upload_resp = requests.post(
                 f"https://app.metricool.com/api/utils/upload",
