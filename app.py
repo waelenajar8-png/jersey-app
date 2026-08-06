@@ -2340,7 +2340,7 @@ def _do_schedule_data(data=None):
                 completed["details"].append({"tiktok": result["tiktok"], "account": result["account"], "time": result["time"]})
             # Mise à jour progressive visible par le frontend
             _schedule_result["last"] = {
-                "pending": completed["count"] < total_jobs,
+                "pending": True,  # toujours True pendant la progression
                 "scheduled": len(completed["details"]),
                 "total": total_jobs,
                 "errors": completed["errors"][:],
