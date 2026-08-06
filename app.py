@@ -1330,13 +1330,21 @@ def schedule_metricool(image_urls, caption, publish_time_iso, blog_id, timezone=
                 print(f"[METRICOOL] Erreur téléchargement image {i+1}: {img_resp.status_code}")
                 continue
             
-            # Toujours convertir en JPEG pour TikTok (PNG non accepté)
+            # Convertir en JPEG et redimensionner à 1080x1920 max (limite TikTok)
             try:
                 from PIL import Image
                 import io
                 img = Image.open(io.BytesIO(img_resp.content)).convert("RGB")
+                # Redimensionner si trop grand
+                max_w, max_h = 1080, 1920
+                w, h = img.size
+                if w > max_w or h > max_h:
+                    ratio = min(max_w/w, max_h/h)
+                    new_w, new_h = int(w*ratio), int(h*ratio)
+                    img = img.resize((new_w, new_h), Image.LANCZOS)
+                    print(f"[METRICOOL] Image {i+1} redimensionnée: {w}x{h} → {new_w}x{new_h}")
                 buf = io.BytesIO()
-                img.save(buf, format="JPEG", quality=95)
+                img.save(buf, format="JPEG", quality=92)
                 img_bytes = buf.getvalue()
             except Exception as e:
                 print(f"[METRICOOL] ❌ Conversion JPEG échouée image {i+1}: {e} — image ignorée")
