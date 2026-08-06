@@ -446,9 +446,9 @@ FIXED_CAPTION  = "3 Maillot Acheté 1 Offert 🎁 #volakits #ete #foot"
 # Conversion heure française (UTC+2 été) → UTC : soustraire 2h
 SCHEDULE_TIMES_BY_ACCOUNT = {
     "Volakits Main (wael)": ["08:00", "13:00", "16:30", "19:00"],  # 4x/jour — 10h/15h/18h30/21h Paris (UTC+2)
-    "Volakits 1 (seik)":    ["08:30", "15:30"],  # 2x/jour — 10h30/17h30 Paris
-    "Volakits 2 (momo)":    ["08:30", "15:30"],  # 2x/jour
-    "Volakits 6 (wassim)":  ["08:30", "15:30"],  # 2x/jour
+    "Volakits 1 (seik)":    ["14:00", "18:30"],  # 16h/20h30 Paris
+    "Volakits 2 (momo)":    ["14:00", "18:30"],  # 16h/20h30 Paris
+    "Volakits 6 (wassim)":  ["14:00", "18:30"],  # 16h/20h30 Paris
 }
 SCHEDULE_TIMES_DEFAULT = ["08:30", "15:30"]  # 2x/jour par defaut
 
