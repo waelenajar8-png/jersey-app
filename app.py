@@ -1371,11 +1371,12 @@ def schedule_metricool(image_urls, caption, publish_time_iso, blog_id, timezone=
     if not media_ids:
         return {"success": False, "error": "Aucune image convertie en JPEG"}
     
-    if len(media_ids) < len(image_urls):
-        print(f"[METRICOOL] ⚠️ Seulement {len(media_ids)}/{len(image_urls)} images converties")
+    failed_count = len(image_urls) - len(media_ids)
+    if len(media_ids) < 5:
+        return {"success": False, "error": f"Seulement {len(media_ids)}/{len(image_urls)} images valides — TikTok renvoyé en file d'attente", "requeue": True}
     
-    if len(media_ids) < 7:
-        return {"success": False, "error": f"Seulement {len(media_ids)}/7 images valides — TikTok non programmé"}
+    if failed_count > 0:
+        print(f"[METRICOOL] ⚠️ {failed_count} image(s) ignorées — TikTok programmé avec {len(media_ids)} images")
     
     # Créer le post schedulé avec le bon format Metricool
     print(f"[METRICOOL] Payload media: {media_ids[:2]}")
@@ -2283,6 +2284,14 @@ def _do_schedule_data(data=None):
                 )
                 print(f"[METRICOOL] Résultat: {result}")
                 if not result["success"]:
+                    if result.get("requeue"):
+                        # Remettre dans la file d'attente avec badge d'erreur
+                        tiktok_data["status"] = "pending"
+                        tiktok_data["account"] = None
+                        tiktok_data["image_error"] = result["error"]
+                        r2_put_json(tiktok["r2_key"], tiktok_data)
+                        print(f"[METRICOOL] TikTok {tiktok.get('number','')} renvoyé en file d'attente: {result['error']}")
+                        return {"error": f"TikTok {tiktok.get('number','')}: {result['error']}"}
                     return {"error": f"TikTok {tiktok.get('number','')}: {result['error']}"}
                 tiktok_data["metricool_post_id"] = result.get("post_id")
                 print(f"[METRICOOL] ✅ TikTok {tiktok.get('number','')} programmé")
