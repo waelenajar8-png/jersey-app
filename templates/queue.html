@@ -1173,7 +1173,7 @@ async function scheduleAll(){
             attempts++;
             try{
                 const sr=await fetch('/api/queue/schedule/status').then(r=>r.json());
-                if(sr.pending === false || (sr.scheduled !== undefined && !sr.pending) || attempts > 300){
+                if(sr.pending === false || sr.success === true || attempts > 300){
                     clearInterval(poll);
                     progFill.style.width='100%';
                     setTimeout(()=>progWrap.classList.remove('show'),600);
@@ -1195,7 +1195,10 @@ async function scheduleAll(){
                 } else {
                     showStatus(`⏳ Programmation en cours... ${sr.progress||''} TikToks — ${attempts*3}s`);
                 }
-            }catch(e){}
+            }catch(e){
+                console.error('[POLL ERROR]', e);
+                showStatus('⏳ Programmation en cours... ' + (attempts*3) + 's');
+            }
         }, 3000);  // poll toutes les 3s
         return;
     }
