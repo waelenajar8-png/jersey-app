@@ -398,6 +398,16 @@ async function loadAll(){
     setupInfiniteScroll();
     populateSelectNAccount();
     updateAccountFilters();
+    // Afficher résumé dernière programmation si disponible
+    try {
+        const sr = await fetch('/api/queue/schedule/status').then(r=>r.json());
+        if(sr.success && sr.pending === false && sr.completed_at){
+            const msg = sr.errors?.length 
+                ? `✅ Dernière programmation (${sr.completed_at}) : ${sr.scheduled} programmés — ⚠️ ${sr.errors.length} erreur(s)`
+                : `✅ Dernière programmation (${sr.completed_at}) : ${sr.scheduled} TikTok(s) programmés`;
+            showStatus(msg);
+        }
+    } catch(e){}
 }
 
 async function loadPage(page){
