@@ -402,10 +402,11 @@ async function loadAll(){
     try {
         const sr = await fetch('/api/queue/schedule/status').then(r=>r.json());
         if(sr.success && sr.pending === false && sr.completed_at){
-            const msg = sr.errors?.length 
-                ? `✅ Dernière programmation (${sr.completed_at}) : ${sr.scheduled} programmés — ⚠️ ${sr.errors.length} erreur(s)`
-                : `✅ Dernière programmation (${sr.completed_at}) : ${sr.scheduled} TikTok(s) programmés`;
-            showStatus(msg);
+            let msg = `✅ Dernière programmation (${sr.completed_at}) : ${sr.scheduled} TikTok(s) programmés`;
+            if(sr.errors?.length){
+                msg += `\n⚠️ ${sr.errors.length} échec(s) :\n` + sr.errors.map((e,i)=>`${i+1}. ${e}`).join('\n');
+            }
+            showStatus(msg.replace(/\n/g, '<br>'));
         }
     } catch(e){}
 }
@@ -1194,11 +1195,11 @@ async function scheduleAll(){
                     updateCounters();
                     await loadAll();
                     if(sr.scheduled !== undefined){
+                        let msg = `✅ ${sr.scheduled}/${sr.total||sr.scheduled} TikTok(s) programmés`;
                         if(sr.errors?.length){
-                            showStatus(`✅ ${sr.scheduled} programmés — ⚠️ ${sr.errors.length} erreur(s)`);
-                        } else {
-                            showStatus(`✅ ${sr.scheduled} TikTok(s) programmés !`);
+                            msg += `<br>⚠️ ${sr.errors.length} échec(s) :<br>` + sr.errors.map((e,i)=>`${i+1}. ${e}`).join('<br>');
                         }
+                        showStatus(msg);
                     } else {
                         showStatus('✅ Programmation terminée — vérifie les TikToks programmés');
                     }
