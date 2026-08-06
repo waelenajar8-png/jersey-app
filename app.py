@@ -2056,6 +2056,9 @@ def api_schedule():
                 else:
                     _schedule_result["last"] = result
                 print(f"[SCHEDULE] Résultat final stocké: {_schedule_result['last']}")
+                # Persister dans R2 pour survivre aux restarts Railway
+                try: r2_put_json("meta/last_schedule_result.json", _schedule_result["last"])
+                except Exception: pass
         except Exception as e:
             import traceback
             print(f"[SCHEDULE] ❌ Exception dans run_schedule: {e}")
@@ -2072,7 +2075,14 @@ def api_schedule():
 def api_schedule_status():
     """Retourne le résultat de la dernière programmation"""
     result = _schedule_result.get("last")
-    if result is None:
+    if result is None or result == {"pending": True}:
+        # Essayer depuis R2 si la variable mémoire est vide
+        try:
+            r2_result = r2_get_json("meta/last_schedule_result.json")
+            if r2_result and r2_result.get("scheduled") is not None:
+                return jsonify(r2_result)
+        except Exception:
+            pass
         return jsonify({"pending": True})
     # Si c'est un objet Response Flask, extraire les données
     if hasattr(result, 'get_json'):
