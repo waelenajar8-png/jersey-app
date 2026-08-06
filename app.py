@@ -1330,20 +1330,10 @@ def schedule_metricool(image_urls, caption, publish_time_iso, blog_id, timezone=
                 print(f"[METRICOOL] Erreur téléchargement image {i+1}: {img_resp.status_code}")
                 continue
             
-            # Convertir en JPEG (TikTok n'accepte pas PNG)
-            try:
-                from PIL import Image
-                import io
-                img = Image.open(io.BytesIO(img_resp.content)).convert("RGB")
-                buf = io.BytesIO()
-                img.save(buf, format="JPEG", quality=95)
-                img_bytes = buf.getvalue()
-                mime = "image/jpeg"
-                ext = "jpg"
-            except Exception:
-                img_bytes = img_resp.content
-                mime = "image/jpeg"
-                ext = "jpg"
+            # Les images sont déjà en JPEG depuis la génération
+            img_bytes = img_resp.content
+            ext = "jpg" if url.endswith(".jpg") else "png"
+            mime = "image/jpeg" if ext == "jpg" else "image/png"
             
             # Uploader sur les serveurs Metricool
             files = {"picture": (f"image_{i+1}.{ext}", img_bytes, mime)}
@@ -1532,8 +1522,22 @@ def _save_tiktok(num, images_b64, user, flockages=None, template_keys=None):
     image_keys = []
     for i, b64 in enumerate(images_b64):
         if not b64: continue
-        k = f"queue/imgs/tiktok_{num:04d}_{i+1:02d}.png"
-        r2_put_image(k, base64.b64decode(b64))
+        # Convertir en JPEG directement pour compatibilité TikTok
+        try:
+            from PIL import Image
+            import io
+            img_data = base64.b64decode(b64)
+            img = Image.open(io.BytesIO(img_data)).convert("RGB")
+            buf = io.BytesIO()
+            img.save(buf, format="JPEG", quality=95)
+            img_bytes = buf.getvalue()
+            ext = "jpg"
+        except Exception as e:
+            print(f"[JPEG] ⚠️ Conversion JPEG échouée: {e} — fallback PNG (risque TikTok)")
+            img_bytes = base64.b64decode(b64)
+            ext = "png"
+        k = f"queue/imgs/tiktok_{num:04d}_{i+1:02d}.{ext}"
+        r2_put_image(k, img_bytes)
         image_keys.append(k)
 
     meta = {
