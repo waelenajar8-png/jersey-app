@@ -530,6 +530,7 @@ function showStatus(msg){
 }
 
 loadPage(0);
+setInterval(()=>loadPage(0), 300000); // refresh toutes les 5 minutes
 
 // Bouton pour ouvrir la correction de créneaux
 function showFixSlotsBar(){
