@@ -2292,8 +2292,30 @@ def _do_schedule_data(data=None):
         return {"success": True, "tiktok": tiktok.get("number",""), "account": account, "time": display_time}
 
     # Lancer tous les jobs en parallèle (max 5 simultanés)
+    total_jobs = len(jobs)
+    completed = {"count": 0, "errors": [], "details": []}
+    completed_lock = threading.Lock()
+
+    def process_and_update(job):
+        result = process_schedule_job(job)
+        with completed_lock:
+            completed["count"] += 1
+            if result.get("error"):
+                completed["errors"].append(result["error"])
+            else:
+                completed["details"].append({"tiktok": result["tiktok"], "account": result["account"], "time": result["time"]})
+            # Mise à jour progressive visible par le frontend
+            _schedule_result["last"] = {
+                "pending": completed["count"] < total_jobs,
+                "scheduled": len(completed["details"]),
+                "total": total_jobs,
+                "errors": completed["errors"][:],
+                "progress": f"{completed['count']}/{total_jobs}"
+            }
+        return result
+
     with ThreadPoolExecutor(max_workers=5) as ex:
-        results_jobs = list(ex.map(process_schedule_job, jobs))
+        results_jobs = list(ex.map(process_and_update, jobs))
 
     for r in results_jobs:
         if r.get("error"):
