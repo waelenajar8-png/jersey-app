@@ -2079,15 +2079,14 @@ def api_schedule():
 def api_schedule_status():
     """Retourne le résultat de la dernière programmation"""
     result = _schedule_result.get("last")
-    if result is None or result == {"pending": True}:
-        # Essayer depuis R2 si la variable mémoire est vide
-        try:
-            r2_result = r2_get_json("meta/last_schedule_result.json")
-            if r2_result and r2_result.get("scheduled") is not None:
-                return jsonify(r2_result)
-        except Exception:
-            pass
+    if result is None:
         return jsonify({"pending": True})
+    # Si c'est un objet Response Flask, extraire les données
+    if hasattr(result, 'get_json'):
+        return result
+    if hasattr(result, 'json'):
+        return result
+    return jsonify(result)
     # Si c'est un objet Response Flask, extraire les données
     if hasattr(result, 'get_json'):
         return result
