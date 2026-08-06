@@ -2232,6 +2232,11 @@ def _do_schedule_data(data=None):
                     slot_iso = slot_dt.isoformat()
                     is_future_enough = slot_dt > now + timedelta(minutes=30)
                     if is_future_enough and slot_iso not in used_slots:
+                        # Réserver ce créneau immédiatement pour éviter les trous
+                        used_slots.add(slot_iso)
+                        slot_index += 1
+                        if slot_index % len(account_times) == 0:
+                            slot_date += timedelta(days=1)
                         break
                     slot_index += 1
                     if slot_index % len(account_times) == 0:
@@ -2353,13 +2358,18 @@ def _do_schedule_data(data=None):
             scheduled_count += 1
             scheduled_details.append({"tiktok": r["tiktok"], "account": r["account"], "time": r["time"]})
 
-    return jsonify({
+    final_result = {
         "success": True,
         "pending": False,
         "scheduled": scheduled_count,
         "details": scheduled_details,
-        "errors": errors
-    })
+        "errors": errors,
+        "completed_at": datetime.now(timezone.utc).strftime("%d/%m/%Y à %Hh%M")
+    }
+    # Persister dans R2 pour affichage même si l'utilisateur revient plus tard
+    try: r2_put_json("meta/last_schedule_result.json", final_result)
+    except Exception: pass
+    return jsonify(final_result)
 
 @app.route("/api/queue/tiktok")
 def api_queue_tiktok():
