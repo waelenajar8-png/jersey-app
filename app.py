@@ -473,6 +473,19 @@ METRICOOL_ACCOUNTS = {
     "Volakits 6 (wassim)":  {"blog_id": "6675169", "active": True},
 }
 
+# Comptes Instagram (même blogId que TikTok car même marque Metricool)
+INSTAGRAM_ACCOUNTS = {
+    "Volakits Instagram": {"blog_id": "6542376", "active": True},
+}
+
+# Créneaux Instagram (UTC) — 9h/12h/15h/18h/21h Paris (UTC+2)
+INSTAGRAM_SCHEDULE_TIMES = ["07:00", "10:00", "13:00", "16:00", "19:00"]
+
+# Préfixes R2 pour la queue Instagram
+PFX_QUEUE_IG     = "queue_ig/"
+PFX_SCHEDULED_IG = "scheduled_ig/"
+KEY_USED_SLOTS_IG = "meta/used_slots_ig.json"
+
 
 # ── Auth utilisateurs ──────────────────────────────────────────────────────
 # Format: { "prenom": "mot_de_passe" }
@@ -1432,6 +1445,89 @@ def schedule_metricool(image_urls, caption, publish_time_iso, blog_id, timezone=
     except Exception as e:
         return {"success": False, "error": str(e)}
 
+def schedule_instagram(image_urls, caption, publish_time_iso, blog_id, timezone="Europe/Paris"):
+    """Programme un post Instagram carrousel via Metricool"""
+    if not METRICOOL_TOKEN:
+        return {"success": False, "error": "METRICOOL_TOKEN manquant"}
+    
+    media_ids = []
+    for i, url in enumerate(image_urls):
+        try:
+            img_resp = requests.get(url, timeout=30)
+            if img_resp.status_code != 200:
+                print(f"[INSTAGRAM] Erreur téléchargement image {i+1}: {img_resp.status_code}")
+                continue
+            # Convertir en JPEG et redimensionner à 1080x1920
+            try:
+                from PIL import Image
+                import io
+                img = Image.open(io.BytesIO(img_resp.content)).convert("RGB")
+                max_w, max_h = 1080, 1920
+                w, h = img.size
+                if w > max_w or h > max_h:
+                    ratio = min(max_w/w, max_h/h)
+                    img = img.resize((int(w*ratio), int(h*ratio)), Image.LANCZOS)
+                buf = io.BytesIO()
+                img.save(buf, format="JPEG", quality=92)
+                img_bytes = buf.getvalue()
+            except Exception as e:
+                print(f"[INSTAGRAM] ❌ Conversion échouée image {i+1}: {e}")
+                continue
+            
+            files = {"picture": (f"image_{i+1}.jpg", img_bytes, "image/jpeg")}
+            data = {"userId": METRICOOL_USER_ID, "blogId": blog_id}
+            upload_resp = requests.post(
+                "https://app.metricool.com/api/utils/upload",
+                headers={"X-Mc-Auth": METRICOOL_TOKEN},
+                files=files,
+                data=data,
+                timeout=60
+            )
+            if upload_resp.status_code == 200:
+                resp_text = upload_resp.text.strip()
+                if resp_text.startswith("http"):
+                    media_ids.append(resp_text)
+                    print(f"[INSTAGRAM] Upload image {i+1}: OK")
+        except Exception as e:
+            print(f"[INSTAGRAM] Erreur upload image {i+1}: {e}")
+    
+    if len(media_ids) < 5:
+        return {"success": False, "error": f"Seulement {len(media_ids)} images valides"}
+    
+    payload = {
+        "publicationDate": {"dateTime": publish_time_iso, "timezone": timezone},
+        "text": caption,
+        "firstCommentText": "",
+        "providers": [{"network": "instagram"}],
+        "media": media_ids,
+        "mediaAltText": [None] * len(media_ids),
+        "autoPublish": True,
+        "shortener": False,
+        "draft": False,
+        "hasNotReadNotes": False,
+        "instagramData": {
+            "autoPublish": True,
+            "isAiGenerated": False,
+            "type": "CAROUSEL"
+        }
+    }
+    
+    try:
+        resp = requests.post(
+            f"https://app.metricool.com/api/v2/scheduler/posts?userId={METRICOOL_USER_ID}&blogId={blog_id}",
+            headers={"X-Mc-Auth": METRICOOL_TOKEN, "Content-Type": "application/json"},
+            json=payload,
+            timeout=60
+        )
+        print(f"[INSTAGRAM] Response {resp.status_code}: {resp.text[:300]}")
+        if resp.status_code in (200, 201):
+            data = resp.json()
+            post_id = (data.get("data") or {}).get("id")
+            return {"success": True, "post_id": post_id}
+        return {"success": False, "error": resp.text[:200]}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
 def get_pepites_count_per_tiktok(n_tiktoks, n_pepites):
     """Calcule combien d'images pépites par TikTok (min 1, max 4)"""
     if n_tiktoks == 0 or n_pepites == 0:
@@ -1574,7 +1670,11 @@ def _save_tiktok(num, images_b64, user, flockages=None, template_keys=None):
         "account": None,
         "scheduled_at": None,
     }
-    return r2_put_json(f"{PFX_QUEUE}tiktok_{num:04d}.json", meta)
+    r2_put_json(f"{PFX_QUEUE}tiktok_{num:04d}.json", meta)
+    # Copie automatique dans la file d'attente Instagram
+    ig_meta = {**meta, "platform": "instagram", "ig_status": "pending"}
+    r2_put_json(f"{PFX_QUEUE_IG}tiktok_{num:04d}.json", ig_meta)
+    return True
 
 def _enrich_tiktok(data, key, with_images=True):
     """Ajoute les URLs signées et la clé R2. Cache l'URL avec une expiration longue."""
@@ -1834,6 +1934,9 @@ def scheduled_page(): return render_template("scheduled.html")
 
 @app.route("/templates")
 def templates_page(): return render_template("templates.html")
+
+@app.route("/queue_ig")
+def page_queue_ig(): return render_template("queue_ig.html")
 
 @app.route("/generator2")
 def page_generator2(): return render_template("generator2.html")
@@ -2824,6 +2927,179 @@ def api_metricool_failed_posts():
             print(f"[FAILED_POSTS] {account}: {e}")
     
     return jsonify({"failed": failed, "count": len(failed)})
+
+@app.route("/api/queue_ig/all")
+def api_queue_ig_all():
+    """Retourne tous les posts Instagram en attente"""
+    keys = sorted(r2_list_keys(PFX_QUEUE_IG))
+    keys = [k for k in keys if "/imgs/" not in k]
+    tiktoks = []
+    for k in keys:
+        d = r2_get_json(k)
+        if d:
+            d["r2_key"] = k
+            tiktoks.append(_enrich_tiktok(d, k))
+    return jsonify({"tiktoks": tiktoks, "total": len(tiktoks)})
+
+@app.route("/api/queue_ig/schedule", methods=["POST"])
+def api_schedule_ig():
+    """Programme des posts Instagram"""
+    if not _schedule_lock.acquire(blocking=False):
+        return jsonify({"error": "Programmation en cours"}), 429
+    
+    data = request.json or {}
+    _schedule_result_ig["last"] = {"pending": True}
+    
+    def run_schedule_ig():
+        try:
+            with app.app_context():
+                result = _do_schedule_ig(data)
+                _schedule_result_ig["last"] = result.get_json() if hasattr(result, 'get_json') else result
+        except Exception as e:
+            import traceback; traceback.print_exc()
+            _schedule_result_ig["last"] = {"scheduled": 0, "errors": [str(e)], "pending": False}
+        finally:
+            _schedule_lock.release()
+    
+    threading.Thread(target=run_schedule_ig, daemon=True).start()
+    return jsonify({"success": True, "background": True, "message": "Programmation Instagram lancée"})
+
+@app.route("/api/queue_ig/schedule/status")
+def api_schedule_ig_status():
+    result = _schedule_result_ig.get("last")
+    if result is None:
+        return jsonify({"pending": True})
+    if hasattr(result, 'get_json'):
+        return result
+    return jsonify(result)
+
+def _do_schedule_ig(data=None):
+    """Scheduling Instagram"""
+    if data is None: data = {}
+    start_date_str = data.get("start_date")
+    now = datetime.now(timezone.utc)
+    
+    try:
+        if start_date_str:
+            from datetime import date as _date
+            y,mo,d = map(int, start_date_str.split("-"))
+            start_date = _date(y,mo,d)
+        else:
+            start_date = now.date()
+    except Exception:
+        start_date = now.date()
+    
+    # Récupérer les posts Instagram assignés
+    keys = sorted(r2_list_keys(PFX_QUEUE_IG))
+    keys = [k for k in keys if "/imgs/" not in k]
+    queue = []
+    for k in keys:
+        d = r2_get_json(k)
+        if d and d.get("account") and d.get("ig_status","pending") == "pending":
+            d["r2_key"] = k
+            queue.append(d)
+    
+    if not queue:
+        return jsonify({"success": True, "pending": False, "scheduled": 0, "errors": [], "details": []})
+    
+    # Reconstruire les créneaux utilisés Instagram
+    ig_used = set()
+    for sk in r2_list_keys(PFX_SCHEDULED_IG):
+        if "/imgs/" in sk: continue
+        sd = r2_get_json(sk)
+        if sd and sd.get("scheduled_at"):
+            ig_used.add(sd["scheduled_at"])
+    
+    scheduled_count = 0
+    errors = []
+    details = []
+    
+    for post in queue:
+        account = post.get("account", "Volakits Instagram")
+        ig_acc = INSTAGRAM_ACCOUNTS.get(account) or list(INSTAGRAM_ACCOUNTS.values())[0]
+        
+        # Trouver le prochain créneau libre
+        scan_date = start_date
+        scan_idx = 0
+        while True:
+            h, m = map(int, INSTAGRAM_SCHEDULE_TIMES[scan_idx % len(INSTAGRAM_SCHEDULE_TIMES)].split(":"))
+            slot_dt = datetime(scan_date.year, scan_date.month, scan_date.day, h, m, tzinfo=timezone.utc)
+            slot_iso = slot_dt.isoformat()
+            if slot_dt > now + timedelta(minutes=30) and slot_iso not in ig_used:
+                ig_used.add(slot_iso)
+                break
+            scan_idx += 1
+            if scan_idx % len(INSTAGRAM_SCHEDULE_TIMES) == 0:
+                from datetime import timedelta as _td
+                scan_date = scan_date + _td(days=1)
+        
+        # Convertir en heure Paris
+        from zoneinfo import ZoneInfo
+        paris_tz = ZoneInfo("Europe/Paris")
+        dt_paris = slot_dt.astimezone(paris_tz)
+        publish_time = dt_paris.strftime("%Y-%m-%dT%H:%M:%S")
+        display_time = dt_paris.strftime("%d/%m/%Y à %Hh%M")
+        
+        image_keys = post.get("image_keys", [])
+        image_urls = [f"{R2_PUBLIC_URL}/{k}" for k in image_keys if k]
+        
+        result = schedule_instagram(
+            image_urls=image_urls,
+            caption=FIXED_CAPTION,
+            publish_time_iso=publish_time,
+            blog_id=ig_acc["blog_id"]
+        )
+        
+        if result["success"]:
+            # Déplacer vers scheduled_ig
+            post["ig_status"] = "scheduled"
+            post["ig_post_id"] = result.get("post_id")
+            post["scheduled_at"] = slot_iso
+            r2_put_json(post["r2_key"].replace(PFX_QUEUE_IG, PFX_SCHEDULED_IG), post)
+            try: get_r2().delete_object(Bucket=R2_BUCKET, Key=post["r2_key"])
+            except Exception: pass
+            scheduled_count += 1
+            details.append({"account": account, "time": display_time})
+            print(f"[INSTAGRAM] ✅ Post programmé pour {display_time}")
+        else:
+            errors.append(f"Post {post.get('number','?')}: {result['error']}")
+    
+    final = {
+        "success": True, "pending": False,
+        "scheduled": scheduled_count, "errors": errors, "details": details,
+        "completed_at": datetime.now(timezone.utc).strftime("%d/%m/%Y à %Hh%M")
+    }
+    try: r2_put_json("meta/last_ig_schedule_result.json", final)
+    except Exception: pass
+    return jsonify(final)
+
+_schedule_result_ig = {}
+
+@app.route("/api/queue_ig/dispatch_smart", methods=["POST"])
+def api_dispatch_ig_smart():
+    """Auto-dispatch Instagram — assigne tous les posts non assignés au compte Instagram"""
+    keys = [k for k in r2_list_keys(PFX_QUEUE_IG) if "/imgs/" not in k]
+    ig_account = list(INSTAGRAM_ACCOUNTS.keys())[0]
+    count = 0
+    for k in keys:
+        t = r2_get_json(k)
+        if t and not t.get("account"):
+            t["account"] = ig_account
+            r2_put_json(k, t)
+            count += 1
+    return jsonify({"success": True, "count": count, "by_account": {ig_account: count}})
+
+@app.route("/api/queue_ig/unassign_all", methods=["POST"])
+def api_unassign_ig_all():
+    keys = [k for k in r2_list_keys(PFX_QUEUE_IG) if "/imgs/" not in k]
+    done = 0
+    for k in keys:
+        t = r2_get_json(k)
+        if t and t.get("account"):
+            t["account"] = None
+            r2_put_json(k, t)
+            done += 1
+    return jsonify({"success": True, "unassigned": done})
 
 @app.route("/api/metricool/test")
 def api_metricool_test():
