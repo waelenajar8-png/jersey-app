@@ -1,0 +1,1435 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>File d'attente — TikToks</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root[data-theme="dark"]{
+    --bg:#0a0b0f; --bg-elevated:#0f1117;
+    --panel:#15171e; --panel-hover:#1a1d26;
+    --border:#242832; --border-strong:#323847;
+    --accent:#4ade80; --accent-grad:linear-gradient(135deg,#4ade80,#22d3ee); --accent-dim:rgba(74,222,128,.12);
+    --text:#f1f3f6; --text-dim:#8b93a3; --text-faint:#5b6373;
+    --danger:#f87171; --danger-dim:rgba(248,113,113,.12);
+    --warn:#fbbf24; --warn-dim:rgba(251,191,36,.12);
+    --purple:#a78bfa; --purple-dim:rgba(167,139,250,.12);
+    --shadow-sm:0 1px 2px rgba(0,0,0,.3);
+    --shadow-md:0 4px 12px rgba(0,0,0,.35),0 1px 3px rgba(0,0,0,.3);
+    --shadow-lg:0 12px 32px rgba(0,0,0,.45),0 2px 8px rgba(0,0,0,.3);
+    --shadow-glow:0 0 0 1px rgba(74,222,128,.15),0 4px 16px rgba(74,222,128,.08);
+}
+:root[data-theme="light"]{
+    --bg:#f7f8fa; --bg-elevated:#ffffff;
+    --panel:#ffffff; --panel-hover:#f9fafb;
+    --border:#e5e7eb; --border-strong:#d1d5db;
+    --accent:#16a34a; --accent-grad:linear-gradient(135deg,#16a34a,#0891b2); --accent-dim:rgba(22,163,74,.08);
+    --text:#0f172a; --text-dim:#64748b; --text-faint:#94a3b8;
+    --danger:#dc2626; --danger-dim:rgba(220,38,38,.08);
+    --warn:#d97706; --warn-dim:rgba(217,119,6,.08);
+    --purple:#7c3aed; --purple-dim:rgba(124,58,237,.08);
+    --shadow-sm:0 1px 2px rgba(15,23,42,.06);
+    --shadow-md:0 4px 12px rgba(15,23,42,.08),0 1px 3px rgba(15,23,42,.06);
+    --shadow-lg:0 12px 32px rgba(15,23,42,.12),0 2px 8px rgba(15,23,42,.06);
+    --shadow-glow:0 0 0 1px rgba(22,163,74,.12),0 4px 16px rgba(22,163,74,.06);
+}
+*{box-sizing:border-box}
+::selection{background:var(--accent);color:#0a0b0f}
+body{margin:0;font-family:'Inter',-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;padding:32px 24px;transition:background .25s ease,color .25s ease;-webkit-font-smoothing:antialiased;letter-spacing:-0.01em}
+.wrap{max-width:1400px;margin:0 auto}
+@keyframes fadeInUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+@keyframes spin{to{transform:rotate(360deg)}}
+.card{animation:fadeInUp .35s cubic-bezier(.16,1,.3,1) both}
+.topbar{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px}
+h1{font-size:24px;margin:0;font-weight:800;letter-spacing:-0.02em}
+.nav{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+@media(max-width:640px){
+    .topbar{flex-direction:column;align-items:stretch}
+    .nav{flex-wrap:nowrap;overflow-x:auto;padding-bottom:4px;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+    .nav::-webkit-scrollbar{display:none}
+    .nav a,.theme-btn,.config-btn{flex-shrink:0}
+}
+.nav a{color:var(--text-dim);text-decoration:none;font-size:13px;font-weight:600;padding:6px 10px;border-radius:8px;transition:all .15s ease}
+.nav a:hover{color:var(--text);background:var(--panel-hover)}
+.theme-btn,.config-btn{background:var(--panel);border:1px solid var(--border);color:var(--text);padding:6px 12px;border-radius:100px;cursor:pointer;font-size:13px;font-weight:600;box-shadow:var(--shadow-sm);transition:all .15s ease}
+.theme-btn:hover,.config-btn:hover{border-color:var(--border-strong);transform:translateY(-1px)}
+.buffer-bar{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:14px 18px;margin-bottom:18px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;box-shadow:var(--shadow-sm)}
+.buffer-label{font-size:13px;font-weight:700;color:var(--warn)}
+.buffer-track{flex:1;min-width:120px;height:8px;background:var(--border);border-radius:100px;overflow:hidden}
+.buffer-fill{height:100%;background:linear-gradient(135deg,#fbbf24,#f59e0b);border-radius:100px;transition:width .4s cubic-bezier(.4,0,.2,1)}
+.buffer-text{font-size:12px;color:var(--text-dim);white-space:nowrap;font-weight:500}
+.toolbar{display:flex;gap:10px;margin-bottom:18px;flex-wrap:wrap;align-items:center}
+.btn{padding:11px 20px;background:var(--accent-grad);color:#06170d;border:none;border-radius:11px;font-size:13.5px;font-weight:700;cursor:pointer;box-shadow:var(--shadow-glow);transition:all .18s cubic-bezier(.16,1,.3,1)}
+.btn:hover:not(:disabled){transform:translateY(-1.5px);box-shadow:0 6px 20px rgba(74,222,128,.25),var(--shadow-glow)}
+.btn:disabled{opacity:.4;cursor:not-allowed;box-shadow:none}
+.btn-sec{padding:10px 18px;background:var(--panel);border:1px solid var(--border);color:var(--text);border-radius:10px;font-size:12.5px;font-weight:600;cursor:pointer;transition:all .15s ease}
+.btn-sec:hover{border-color:var(--border-strong);transform:translateY(-1px);box-shadow:var(--shadow-sm)}
+.btn-purple{background:linear-gradient(135deg,#a78bfa,#8b5cf6);color:#fff;border:none;box-shadow:0 0 0 1px rgba(167,139,250,.15),0 4px 16px rgba(167,139,250,.15)}
+.btn-purple:hover:not(:disabled){box-shadow:0 6px 20px rgba(167,139,250,.25)}
+.btn-danger{background:var(--danger-dim);border:1px solid rgba(248,113,113,.3);color:var(--danger)}
+.count-badge{background:var(--panel);border:1px solid var(--border);padding:8px 14px;border-radius:100px;font-size:12.5px;font-weight:600;box-shadow:var(--shadow-sm)}
+.select-row{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;align-items:center}
+.select-row span{font-size:12px;color:var(--text-dim);font-weight:500}
+.filters-row{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;align-items:center}
+.filter-chip{padding:6px 14px;background:var(--panel);border:1px solid var(--border);color:var(--text-dim);border-radius:100px;font-size:12px;font-weight:600;cursor:pointer;transition:all .15s ease}
+.filter-chip:hover{transform:translateY(-1px);border-color:var(--border-strong)}
+.filter-chip.active{background:var(--accent-grad);color:#06170d;border-color:transparent}
+.search-input{padding:8px 14px;background:var(--panel);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:12.5px;min-width:160px;font-family:inherit;transition:all .15s ease}
+.search-input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-dim)}
+.status-bar{background:var(--accent-dim);border:1px solid rgba(74,222,128,.25);border-radius:12px;padding:13px 18px;margin-bottom:4px;font-size:13px;font-weight:500;display:none;transition:opacity .3s,transform .3s}
+.status-bar.show{display:block;opacity:1;transform:translateY(0)}
+.status-bar:not(.show){opacity:0;transform:translateY(-4px);pointer-events:none}
+.prog-wrap{display:none;margin-bottom:18px}
+.prog-wrap.show{display:block}
+.prog-bar{height:6px;background:var(--border);border-radius:100px;overflow:hidden;margin-top:6px}
+.prog-fill{height:100%;background:var(--accent-grad);width:0%;transition:width .3s cubic-bezier(.4,0,.2,1);border-radius:100px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px}
+.card{background:var(--panel);border:1.5px solid var(--border);border-radius:16px;overflow:hidden;transition:transform .18s cubic-bezier(.16,1,.3,1),box-shadow .18s ease,border-color .15s ease}
+.card:hover{box-shadow:var(--shadow-md);border-color:var(--border-strong);transform:translateY(-2px)}
+.card.selected{border-color:var(--accent);box-shadow:var(--shadow-glow)}
+.card.checked{border-color:var(--danger);box-shadow:0 0 0 1px rgba(248,113,113,.2)}
+.card-header{padding:12px 14px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border)}
+.card-num{font-size:13px;font-weight:700;display:flex;align-items:center;gap:7px;letter-spacing:-0.01em}
+.card-meta{font-size:10.5px;color:var(--text-dim);margin-top:2px;font-weight:500}
+.account-tag{background:var(--accent-dim);color:var(--accent);padding:3px 10px;border-radius:100px;font-size:10px;font-weight:700}
+.imgs-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:3px;padding:8px}
+.img-item{position:relative;cursor:grab;border-radius:6px;overflow:hidden}
+.img-item.dragging{opacity:.4;cursor:grabbing}
+.img-item img{width:100%;aspect-ratio:3/4;object-fit:cover;border-radius:6px;background:var(--bg-elevated);display:block;cursor:zoom-in;transition:transform .25s ease}
+.img-item:hover img{transform:scale(1.05)}
+.img-overlay{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;gap:3px;background:rgba(0,0,0,.55);backdrop-filter:blur(2px);border-radius:6px}
+.img-item:hover .img-overlay{display:flex}
+.img-arrow{background:rgba(255,255,255,.2);border:none;color:#fff;padding:3px 8px;border-radius:100px;font-size:11px;cursor:pointer;font-weight:700;transition:background .15s}
+.img-arrow:hover{background:rgba(255,255,255,.4)}
+.img-del{background:rgba(248,113,113,.9);border:none;color:#fff;padding:3px 8px;border-radius:100px;font-size:10px;cursor:pointer;font-weight:700}
+.img-num{position:absolute;bottom:3px;left:4px;background:rgba(0,0,0,.65);color:#fff;font-size:9px;padding:1px 5px;border-radius:5px;font-weight:700;pointer-events:none}
+.more-imgs{display:flex;align-items:center;justify-content:center;background:var(--bg-elevated);border-radius:6px;aspect-ratio:3/4;font-size:10px;color:var(--text-dim);font-weight:700}
+.card-footer{padding:10px 12px;display:flex;flex-direction:column;gap:7px;border-top:1px solid var(--border)}
+.account-select{width:100%;padding:8px 10px;background:var(--bg-elevated);border:1px solid var(--border);border-radius:9px;color:var(--text);font-size:12px;font-weight:600;font-family:inherit;transition:border-color .15s}
+.account-select:focus{outline:none;border-color:var(--accent)}
+.card-actions{display:flex;gap:6px}
+.mark-btn{flex:1;padding:7px;background:var(--bg-elevated);border:1px solid var(--border);color:var(--text-dim);border-radius:8px;font-size:11px;font-weight:600;cursor:pointer;text-align:center;transition:all .15s ease}
+.mark-btn:hover{border-color:var(--border-strong)}
+.mark-btn.on{background:var(--accent-grad);color:#06170d;border-color:transparent}
+.del-btn{padding:7px 11px;background:var(--danger-dim);border:1px solid rgba(248,113,113,.3);color:var(--danger);border-radius:8px;font-size:11px;cursor:pointer;transition:all .15s ease}
+.del-btn:hover{background:rgba(248,113,113,.2)}
+.schedule-one-btn{width:100%;padding:9px;background:var(--accent-grad);color:#06170d;border:none;border-radius:9px;font-size:12px;font-weight:700;cursor:pointer;transition:all .18s ease}
+.schedule-one-btn:hover:not(:disabled){transform:translateY(-1px);box-shadow:var(--shadow-glow)}
+.schedule-one-btn:disabled{opacity:.4;cursor:not-allowed}
+.card-status{font-size:10.5px;padding:6px 10px;border-radius:8px;text-align:center;display:none;font-weight:500}
+.card-status.ok{background:var(--accent-dim);color:var(--accent);display:block}
+.card-status.err{background:var(--danger-dim);color:var(--danger);display:block}
+.card-status.loading{background:var(--bg-elevated);color:var(--text-dim);display:block}
+.empty{text-align:center;color:var(--text-dim);padding:70px 20px;font-size:14px;font-weight:500}
+.spinner{width:28px;height:28px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;margin:0 auto 14px}
+.modal-bg{position:fixed;inset:0;background:rgba(5,6,10,.7);backdrop-filter:blur(3px);display:none;align-items:center;justify-content:center;z-index:100}
+.modal-bg.open{display:flex}
+.modal{background:var(--panel);border:1px solid var(--border);border-radius:18px;padding:26px;width:100%;max-width:440px;box-shadow:var(--shadow-lg)}
+.modal h2{font-size:16px;margin:0 0 18px;font-weight:800;letter-spacing:-0.01em}
+.modal label{display:block;font-size:12px;color:var(--text-dim);margin-bottom:5px;margin-top:14px;font-weight:600}
+.modal input{width:100%;padding:10px 12px;background:var(--bg-elevated);border:1.5px solid var(--border);border-radius:10px;color:var(--text);font-size:13px;font-family:inherit;transition:all .15s}
+.modal input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-dim)}
+.modal-hint{font-size:11px;color:var(--text-faint);margin-top:5px}
+.modal-actions{display:flex;gap:8px;margin-top:22px;justify-content:flex-end}
+.pagination{display:flex;gap:8px;justify-content:center;align-items:center;margin-top:24px}
+.page-btn{padding:9px 16px;background:var(--panel);border:1px solid var(--border);color:var(--text);border-radius:10px;font-size:13px;cursor:pointer;font-weight:600;transition:all .15s ease}
+.page-btn:hover:not(:disabled){border-color:var(--border-strong);transform:translateY(-1px)}
+.page-btn:disabled{opacity:.4;cursor:not-allowed}
+.page-info{font-size:13px;color:var(--text-dim);font-weight:500}
+.lightbox-bg{position:fixed;inset:0;background:rgba(5,6,10,.92);z-index:300;display:none;align-items:center;justify-content:center;padding:20px}
+.lightbox-bg.open{display:flex}
+.lightbox-bg img{max-width:90vw;max-height:90vh;border-radius:12px;box-shadow:var(--shadow-lg)}
+.lightbox-close{position:absolute;top:20px;right:20px;background:rgba(255,255,255,.1);border:none;color:#fff;font-size:22px;width:42px;height:42px;border-radius:50%;cursor:pointer;transition:background .15s}
+.lightbox-close:hover{background:rgba(255,255,255,.2)}
+/* ── Modal sélecteur template pour régénération ───────────────── */
+.regen-modal-bg{position:fixed;inset:0;background:rgba(5,6,10,.9);backdrop-filter:blur(6px);z-index:300;display:none;align-items:center;justify-content:center;padding:24px;overflow-y:auto}
+.regen-modal-bg.open{display:flex}
+.regen-modal{background:var(--panel);border:1px solid var(--border);border-radius:20px;width:100%;max-width:760px;padding:24px;box-shadow:var(--shadow-lg);margin:auto}
+.regen-template-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:8px;max-height:60vh;overflow-y:auto;margin-top:16px;padding:4px}
+.regen-tpl{cursor:pointer;border-radius:10px;overflow:hidden;border:2px solid transparent;transition:all .15s}
+.regen-tpl:hover{border-color:var(--accent);transform:scale(1.03)}
+.regen-tpl img{width:100%;aspect-ratio:3/4;object-fit:cover;display:block}
+.regen-tpl-name{font-size:9px;color:var(--text-dim);padding:3px 4px;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* ── Modal éditeur images ─────────────────────────────────────── */
+.img-editor-bg{position:fixed;inset:0;background:rgba(5,6,10,.88);backdrop-filter:blur(6px);z-index:200;display:none;align-items:flex-start;justify-content:center;padding:24px;overflow-y:auto}
+.img-editor-bg.open{display:flex}
+.img-editor{background:var(--panel);border:1px solid var(--border);border-radius:20px;width:100%;max-width:680px;padding:24px;box-shadow:var(--shadow-lg);margin:auto}
+.img-editor-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px}
+.img-editor-title{font-size:16px;font-weight:800;letter-spacing:-0.01em}
+.img-editor-close{background:var(--bg-elevated);border:1px solid var(--border);color:var(--text);width:34px;height:34px;border-radius:50%;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;transition:all .15s}
+.img-editor-close:hover{border-color:var(--danger);color:var(--danger)}
+.img-editor-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:20px}
+.ie-item{position:relative;border-radius:10px;overflow:hidden;border:2px solid transparent;transition:border-color .15s;cursor:grab;background:var(--bg-elevated)}
+.ie-item.dragging{opacity:.4;cursor:grabbing}
+.ie-item.drag-over{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-dim)}
+.ie-item img{width:100%;aspect-ratio:3/4;object-fit:cover;display:block}
+.ie-item-num{position:absolute;top:5px;left:5px;background:rgba(0,0,0,.7);color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:6px}
+.ie-item-actions{position:absolute;inset:0;background:rgba(0,0,0,.55);display:none;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:8px}
+.ie-item:hover .ie-item-actions{display:flex}
+.ie-btn{width:100%;padding:5px 0;border:none;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;transition:all .15s}
+.ie-btn-zoom{background:rgba(255,255,255,.2);color:#fff}
+.ie-btn-zoom:hover{background:rgba(255,255,255,.35)}
+.ie-btn-up{background:rgba(74,222,128,.3);color:#4ade80}
+.ie-btn-up:hover{background:rgba(74,222,128,.5)}
+.ie-btn-down{background:rgba(74,222,128,.3);color:#4ade80}
+.ie-btn-down:hover{background:rgba(74,222,128,.5)}
+.ie-btn-del{background:rgba(248,113,113,.3);color:#f87171}
+.ie-btn-del:hover{background:rgba(248,113,113,.5)}
+.ie-loading{text-align:center;padding:40px;color:var(--text-dim)}
+.ie-actions{display:flex;gap:8px;justify-content:flex-end}
+.recap-list{max-height:300px;overflow-y:auto;background:var(--bg-elevated);border-radius:10px;padding:12px;font-size:12px;margin-top:12px}
+.recap-item{padding:6px 0;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;font-weight:500}
+.recap-item:last-child{border-bottom:none}
+.conflict-warn{background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.3);color:var(--warn);padding:8px 12px;border-radius:8px;font-size:12px;margin-top:8px}
+</style>
+</head>
+<body>
+<div class="wrap">
+    <div class="topbar">
+        <div>
+            <h1>📸 Instagram — Posts en attente</h1>
+            <div style="color:var(--text-dim);font-size:12px;margin-top:2px">Posts Instagram prêts à programmer</div>
+        </div>
+        <div class="nav">
+            <a href="/queue">📋 TikTok</a>
+            <a href="/queue_ig" class="nav-link active" style="color:#e1306c">📸 Instagram</a>
+            <a href="/generator2" style="color:#f59e0b">📦 Gén. V2</a>
+            <a href="/scheduled">✅ Programmés</a>
+            <a href="/dashboard">📊 Dashboard</a>
+            <a href="/calendar">📅 Calendrier</a>
+            <a href="/stats">📈 Stats</a>
+            <a href="/monitor">👀 Monitor</a>
+            <button class="config-btn" onclick="openConfig()">⚙️ Comptes</button>
+            <button class="theme-btn" id="themeBtn">☀️</button>
+        </div>
+    </div>
+
+    <div class="buffer-bar" id="bufferBar" style="display:none">
+        <span class="buffer-label">⏳ Buffer en cours</span>
+        <div class="buffer-track"><div class="buffer-fill" id="bufferFill"></div></div>
+        <span class="buffer-text" id="bufferText">—/7 images</span>
+        <button class="btn-sec" style="padding:5px 10px;font-size:11px" onclick="clearBuffer()">🗑️ Vider le buffer</button>
+    </div>
+
+    <div class="status-bar" id="statusBar"></div>
+    <div class="prog-wrap" id="progWrap">
+        <div class="prog-bar"><div class="prog-fill" id="progFill"></div></div>
+    </div>
+
+    <div class="toolbar">
+        <span class="count-badge" id="countBadge">⏳ Chargement...</span>
+        <button class="btn btn-purple" id="dispatchBtn" disabled onclick="dispatchAuto()">🔀 Dispatcher le reste auto</button>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <label style="font-size:12px;color:var(--text-dim);font-weight:600">📅 Début :</label>
+            <input type="date" id="startDate" style="padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px">
+            <button class="btn" id="scheduleBtn" disabled onclick="confirmScheduleAll()">🚀 Programmer</button>
+        </div>
+        <button class="btn-sec btn-danger" id="deleteSelBtn" style="display:none" onclick="deleteSelected()">🗑️ Supprimer sélection</button>
+    </div>
+
+    <div class="select-row">
+        <button class="btn-sec" style="padding:6px 12px;font-size:12px" onclick="selectAll()">⭐ Tout → Compte principal</button>
+        <button class="btn-sec" style="padding:6px 12px;font-size:12px;display:none" id="deselectBtn" onclick="deselectAll()">✖️ Désélectionner tout</button>
+        <button class="btn-sec" style="padding:6px 12px;font-size:12px;background:rgba(248,113,113,.1);border-color:rgba(248,113,113,.3);color:var(--danger)" onclick="unassignAll()">🗑️ Tout désassigner</button>
+        <button class="btn-sec" onclick="showAutopilot()" style="padding:6px 12px;font-size:12px;background:rgba(139,92,246,.15);border-color:rgba(139,92,246,.3);color:#a78bfa">🚁 Pilote auto</button>
+        <span id="selCount"></span>
+        <!-- Sélection rapide N TikToks -->
+        <div style="display:flex;align-items:center;gap:6px;margin-left:auto">
+            <input type="number" id="selectNCount" value="20" min="1" max="500"
+                style="width:60px;padding:5px 8px;background:var(--bg-elevated);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:12px;text-align:center">
+            <select id="selectNAccount" style="padding:5px 8px;background:var(--bg-elevated);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:12px">
+                <option value="">— Compte —</option>
+            </select>
+            <button class="btn-sec" onclick="selectNForAccount()" style="padding:5px 12px;font-size:12px">✅ Sélectionner</button>
+        </div>
+    </div>
+
+    <div class="filters-row">
+        <input type="text" class="search-input" id="searchInput" placeholder="🔍 N° TikTok ou flocage..." oninput="applyFilters()">
+        <select class="search-input" id="sortSelect" onchange="applyFilters()">
+            <option value="num_asc">Tri : N° croissant</option>
+            <option value="num_desc">Tri : N° décroissant</option>
+            <option value="date_desc">Tri : plus récent</option>
+            <option value="date_asc">Tri : plus ancien</option>
+        </select>
+        <span id="userFilters"></span>
+        <span id="accountFilters" style="margin-left:8px"></span>
+    </div>
+
+    <div id="grid" class="grid">
+        <div style="text-align:center;padding:60px;color:var(--text-dim);grid-column:1/-1"><div class="spinner"></div>Chargement...</div>
+    </div>
+
+    <div class="pagination" id="pagination" style="display:none">
+        <button class="page-btn" id="prevPageBtn" onclick="changePage(-1)">← Précédent</button>
+        <span class="page-info" id="pageInfo">Page 1</span>
+        <button class="page-btn" id="nextPageBtn" onclick="changePage(1)">Suivant →</button>
+    </div>
+</div>
+
+<!-- Lightbox -->
+<div class="lightbox-bg" id="lightbox" onclick="closeLightbox()">
+    <button class="lightbox-close" onclick="closeLightbox()">✕</button>
+    <img id="lightboxImg" src="" onclick="event.stopPropagation()">
+</div>
+
+<!-- Modal sélecteur template pour régénération -->
+<div class="regen-modal-bg" id="regenModal" onclick="if(event.target===this)this.classList.remove('open')">
+    <div class="regen-modal">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+            <div style="font-size:16px;font-weight:800">🔄 Régénérer une image</div>
+            <button style="background:var(--bg-elevated);border:1px solid var(--border);color:var(--text);width:34px;height:34px;border-radius:50%;cursor:pointer;font-size:16px" onclick="document.getElementById('regenModal').classList.remove('open')">✕</button>
+        </div>
+        <!-- Flocage modifiable -->
+        <div style="margin-bottom:16px">
+            <label style="font-size:11px;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:.04em;display:block;margin-bottom:6px">Flocage</label>
+            <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+                <input type="text" id="regenFlocInput" placeholder="NOM / NUMÉRO / NOM_DESSOUS"
+                    style="flex:1;padding:10px 12px;background:var(--bg-elevated);border:1.5px solid var(--border);border-radius:10px;color:var(--text);font-size:13px;font-family:inherit;font-weight:600">
+                <button onclick="pickRandomFloc()" title="Flocage aléatoire depuis la bibliothèque"
+                    style="padding:10px 14px;background:var(--accent-dim);border:1px solid rgba(74,222,128,.3);color:var(--accent);border-radius:10px;cursor:pointer;font-size:14px;font-weight:700;white-space:nowrap">🎲 Aléatoire</button>
+            </div>
+            <!-- Flocages du TikTok courant pour choisir rapidement -->
+            <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px">Flocages du TikTok :</div>
+            <div id="regenFlocList" style="display:flex;flex-wrap:wrap;gap:6px"></div>
+        </div>
+        <!-- Template -->
+        <label style="font-size:11px;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:.04em;display:block;margin-bottom:8px">Choisir un template <span style="font-weight:400;text-transform:none">(optionnel — garde le même si non sélectionné)</span></label>
+        <div class="regen-template-grid" id="regenTemplateGrid">
+            <div style="grid-column:1/-1;text-align:center;padding:20px;color:var(--text-dim)"><div class="spinner"></div></div>
+        </div>
+        <div style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end">
+            <button class="btn-sec" onclick="document.getElementById('regenModal').classList.remove('open')">Annuler</button>
+            <button class="btn" onclick="selectRegenTemplate(null)" style="background:var(--panel);border:1px solid var(--border);color:var(--text)">🔄 Régénérer sans changer le template</button>
+        </div>
+    </div>
+</div>
+
+<!-- Modal éditeur images -->
+<div class="img-editor-bg" id="imgEditorBg" onclick="closeImgEditor(event)">
+    <div class="img-editor" onclick="event.stopPropagation()">
+        <div class="img-editor-header">
+            <div class="img-editor-title" id="ieTitle">🖼️ Éditer les images</div>
+            <button class="img-editor-close" onclick="closeImgEditor()">✕</button>
+        </div>
+        <div class="img-editor-grid" id="ieGrid">
+            <div class="ie-loading"><div class="spinner"></div>Chargement...</div>
+        </div>
+        <div class="ie-actions">
+            <button class="btn-sec" onclick="closeImgEditor()">Fermer</button>
+            <button class="btn" onclick="saveImgOrder()">💾 Sauvegarder l'ordre</button>
+        </div>
+    </div>
+</div>
+
+<!-- Modal config comptes -->
+<div class="modal-bg" id="configModal">
+    <div class="modal">
+        <h2>⚙️ Configuration des comptes TikTok</h2>
+        <label>Compte principal (celui qui performe le mieux)</label>
+        <select id="mainAccount" class="account-select" style="padding:9px 11px"></select>
+        <div class="modal-hint">Les TikToks que tu sélectionnes manuellement iront sur ce compte</div>
+        <label>Autres comptes (dispatch automatique)</label>
+        <div id="otherAccountsChecks" style="display:flex;flex-direction:column;gap:6px;margin-top:6px"></div>
+        <div class="modal-hint">Le reste sera dispatché automatiquement sur ces comptes</div>
+        <div class="modal-actions">
+            <button class="btn-sec" onclick="closeConfig()">Annuler</button>
+            <button class="btn" onclick="saveConfig()">💾 Sauvegarder</button>
+        </div>
+    </div>
+</div>
+
+<!-- Modal récap avant programmation -->
+<div class="modal-bg" id="recapModal">
+    <div class="modal" style="max-width:520px">
+        <h2>🚀 Confirmer la programmation</h2>
+        <div id="recapContent"></div>
+        <div class="modal-actions">
+            <button class="btn-sec" onclick="closeRecap()">Annuler</button>
+            <button class="btn" onclick="scheduleAll()">✅ Confirmer et programmer</button>
+        </div>
+    </div>
+</div>
+
+<script>
+const html=document.documentElement;
+const themeBtn=document.getElementById('themeBtn');
+let theme=localStorage.getItem('theme')||'dark';
+applyTheme(theme);
+function applyTheme(t){theme=t;html.setAttribute('data-theme',t);themeBtn.textContent=t==='dark'?'☀️':'🌙';localStorage.setItem('theme',t)}
+themeBtn.addEventListener('click',()=>applyTheme(theme==='dark'?'light':'dark'));
+
+// ── Cache local — toutes les données en mémoire, zéro latence UI ──────────
+let allTiktoks=[];
+let _filteredTiktoks=[];
+let _displayCount=20; // nombre affiché (infinite scroll)
+let totalCount=0;
+let selectedForMain=new Set();
+let checkedForDelete=new Set();
+let accounts={main:'',others:[]};
+let customSlots={};
+let currentUserFilter='all';
+let currentAccountFilter='all';
+let currentSearch='';
+let currentSort='num_asc';
+let _cacheLoaded=false;
+
+async function init(){
+    const [acRes, bufRes] = await Promise.all([fetch('/api/accounts'), fetch('/api/buffer')]);
+    accounts = await acRes.json();
+    const buf = await bufRes.json();
+    updateBufferBar(buf.pending, buf.pending + buf.needed);
+    await loadAll();
+}
+
+async function loadAll(){
+    // Charger TOUT en une seule requête — cache complet en mémoire
+    document.getElementById('grid').innerHTML = '<div style="text-align:center;padding:60px;color:var(--text-dim);grid-column:1/-1"><div class="spinner"></div>Chargement...</div>';
+    const res = await fetch('/api/queue_ig/all');
+    const data = await res.json();
+    allTiktoks = data.tiktoks || [];
+    totalCount = allTiktoks.length;
+    _cacheLoaded = true;
+    _displayCount = 20;
+    updateUserFilters();
+    applyFilters();
+    updateCounters();
+    setupInfiniteScroll();
+    populateSelectNAccount();
+    updateAccountFilters();
+    // Afficher résumé dernière programmation si disponible
+    try {
+        const sr = await fetch('/api/queue_ig/schedule/status').then(r=>r.json());
+        if(sr.success && sr.pending === false && sr.completed_at){
+            let msg = `✅ Dernière programmation (${sr.completed_at}) : ${sr.scheduled} TikTok(s) programmés`;
+            if(sr.errors?.length){
+                msg += `\n⚠️ ${sr.errors.length} échec(s) :\n` + sr.errors.map((e,i)=>`${i+1}. ${e}`).join('\n');
+            }
+            showStatus(msg.replace(/\n/g, '<br>'));
+        }
+    } catch(e){}
+}
+
+async function loadPage(page){
+    // Compatibilité — redirige vers loadAll si pas encore chargé
+    if(!_cacheLoaded) { await loadAll(); return; }
+    applyFilters();
+}
+
+function updatePagination(){
+    // Remplacé par infinite scroll — on cache la pagination
+    document.getElementById('pagination').style.display = 'none';
+}
+
+function changePage(delta){ /* plus utilisé avec infinite scroll */ }
+
+function setupInfiniteScroll(){
+    window.removeEventListener('scroll', _onScroll);
+    window.addEventListener('scroll', _onScroll, {passive: true});
+}
+
+function _onScroll(){
+    if(window.innerHeight + window.scrollY >= document.body.offsetHeight - 300){
+        const filtered = getFilteredSorted();
+        if(_displayCount < filtered.length){
+            _displayCount += 20;
+            renderMore();
+        }
+    }
+}
+
+function renderMore(){
+    const filtered = getFilteredSorted();
+    const toShow = filtered.slice(0, _displayCount);
+    const existing = new Set([...document.querySelectorAll('[id^="c-"]')].map(el=>el.id.replace('c-','')));
+    const grid = document.getElementById('grid');
+    toShow.forEach(t=>{
+        if(!existing.has(t.id)){
+            const div = document.createElement('div');
+            div.innerHTML = renderCard(t);
+            grid.appendChild(div.firstElementChild);
+        }
+    });
+}
+
+function updateUserFilters(){
+    const users = [...new Set(allTiktoks.map(t=>t.user).filter(Boolean))];
+    const el = document.getElementById('userFilters');
+    el.innerHTML = `<button class="filter-chip ${currentUserFilter==='all'?'active':''}" onclick="setUserFilter('all')">Tous</button>` +
+        users.map(u=>`<button class="filter-chip ${currentUserFilter===u?'active':''}" onclick="setUserFilter('${u}')">${u}</button>`).join('');
+}
+
+function setAccountFilter(a){
+    currentAccountFilter = a;
+    document.querySelectorAll('#accountFilters .filter-chip').forEach(b=>b.classList.remove('active'));
+    document.querySelectorAll('#accountFilters .filter-chip').forEach(b=>{
+        if(b.dataset.account===a) b.classList.add('active');
+    });
+    render();
+    updateCounters();
+}
+
+function updateAccountFilters(){
+    const el = document.getElementById('accountFilters');
+    if(!el || !accounts.main) return;
+    const all = [accounts.main, ...(accounts.others||[]).filter(a=>a!==accounts.main)].filter(Boolean);
+    el.innerHTML = `<button class="filter-chip ${currentAccountFilter==='all'?'active':''}" data-account="all" onclick="setAccountFilter('all')">📋 Tous les comptes</button>` +
+        all.map(a=>`<button class="filter-chip ${currentAccountFilter===a?'active':''}" data-account="${a}" onclick="setAccountFilter('${a}')">${a.split(' ')[0]} ${a.split('(')[1]?.replace(')','')}</button>`).join('');
+}
+
+function setUserFilter(u){
+    currentUserFilter = u;
+    updateUserFilters();
+    applyFilters();
+}
+
+function applyFilters(){
+    currentSearch = document.getElementById('searchInput').value.trim();
+    currentSort = document.getElementById('sortSelect').value;
+    render();
+}
+
+function getFilteredSorted(){
+    let list = [...allTiktoks];
+    if(currentUserFilter !== 'all') list = list.filter(t => t.user === currentUserFilter);
+    if(currentAccountFilter !== 'all') list = list.filter(t => t.account === currentAccountFilter);
+    if(currentSearch) list = list.filter(t => 
+        String(t.number).includes(currentSearch) || 
+        (t.flockages||[]).some(f => f.toLowerCase().includes(currentSearch.toLowerCase()))
+    );
+    switch(currentSort){
+        case 'num_asc': list.sort((a,b)=>(a.number||0)-(b.number||0)); break;
+        case 'num_desc': list.sort((a,b)=>(b.number||0)-(a.number||0)); break;
+        case 'date_desc': list.sort((a,b)=>new Date(b.created_at)-new Date(a.created_at)); break;
+        case 'date_asc': list.sort((a,b)=>new Date(a.created_at)-new Date(b.created_at)); break;
+    }
+    return list;
+}
+
+function updateBufferBar(pending, total){
+    const bar=document.getElementById('bufferBar');
+    const fill=document.getElementById('bufferFill');
+    const text=document.getElementById('bufferText');
+    if(pending>0){
+        bar.style.display='flex';
+        fill.style.width=`${Math.round(pending/total*100)}%`;
+        text.textContent=`${pending}/7 images — encore ${total-pending} avant le prochain TikTok`;
+    } else {
+        bar.style.display='none';
+    }
+}
+
+async function clearBuffer(){
+    if(!confirm('Vider le buffer ? Les images en attente seront perdues.')) return;
+    await fetch('/api/buffer/clear',{method:'POST'});
+    const res=await fetch('/api/buffer');
+    const buf=await res.json();
+    updateBufferBar(buf.pending,buf.pending+buf.needed);
+    showStatus('🗑️ Buffer vidé');
+}
+
+function renderImgsGridHtml(t){
+    // Utiliser thumb_url (chargé en une seule requête) sinon première image_url
+    const thumb=t.thumb_url||(t.image_urls&&t.image_urls[0])||'';
+    const total=t.image_count||t.image_keys?.length||t.image_urls?.length||0;
+    return `<div style="position:relative;cursor:pointer" onclick="openImgEditor('${t.r2_key}','${t.id}','TikTok ${t.number}')">
+        <div class="img-item" data-index="0">
+            <img src="${thumb}" loading="lazy" onerror="this.style.opacity='.15'">
+            <div class="img-num">1/${total}</div>
+        </div>
+        ${total>1?`<div class="more-imgs" style="font-size:11px;flex-direction:column;gap:1px">
+            <span style="font-size:14px">✏️</span>
+            <span>${total} imgs</span>
+            <span style="font-size:9px;opacity:.6">éditer</span>
+        </div>`:''}
+    </div>`;
+}
+
+async function loadAllImgs(r2Key, tiktokId){
+    const t=allTiktoks.find(t=>t.id===tiktokId);
+    if(!t) return;
+    // Feedback visuel pendant le chargement
+    const imgsGridEl=document.getElementById(`imgs-${tiktokId}`);
+    if(imgsGridEl) imgsGridEl.style.opacity='0.5';
+    const res=await fetch(`/api/queue/images?key=${encodeURIComponent(r2Key)}`);
+    const d=await res.json();
+    if(d.image_urls){
+        t.image_urls=d.image_urls;
+        if(imgsGridEl){
+            imgsGridEl.style.opacity='1';
+            imgsGridEl.innerHTML=renderAllImgsHtml(t);
+        }
+    }
+}
+
+function renderAllImgsHtml(t){
+    const imgs=t.image_urls||[];
+    return imgs.map((u,i)=>`
+        <div class="img-item" draggable="true" data-index="${i}"
+             ondragstart="imgDragStart(event,'${t.id}')"
+             ondragover="event.preventDefault();event.currentTarget.style.outline='2px solid var(--accent)'"
+             ondragleave="event.currentTarget.style.outline=''"
+             ondrop="imgDrop(event,'${t.id}','${t.r2_key}')">
+            <img src="${u||''}" loading="lazy" onerror="this.style.opacity='.15'" onclick="openLightbox('${u}')">
+            <div class="img-overlay">
+                ${i>0?`<button class="img-arrow" onclick="moveImg(event,'${t.r2_key}',${i},${i-1})">←</button>`:''}
+                <button class="img-del" onclick="deleteImage(event,'${t.r2_key}',${i},'${t.id}')">✕</button>
+                ${i<imgs.length-1?`<button class="img-arrow" onclick="moveImg(event,'${t.r2_key}',${i},${i+1})">→</button>`:''}
+            </div>
+            <div class="img-num">${i+1}/${imgs.length}</div>
+        </div>`).join('');
+}
+
+function render(){
+    const grid=document.getElementById('grid');
+    const list = getFilteredSorted();
+    const dispatchBtn=document.getElementById('dispatchBtn');
+    const deleteSelBtn=document.getElementById('deleteSelBtn');
+    const deselectBtn=document.getElementById('deselectBtn');
+    const selCountEl=document.getElementById('selCount');
+
+    dispatchBtn.disabled=allTiktoks.length===0||!accounts.others?.length;
+    deleteSelBtn.style.display=checkedForDelete.size>0?'inline-block':'none';
+    deselectBtn.style.display=selectedForMain.size>0?'inline-block':'none';
+    selCountEl.textContent=selectedForMain.size>0?`${selectedForMain.size} sélectionné(s) → ${accounts.main||'compte principal'}`:'';
+
+    if(!list.length){
+        grid.innerHTML='<div class="empty" style="grid-column:1/-1">📭 Aucun TikTok trouvé<br><br>Génère des images sur le <a href="/" style="color:var(--accent)">Générateur</a></div>';
+        return;
+    }
+
+    grid.innerHTML=list.slice(0,_displayCount).map(t=>renderCard(t)).join('');
+}
+
+function renderCard(t){
+    const allAccounts=[accounts.main,...(accounts.others||[]).filter(a=>a!==accounts.main)].filter(Boolean);
+        const sel=selectedForMain.has(t.r2_key);
+        const checked=checkedForDelete.has(t.r2_key);
+        const date=new Date(t.created_at).toLocaleDateString('fr-FR',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});
+        return `<div class="card ${sel?'selected':''} ${checked?'checked':''}" id="c-${t.id}">
+            <div class="card-header">
+                <div>
+                    <div class="card-num">
+                        <input type="checkbox" ${checked?'checked':''} onchange="toggleCheckDelete('${t.r2_key}')" style="accent-color:var(--danger)">
+                        TikTok ${t.number} <span style="font-size:10px;color:var(--text-dim)">${t.image_keys?.length||0} images</span>
+                    </div>
+                    <div class="card-meta">${t.user} · ${date}</div>
+                    ${t.recovered ? `<div style="font-size:10px;color:#fbbf24;background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.3);border-radius:6px;padding:2px 6px;margin-top:3px;display:inline-block">⚠️ Récupéré · prévu le ${t.recovered_original_date ? new Date(t.recovered_original_date).toLocaleString('fr-FR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit',timeZone:'Europe/Paris'}) : '?'} · ${t.recovered_original_account||'?'}</div>` : ''}
+                    ${t.image_error ? `<div style="font-size:10px;color:#f87171;background:rgba(248,113,113,.1);border:1px solid rgba(248,113,113,.3);border-radius:6px;padding:2px 6px;margin-top:3px;display:inline-block">❌ ${t.image_error}</div>` : ''}
+                </div>
+                ${t.account?`<span class="account-tag">${t.account}</span>`:''}
+            </div>
+            <div class="imgs-grid" id="imgs-${t.id}" data-key="${t.r2_key}">
+                ${renderImgsGridHtml(t)}
+            </div>
+            <div class="card-footer">
+                <select class="account-select" onchange="assign('${t.r2_key}',this.value)">
+                    <option value="">— Choisir un compte —</option>
+                    ${allAccounts.map(a=>`<option value="${a}" ${t.account===a?'selected':''}>${a}${a===accounts.main?' ⭐':''}</option>`).join('')}
+                </select>
+                <select class="account-select" style="margin-top:4px" onchange="setSlot('${t.r2_key}',this.value)">
+                    <option value="">⏰ Créneau auto</option>
+                    <option value="10:00">10h00 (Main)</option>
+                    <option value="15:00">15h00 (Main)</option>
+                    <option value="18:30">18h30 (Main)</option>
+                    <option value="21:00">21h00 (Main)</option>
+                    <option value="14:00">16h00 (Autres)</option>
+                    <option value="18:30">20h30 (Autres)</option>
+                    <option value="custom">🕐 Heure personnalisée...</option>
+                </select>
+                <input type="datetime-local" class="account-select" id="custom-${t.r2_key.replace(/[^a-z0-9]/gi,'_')}" style="margin-top:4px;display:none" onchange="setCustomTime('${t.r2_key}',this.value)">
+                <div class="card-actions">
+                    <div class="mark-btn ${sel?'on':''}" onclick="toggleMain('${t.r2_key}')">
+                        ${sel?'⭐ Compte principal':'☆ Marquer principal'}
+                    </div>
+                    <div class="del-btn" onclick="deleteTiktok('${t.r2_key}')">🗑️</div>
+                </div>
+                <button class="schedule-one-btn" onclick="scheduleOne('${t.r2_key}')" ${!t.account?'disabled':''}>
+                    🚀 Programmer ce TikTok
+                </button>
+                <div class="card-status" id="status-${t.id}"></div>
+            </div>
+        </div>`;
+}
+
+// ── Lightbox ────────────────────────────────────────────────────────────────
+function openLightbox(url){
+    if(!url) return;
+    document.getElementById('lightboxImg').src = url;
+    document.getElementById('lightbox').classList.add('open');
+}
+function closeLightbox(){
+    document.getElementById('lightbox').classList.remove('open');
+}
+
+// ── Modal éditeur images ───────────────────────────────────────────────────
+let _ieCurrentKey=null,_ieCurrentId=null,_ieUrls=[],_ieOriginalUrls=[],_ieItems=[],_ieDragSrc=null;
+
+async function openImgEditor(r2Key,tiktokId,title){
+    _ieCurrentKey=r2Key; _ieCurrentId=tiktokId;
+    document.getElementById('ieTitle').textContent=`🖼️ ${title}`;
+    document.getElementById('ieGrid').innerHTML='<div class="ie-loading"><div class="spinner"></div>Chargement...</div>';
+    document.getElementById('imgEditorBg').classList.add('open');
+    const t=allTiktoks.find(t=>t.r2_key===r2Key);
+    const res=await fetch(`/api/queue/images?key=${encodeURIComponent(r2Key)}`);
+    const d=await res.json();
+    const urls=d.image_urls||[];
+    // Stocker les items avec leur index original — l'index ne change jamais même si l'URL expire
+    _ieItems=urls.map((url,i)=>({url,origIndex:i}));
+    _ieUrls=urls; // compatibilité
+    if(t) t.image_urls=[...urls];
+    renderIeGrid();
+}
+
+function closeImgEditor(e){
+    if(e&&e.target!==document.getElementById('imgEditorBg')) return;
+    document.getElementById('imgEditorBg').classList.remove('open');
+}
+
+function renderIeGrid(){
+    const grid=document.getElementById('ieGrid');
+    if(!_ieItems.length){grid.innerHTML='<div class="ie-loading">Aucune image</div>';return;}
+    _ieUrls=_ieItems.map(it=>it.url); // sync pour compatibilité
+    grid.innerHTML=_ieItems.map((item,i)=>{const url=item.url;return`
+        <div class="ie-item" draggable="true" data-index="${i}"
+             ondragstart="ieDragStart(event,${i})"
+             ondragover="event.preventDefault();event.currentTarget.classList.add('drag-over')"
+             ondragleave="event.currentTarget.classList.remove('drag-over')"
+             ondrop="ieDrop(event,${i})">
+            <img src="${url}" loading="lazy" onerror="this.style.opacity='.2'">
+            <div class="ie-item-num">${i+1}/${_ieUrls.length}</div>
+            <div class="ie-item-actions">
+                <button class="ie-btn ie-btn-zoom" onclick="openLightbox('${url}')">🔍 Agrandir</button>
+                ${i>0?`<button class="ie-btn ie-btn-up" onclick="ieMoveUp(${i})">↑ Monter</button>`:''}
+                ${i<_ieUrls.length-1?`<button class="ie-btn ie-btn-down" onclick="ieMoveDown(${i})">↓ Descendre</button>`:''}
+                <button class="ie-btn" style="background:rgba(251,191,36,.3);color:#fbbf24" onclick="ieRegenerate(${i})">🔄 Régénérer</button>
+                <button class="ie-btn ie-btn-del" onclick="ieDelete(${i})">🗑️ Supprimer</button>
+            </div>
+        </div>`; }).join('');
+}
+
+function ieDragStart(e,idx){_ieDragSrc=idx;e.currentTarget.classList.add('dragging');}
+function ieDrop(e,targetIdx){
+    e.currentTarget.classList.remove('drag-over');
+    document.querySelectorAll('.ie-item').forEach(el=>el.classList.remove('dragging'));
+    if(_ieDragSrc===null||_ieDragSrc===targetIdx) return;
+    const moved=_ieItems.splice(_ieDragSrc,1)[0];
+    _ieItems.splice(targetIdx,0,moved);
+    _ieDragSrc=null; renderIeGrid();
+}
+function ieMoveUp(i){if(i<=0)return;[_ieItems[i-1],_ieItems[i]]=[_ieItems[i],_ieItems[i-1]];renderIeGrid();}
+function ieMoveDown(i){if(i>=_ieItems.length-1)return;[_ieItems[i],_ieItems[i+1]]=[_ieItems[i+1],_ieItems[i]];renderIeGrid();}
+
+async function ieDelete(i){
+    if(!confirm(`Supprimer l'image ${i+1} définitivement ?`)) return;
+    const t=allTiktoks.find(t=>t.r2_key===_ieCurrentKey);
+    try{
+        const res=await fetch('/api/queue/delete_image',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:_ieCurrentKey,index:i})});
+        if(!res.ok){showStatus('❌ Erreur serveur lors de la suppression');return;}
+        // Mettre à jour TOUS les états
+        _ieItems.splice(i,1);
+        _ieUrls=_ieItems.map(it=>it.url);
+        _ieOriginalUrls=_ieItems.map(it=>it.url); // reset pour que saveImgOrder fonctionne
+        if(t){ t.image_urls=[..._ieUrls]; t.thumb_url=_ieUrls[0]||t.thumb_url; }
+        renderIeGrid();
+        // Mettre à jour la thumbnail dans la carte
+        const imgsGrid=document.getElementById(`imgs-${_ieCurrentId}`);
+        if(imgsGrid&&t) imgsGrid.innerHTML=renderImgsGridHtml(t);
+        showStatus(`✅ Image ${i+1} supprimée`);
+    }catch(e){showStatus('❌ Erreur lors de la suppression: '+e.message);}
+}
+
+let _regenIndex=null;
+let _ieTemplates=[];
+let _flocLibrary=[];
+
+async function pickRandomFloc(){
+    // Charger la bibliothèque si pas encore fait
+    if(!_flocLibrary.length){
+        try{
+            const res=await fetch('/api/flocages');
+            const d=await res.json();
+            _flocLibrary=d.flockages||[];
+        }catch(e){showStatus('❌ Erreur chargement bibliothèque');return;}
+    }
+    if(!_flocLibrary.length){showStatus('❌ Bibliothèque vide');return;}
+    const random=_flocLibrary[Math.floor(Math.random()*_flocLibrary.length)];
+    document.getElementById('regenFlocInput').value=random;
+}
+
+async function ieRegenerate(i){
+    _regenIndex=i;
+    // Récupérer le flocage de cette image
+    const tiktokData=await fetch(`/api/queue/tiktok?key=${encodeURIComponent(_ieCurrentKey)}`).then(r=>r.json());
+    const floc=(tiktokData.flockages||[])[i]||'';
+    // Pré-remplir le champ flocage modifiable
+    document.getElementById('regenFlocInput').value=floc;
+    // Afficher les flocages du TikTok pour choisir rapidement
+    const allFlocs=(tiktokData.flockages||[]).filter(Boolean);
+    const uniqueFlocs=[...new Set(allFlocs)];
+    document.getElementById('regenFlocList').innerHTML=uniqueFlocs.map(f=>
+        `<span onclick="document.getElementById('regenFlocInput').value='${f}'" 
+            style="cursor:pointer;background:var(--bg-elevated);border:1px solid var(--border);padding:4px 10px;border-radius:8px;font-size:11px;font-weight:600;transition:all .15s"
+            onmouseover="this.style.borderColor='var(--accent)'" 
+            onmouseout="this.style.borderColor='var(--border)'">${f}</span>`
+    ).join('');
+    document.getElementById('regenModal').classList.add('open');
+    // Charger les templates si pas encore fait
+    if(!_ieTemplates.length){
+        const res=await fetch('/api/templates');
+        const d=await res.json();
+        _ieTemplates=d.templates||[];
+    }
+    const grid=document.getElementById('regenTemplateGrid');
+    grid.innerHTML=_ieTemplates.map(t=>`
+        <div class="regen-tpl" onclick="selectRegenTemplate('${t.key}')" title="${t.name}">
+            <img src="${t.url}" loading="lazy" onerror="this.style.opacity='.2'">
+            <div class="regen-tpl-name">${t.name}</div>
+        </div>`).join('');
+}
+
+async function selectRegenTemplate(templateKey){
+    document.getElementById('regenModal').classList.remove('open');
+    const i=_regenIndex;
+    if(i===null) return;
+    // Utiliser le flocage modifié dans l'input (ou l'original si vide)
+    const flocInput=document.getElementById('regenFlocInput').value.trim();
+    const tiktokData=await fetch(`/api/queue/tiktok?key=${encodeURIComponent(_ieCurrentKey)}`).then(r=>r.json());
+    const originalFloc=(tiktokData.flockages||[])[i]||'';
+    const floc=flocInput||originalFloc;
+    const parts=floc.split('/').map(p=>p.trim());
+    // Si pas de template sélectionné, utiliser le template original
+    if(!templateKey){
+        templateKey=(tiktokData.template_keys||[])[i]||'';
+        if(!templateKey){
+            // Pas de template sauvegardé — on utilise l'image actuelle comme base
+            // On régénère avec Gemini en utilisant l'URL de l'image existante
+            showStatus('⏳ Régénération avec nouveau flocage...');
+            try{
+                // Télécharger l'image actuelle depuis R2 et la régénérer
+                const imgUrl = _ieUrls[i];
+                if(!imgUrl){ showStatus('❌ Image introuvable'); renderIeGrid(); return; }
+                const imgRes = await fetch(imgUrl);
+                const imgBlob = await imgRes.blob();
+                const file = new File([imgBlob], 'image.png', {type: 'image/png'});
+                const fd = new FormData();
+                fd.append('image', file);
+                fd.append('name', parts[0]||'');
+                fd.append('number', parts[1]||'');
+                fd.append('name_below', parts[2]||'');
+                fd.append('user', document.querySelector('#userChipName')?.textContent||'');
+                fd.append('skip_buffer', 'true');
+                const grid2=document.getElementById('ieGrid');
+                const items2=[...grid2.querySelectorAll('.ie-item')];
+                if(items2[i]) items2[i].innerHTML=`<div style="display:flex;align-items:center;justify-content:center;aspect-ratio:3/4;background:var(--bg-elevated)"><div class="spinner"></div></div>`;
+                const res=await fetch('/generate_single',{method:'POST',body:fd});
+                const d=await res.json();
+                if(!res.ok||d.error){showStatus(`❌ Erreur: ${d.error}`);renderIeGrid();return}
+                _ieItems[i]={url:`data:image/png;base64,${d.image}`,origIndex:_ieItems[i].origIndex};
+                _ieUrls[i]=`data:image/png;base64,${d.image}`;
+                await fetch('/api/queue/replace_image',{method:'POST',headers:{'Content-Type':'application/json'},
+                    body:JSON.stringify({key:_ieCurrentKey,index:i,image:d.image,new_floc:floc})});
+                showStatus('✅ Image régénérée avec nouveau flocage !');
+                renderIeGrid();
+            }catch(e){showStatus(`❌ Erreur: ${e.message}`);renderIeGrid();}
+            return;
+        }
+    }
+    // Spinner sur l'image
+    const grid=document.getElementById('ieGrid');
+    const items=[...grid.querySelectorAll('.ie-item')];
+    if(items[i]) items[i].innerHTML=`<div style="display:flex;align-items:center;justify-content:center;aspect-ratio:3/4;background:var(--bg-elevated)"><div class="spinner"></div></div>`;
+    try{
+        // Récupérer le template
+        const tplRes=await fetch(`/api/template_image?key=${encodeURIComponent(templateKey)}`);
+        const tplData=await tplRes.json();
+        if(!tplData.image){showStatus('❌ Template introuvable');renderIeGrid();return}
+        const bin=atob(tplData.image);
+        const arr=new Uint8Array(bin.length);
+        for(let j=0;j<bin.length;j++)arr[j]=bin.charCodeAt(j);
+        const blob=new Blob([arr],{type:tplData.mime||'image/png'});
+        const file=new File([blob],templateKey,{type:tplData.mime||'image/png'});
+        const fd=new FormData();
+        fd.append('image',file);
+        fd.append('name',parts[0]||'');
+        fd.append('number',parts[1]||'');
+        fd.append('name_below',parts[2]||'');
+        fd.append('user',document.querySelector('#userChipName')?.textContent||'');
+        fd.append('skip_buffer','true');
+        const res=await fetch('/generate_single',{method:'POST',body:fd});
+        const d=await res.json();
+        if(!res.ok||d.error){showStatus(`❌ Erreur: ${d.error}`);renderIeGrid();return}
+        _ieUrls[i]=`data:image/png;base64,${d.image}`;
+        await fetch('/api/queue/replace_image',{method:'POST',headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({key:_ieCurrentKey,index:i,image:d.image,new_floc:floc})});
+        showStatus('✅ Image régénérée !');
+        renderIeGrid();
+    }catch(e){showStatus(`❌ Erreur: ${e.message}`);renderIeGrid();}
+}
+
+async function saveImgOrder(){
+    const t=allTiktoks.find(t=>t.r2_key===_ieCurrentKey);
+    if(!t) return;
+
+    // Utiliser les origIndex — jamais affectés par l'expiration des URLs signées
+    const newOrder=_ieItems.map(item=>item.origIndex);
+
+    if(newOrder.some(i=>i<0||i===undefined)){
+        showStatus('❌ Erreur ordre — réouvre le modal et réessaie');
+        return;
+    }
+
+    try{
+        const res=await fetch('/api/queue/reorder',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:_ieCurrentKey,order:newOrder})});
+        if(!res.ok){ showStatus('❌ Erreur serveur lors de la sauvegarde'); return; }
+        t.image_urls=_ieItems.map(it=>it.url);
+        t.thumb_url=_ieItems[0]?.url||t.thumb_url;
+        const imgsGrid=document.getElementById(`imgs-${_ieCurrentId}`);
+        if(imgsGrid) imgsGrid.innerHTML=renderImgsGridHtml(t);
+        showStatus('✅ Ordre sauvegardé !');
+        document.getElementById('imgEditorBg').classList.remove('open');
+    }catch(e){showStatus('❌ Erreur réseau lors de la sauvegarde');}
+}
+
+// ── Sélection suppression ──────────────────────────────────────────────────
+function toggleCheckDelete(key){
+    if(checkedForDelete.has(key)) checkedForDelete.delete(key);
+    else checkedForDelete.add(key);
+    const t=allTiktoks.find(t=>t.r2_key===key);
+    if(t){
+        const card=document.getElementById(`c-${t.id}`);
+        if(card) card.classList.toggle('checked', checkedForDelete.has(key));
+    }
+    document.getElementById('deleteSelBtn').style.display=checkedForDelete.size>0?'inline-block':'none';
+}
+
+async function deleteSelected(){
+    if(!checkedForDelete.size) return;
+    if(!confirm(`Supprimer ${checkedForDelete.size} TikTok(s) de la file d'attente ?`)) return;
+    const keys = [...checkedForDelete];
+    const total = keys.length;
+    let done = 0; let failed = 0;
+    showStatus(`⏳ Suppression 0/${total}...`);
+    for(const key of keys){
+        try{
+            const res = await fetch('/api/queue/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key})});
+            if(!res.ok) failed++;
+        }catch(e){ failed++; }
+        done++;
+        showStatus(`⏳ Suppression ${done}/${total}...`);
+    }
+    checkedForDelete.clear();
+    showStatus(failed>0 ? `⚠️ ${total-failed}/${total} supprimé(s), ${failed} échec(s) — réessaie pour ceux en échec` : `✅ ${total} TikTok(s) supprimé(s)`);
+    await loadAll();
+}
+
+// ── Actions comptes ────────────────────────────────────────────────────────
+function toggleMain(key){
+    const t=allTiktoks.find(t=>t.r2_key===key);
+    let isSel;
+    if(selectedForMain.has(key)){selectedForMain.delete(key);assign(key,'');isSel=false}
+    else{selectedForMain.add(key);if(accounts.main)assign(key,accounts.main);isSel=true}
+    if(t){
+        const card=document.getElementById(`c-${t.id}`);
+        if(card){
+            card.classList.toggle('selected', isSel);
+            const markBtn=card.querySelector('.mark-btn');
+            if(markBtn){
+                markBtn.classList.toggle('on', isSel);
+                markBtn.textContent=isSel?'⭐ Compte principal':'☆ Marquer principal';
+            }
+        }
+    }
+    document.getElementById('deselectBtn').style.display=selectedForMain.size>0?'inline-block':'none';
+    document.getElementById('selCount').textContent=selectedForMain.size>0?`${selectedForMain.size} sélectionné(s) → ${accounts.main||'compte principal'}`:'';
+}
+
+// Batch assignations — toutes envoyées ensemble après 400ms d'inactivité
+const _pendingAssigns = {};
+let _assignTimer = null;
+// Assignations de la session courante uniquement
+const _sessionAssigns = new Set();
+
+async function flushAssigns(){
+    const batch = Object.entries(_pendingAssigns).map(([key, account]) => ({key, account}));
+    if(!batch.length) return;
+    Object.keys(_pendingAssigns).forEach(k => delete _pendingAssigns[k]);
+    try{
+        await fetch('/api/queue/assign_batch',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({assignments: batch})});
+    }catch(e){
+        showStatus('❌ Erreur réseau — recharge la page pour vérifier les assignations');
+    }
+}
+
+async function showAutopilot(){
+    const days = parseInt(prompt('Remplir combien de jours ?', '7'));
+    if(!days || isNaN(days)) return;
+    showStatus('⏳ Calcul du plan...');
+    const res = await fetch('/api/autopilot/plan', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({days})});
+    const d = await res.json();
+    if(!d.plan){showStatus('❌ Erreur');return}
+    
+    let msg = `📊 Plan pour ${days} jours :
+
+`;
+    for(const [acc, info] of Object.entries(d.plan)){
+        msg += `${acc}:
+  Besoin: ${info.needed} TikToks
+  Programmés: ${info.scheduled}
+  En attente: ${info.in_queue}
+  Manque: ${info.missing} TikToks (${info.images_to_generate} images)
+
+`;
+    }
+    msg += `Total: ${d.total_images_to_generate} images à générer`;
+    
+    if(d.total_images_to_generate === 0){
+        alert('✅ Tout est déjà rempli pour ' + days + ' jours !');
+        return;
+    }
+    
+    const go = confirm(msg + "\n\nVeux-tu dispatcher les TikToks existants maintenant ?");
+    if(go){
+        await dispatchAuto();
+    }
+    showStatus(`📊 Plan calculé: ${d.total_tiktoks_missing} TikToks manquants`);
+}
+
+// Sauvegarder avant fermeture de page
+window.addEventListener('beforeunload', () => {
+    if(Object.keys(_pendingAssigns).length > 0) {
+        flushAssigns();
+    }
+});
+
+function assign(key, account){
+    const t=allTiktoks.find(t=>t.r2_key===key);
+    if(t) t.account=account||null;
+    if(t){
+        const card=document.getElementById(`c-${t.id}`);
+        if(card){
+            const header=card.querySelector('.card-header');
+            let tag=header.querySelector('.account-tag');
+            if(account){
+                if(!tag){tag=document.createElement('span');tag.className='account-tag';header.appendChild(tag);}
+                tag.textContent=account;
+            } else if(tag){ tag.remove(); }
+            const scheduleBtn=card.querySelector('.schedule-one-btn');
+            if(scheduleBtn) scheduleBtn.disabled=!account;
+        }
+    }
+    // Gérer selectedForMain et session selon le compte
+    if(!account){
+        selectedForMain.delete(key);
+        checkedForDelete.delete(key);
+        _sessionAssigns.delete(key);
+    } else if(account !== accounts.main){
+        selectedForMain.delete(key);
+        _sessionAssigns.add(key);
+    } else {
+        selectedForMain.add(key);
+        _sessionAssigns.add(key);
+    }
+    updateCounters();
+    _pendingAssigns[key] = account||'';
+    if(_assignTimer) clearTimeout(_assignTimer);
+    _assignTimer = setTimeout(flushAssigns, 400);
+}
+
+async function unassignAll(){
+    if(!confirm('Désassigner tous les comptes de tous les TikToks ?')) return;
+    showStatus('⏳ Désassignation en cours...');
+    try{
+        const res = await fetch('/api/queue_ig/unassign_all', {method:'POST'});
+        const d = await res.json();
+        // Mettre à jour le cache local
+        allTiktoks.forEach(t => { t.account = null; });
+        selectedForMain.clear();
+        _sessionAssigns.clear();
+        // Vider les assignations en attente
+        Object.keys(_pendingAssigns).forEach(k => delete _pendingAssigns[k]);
+        if(_assignTimer) clearTimeout(_assignTimer);
+        render();
+        updateCounters();
+        showStatus(`✅ ${d.unassigned} TikTok(s) désassignés`);
+    }catch(e){
+        showStatus('❌ Erreur lors de la désassignation');
+    }
+}
+
+function selectAll(){
+    getFilteredSorted().forEach(t=>{selectedForMain.add(t.r2_key);if(accounts.main)assign(t.r2_key,accounts.main)});
+    render();
+}
+function deselectAll(){selectedForMain.clear();render()}
+
+async function dispatchAuto(){
+    try{
+        const res = await fetch('/api/queue_ig/dispatch_smart', {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'});
+        const d = await res.json();
+        if(!d.success){showStatus('❌ Erreur dispatch');return}
+        if(d.count === 0){showStatus('✅ Tous les TikToks sont déjà assignés');return}
+        const details = Object.entries(d.by_account||{}).map(([acc,n])=>`${acc}: ${n}`).join(' | ');
+        showStatus(`✅ ${d.count} TikToks répartis — ${details}`);
+        await loadAll();
+        render();
+        updateCounters();
+    }catch(e){
+        showStatus(`❌ Erreur: ${e.message}`);
+    }
+}
+
+// ── Créneaux ────────────────────────────────────────────────────────────────
+function setSlot(key, value){
+    const safeId = key.replace(/[^a-z0-9]/gi,'_');
+    const customInput = document.getElementById(`custom-${safeId}`);
+    if(value === 'custom'){
+        if(customInput) customInput.style.display='block';
+        delete customSlots[key];
+    } else if(value === ''){
+        if(customInput) customInput.style.display='none';
+        delete customSlots[key];
+    } else {
+        if(customInput) customInput.style.display='none';
+        customSlots[key] = value;
+    }
+}
+function setCustomTime(key, value){
+    if(value) customSlots[key] = value;
+}
+
+// ── Récap avant programmation globale ──────────────────────────────────────
+function confirmScheduleAll(){
+    const assigned=allTiktoks.filter(t=>t.account && _sessionAssigns.has(t.r2_key));
+    if(!assigned.length){alert('Assigne d\'abord un compte à des TikToks dans cette session');return}
+    const startDate = document.getElementById('startDate').value;
+    const byAccount = {};
+    assigned.forEach(t=>{byAccount[t.account]=(byAccount[t.account]||0)+1});
+    // Preview calendrier — calculer les créneaux exacts
+    const slotsByAccount = {
+        "Volakits Instagram": ["07:00","10:00","13:00","16:00","19:00"]
+    };
+    
+    let previewSlots = [];
+    let startD = startDate ? new Date(startDate) : new Date();
+    for(const [acc, n] of Object.entries(byAccount)){
+        const slots = slotsByAccount[acc] || ["10:00","17:00"];
+        let slotIdx = 0, d = new Date(startD);
+        for(let i=0; i<n; i++){
+            const [h,m] = slots[slotIdx%slots.length].split(':');
+            const dt = new Date(d);
+            dt.setHours(parseInt(h), parseInt(m), 0);
+            previewSlots.push({acc, dt});
+            slotIdx++;
+            if(slotIdx%slots.length===0) d.setDate(d.getDate()+1);
+        }
+    }
+    previewSlots.sort((a,b)=>a.dt-b.dt);
+    
+    // Preview simplifié
+    let previewLines = previewSlots.slice(0,6).map(s=>{
+        const h = s.dt.getHours();
+        const m = String(s.dt.getMinutes()).padStart(2,"0");
+        const day = s.dt.toLocaleDateString("fr-FR",{weekday:"short",day:"2-digit",month:"2-digit"});
+        return day + " " + h + "h" + m + " - " + s.acc.split(" ")[0];
+    });
+    if(previewSlots.length>6) previewLines.push("+" + (previewSlots.length-6) + " autres...");
+    
+    let html = "<p style='font-size:13px;color:var(--text-dim)'>Tu vas programmer <b>" + assigned.length + "</b> TikTok(s) à partir du <b>" + (startDate||"aujourd'hui") + "</b> :</p>";
+    html += '<div class="recap-list">' + Object.entries(byAccount).map(([acc,n])=>'<div class="recap-item"><span>' + acc + '</span><span>' + n + ' TikTok(s)</span></div>').join('') + '</div>';
+    html += '<div style="margin-top:10px;font-size:11px;color:var(--text-dim)"><b>📅 Aperçu :</b><br>' + previewLines.join('<br>') + '</div>';
+    // Détection conflit simple : même compte + créneau custom identique
+    const customEntries = Object.entries(customSlots);
+    if(customEntries.length){
+        html += `<div class="conflict-warn">⚠️ ${customEntries.length} TikTok(s) ont un créneau personnalisé — vérifie qu'ils ne se chevauchent pas.</div>`;
+    }
+    document.getElementById('recapContent').innerHTML = html;
+    document.getElementById('recapModal').classList.add('open');
+}
+function closeRecap(){ document.getElementById('recapModal').classList.remove('open'); }
+
+let _schedulingInProgress=false;
+async function scheduleAll(){
+    if(_schedulingInProgress) return; // double-clic protection
+    _schedulingInProgress=true;
+    closeRecap();
+    const assigned=allTiktoks.filter(t=>t.account && _sessionAssigns.has(t.r2_key));
+    const total=assigned.length;
+    const startDate=document.getElementById('startDate').value;
+    document.getElementById('scheduleBtn').disabled=true;
+
+    const progWrap=document.getElementById('progWrap');
+    const progFill=document.getElementById('progFill');
+    progWrap.classList.add('show');
+    progFill.style.width='10%';
+    showStatus(`🚀 Programmation de ${total} TikTok(s) en cours...`);
+
+    // UN SEUL appel backend — évite les doublons de créneaux
+    const res=await fetch('/api/queue_ig/schedule',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({start_date: startDate||null, custom_slots: customSlots})
+    });
+    const d=await res.json();
+
+    // Si lancé en background, poller le statut
+    if(d.background){
+        showStatus('⏳ Programmation en cours en arrière-plan...');
+        let attempts=0;
+        const poll=setInterval(async()=>{
+            attempts++;
+            try{
+                const sr=await fetch('/api/queue_ig/schedule/status').then(r=>r.json());
+                console.log('[POLL]', attempts, JSON.stringify(sr).substring(0,100));
+                if(sr.pending === false || sr.success === true || attempts > 300){
+                    clearInterval(poll);
+                    progFill.style.width='100%';
+                    setTimeout(()=>progWrap.classList.remove('show'),600);
+                    _schedulingInProgress=false;
+                    document.getElementById('scheduleBtn').disabled=false;
+                    _sessionAssigns.clear();
+                    customSlots={};
+                    updateCounters();
+                    await loadAll();
+                    if(sr.scheduled !== undefined){
+                        let msg = `✅ ${sr.scheduled}/${sr.total||sr.scheduled} TikTok(s) programmés`;
+                        if(sr.errors?.length){
+                            msg += `<br>⚠️ ${sr.errors.length} échec(s) :<br>` + sr.errors.map((e,i)=>`${i+1}. ${e}`).join('<br>');
+                        }
+                        showStatus(msg);
+                    } else {
+                        showStatus('✅ Programmation terminée — vérifie les TikToks programmés');
+                    }
+                } else {
+                    showStatus(`⏳ Programmation en cours... ${sr.progress||''} TikToks — ${attempts*3}s`);
+                }
+            }catch(e){
+                console.error('[POLL ERROR]', e);
+                showStatus('⏳ Programmation en cours... ' + (attempts*3) + 's');
+            }
+        }, 3000);  // poll toutes les 3s
+        return;
+    }
+
+    progFill.style.width='100%';
+    setTimeout(()=>progWrap.classList.remove('show'),600);
+    _schedulingInProgress=false;
+    document.getElementById('scheduleBtn').disabled=false;
+    customSlots={};
+
+    if(d.errors?.length){
+        showStatus(`✅ ${d.scheduled}/${total} programmés — ⚠️ ${d.errors.length} échec(s)`);
+    } else {
+        showStatus(`✅ ${d.scheduled} TikTok(s) programmés avec succès !`);
+    }
+    _sessionAssigns.clear();
+    updateCounters();
+    await loadAll();
+}
+
+// ── Programmer un seul TikTok ───────────────────────────────────────────────
+const _schedulingOneInProgress = new Set();
+async function scheduleOne(key){
+    if(_schedulingOneInProgress.has(key)) return;
+    _schedulingOneInProgress.add(key);
+    const t = allTiktoks.find(t=>t.r2_key===key);
+    if(!t||!t.account){_schedulingOneInProgress.delete(key);alert('Assigne d\'abord un compte.');return}
+    _sessionAssigns.add(key);
+
+    const btn = document.querySelector(`#c-${t.id} .schedule-one-btn`);
+    const statusEl = document.getElementById(`status-${t.id}`);
+    if(btn) btn.disabled=true;
+    if(statusEl){statusEl.className='card-status loading';statusEl.textContent='⏳ Programmation en cours...'}
+
+    const customSlot = customSlots[key] || null;
+    const startDate = document.getElementById('startDate').value || null;
+
+    try{
+        const res = await fetch('/api/queue_ig/schedule',{
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({
+                start_date: startDate,
+                custom_slots: customSlot ? {[key]: customSlot} : {},
+                single_key: key
+            })
+        });
+        const d = await res.json();
+        if(d.scheduled>0&&d.details?.length){
+            const detail = d.details[0];
+            if(statusEl){statusEl.className='card-status ok';statusEl.textContent=`✅ Programmé le ${detail.time}`}
+            allTiktoks = allTiktoks.filter(t=>t.r2_key!==key);
+            selectedForMain.delete(key);
+            checkedForDelete.delete(key);
+            delete customSlots[key];
+            totalCount = Math.max(0, totalCount - 1);
+            updateCounters();
+            render();
+        } else {
+            const err = d.errors?.[0] || 'Erreur inconnue';
+            if(statusEl){statusEl.className='card-status err';statusEl.textContent=`❌ ${err}`}
+            if(btn) btn.disabled=false;
+        }
+    }catch(e){
+        if(statusEl){statusEl.className='card-status err';statusEl.textContent=`❌ ${e.message}`}
+        if(btn) btn.disabled=false;
+    } finally {
+        _schedulingOneInProgress.delete(key);
+    }
+}
+
+function populateSelectNAccount(){
+    const sel = document.getElementById('selectNAccount');
+    if(!sel||!accounts.main) return;
+    const all = [accounts.main, ...(accounts.others||[]).filter(a=>a!==accounts.main)].filter(Boolean);
+    sel.innerHTML = '<option value="">— Compte —</option>' + all.map(a=>`<option value="${a}">${a}</option>`).join('');
+}
+
+function selectNForAccount(){
+    const n = parseInt(document.getElementById('selectNCount').value) || 20;
+    const account = document.getElementById('selectNAccount').value;
+    if(!account){ alert('Choisis un compte'); return; }
+    
+    const filtered = getFilteredSorted().filter(t => !t.account || t.account === account);
+    const toSelect = filtered.slice(0, n);
+    
+    if(!toSelect.length){ showStatus('Aucun TikTok disponible'); return; }
+    
+    toSelect.forEach(t => {
+        assign(t.r2_key, account);
+        selectedForMain.add(t.r2_key);
+    });
+    
+    render();
+    updateCounters();
+    showStatus(`✅ ${toSelect.length} TikTok(s) assignés à ${account}`);
+}
+
+function updateCounters(){
+    const countBadge=document.getElementById('countBadge');
+    const scheduleBtn=document.getElementById('scheduleBtn');
+    countBadge.textContent=`${totalCount} TikTok(s) en attente`;
+    scheduleBtn.disabled=!allTiktoks.some(t=>t.account);
+}
+
+async function deleteTiktok(key){
+    if(!confirm('Supprimer ce TikTok et ses images ?')) return;
+    await fetch('/api/queue/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key})});
+    selectedForMain.delete(key);
+    checkedForDelete.delete(key);
+    await loadAll();
+}
+
+// ── Drag & drop images ─────────────────────────────────────────────────────
+let dragSrcIndex = null;
+let dragTiktokId = null;
+
+function imgDragStart(e, tiktokId){
+    dragSrcIndex = parseInt(e.currentTarget.dataset.index);
+    dragTiktokId = tiktokId;
+    e.currentTarget.classList.add('dragging');
+    setTimeout(()=>e.currentTarget.classList.remove('dragging'),0);
+}
+
+async function imgDrop(e, tiktokId, r2Key){
+    e.preventDefault();
+    if(dragTiktokId !== tiktokId) return;
+    const destIndex = parseInt(e.currentTarget.dataset.index);
+    if(dragSrcIndex === null || dragSrcIndex === destIndex) return;
+    const t = allTiktoks.find(t=>t.id===tiktokId);
+    if(!t) return;
+    const imgs = t.image_urls || [];
+    const newOrder = Array.from({length:imgs.length},(_,i)=>i);
+    newOrder.splice(destIndex, 0, newOrder.splice(dragSrcIndex, 1)[0]);
+    // Mise à jour optimiste locale — on ne redessine QUE la grille d'images de cette carte
+    t.image_urls = newOrder.map(i=>imgs[i]);
+    const imgsGridEl = document.getElementById(`imgs-${t.id}`);
+    if(imgsGridEl){
+        imgsGridEl.querySelectorAll('.img-item').forEach(el=>el.style.outline='');
+        imgsGridEl.innerHTML = renderAllImgsHtml(t);
+    }
+    dragSrcIndex = null;
+    try{
+        await fetch('/api/queue/reorder',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:r2Key, order:newOrder})});
+    }catch(e){
+        showStatus('❌ Erreur réseau — le nouvel ordre n\'a peut-être pas été sauvegardé, recharge la page pour vérifier');
+    }
+}
+
+async function moveImg(e, r2Key, fromIndex, toIndex){
+    e.stopPropagation();
+    const t = allTiktoks.find(t=>t.r2_key===r2Key);
+    if(!t) return;
+    const imgs = t.image_urls||[];
+    const newOrder = Array.from({length:imgs.length},(_,i)=>i);
+    [newOrder[fromIndex], newOrder[toIndex]] = [newOrder[toIndex], newOrder[fromIndex]];
+    // Mise à jour optimiste locale — on ne redessine QUE la grille d'images de cette carte, pas toute la page
+    const newUrls = newOrder.map(i=>imgs[i]);
+    t.image_urls = newUrls;
+    const imgsGridEl = document.getElementById(`imgs-${t.id}`);
+    if(imgsGridEl) imgsGridEl.innerHTML = renderAllImgsHtml(t);
+    try{
+        await fetch('/api/queue/reorder',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:r2Key, order:newOrder})});
+    }catch(e){
+        showStatus('❌ Erreur réseau — le nouvel ordre n\'a peut-être pas été sauvegardé, recharge la page pour vérifier');
+    }
+}
+
+async function deleteImage(e, r2Key, imgIndex, tiktokId){
+    e.stopPropagation();
+    if(!confirm('Supprimer cette image du TikTok ?')) return;
+    const res = await fetch('/api/queue/delete_image',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:r2Key, index:imgIndex})});
+    const d = await res.json();
+    if(d.success){
+        showStatus(`🗑️ Image supprimée — ${d.remaining} image(s) restante(s)`);
+        await loadAll();
+    }
+}
+
+// ── Config comptes ─────────────────────────────────────────────────────────
+function openConfig(){
+    const available = accounts.available || [];
+    const mainSel = document.getElementById('mainAccount');
+    mainSel.innerHTML = available.map(a => `<option value="${a}" ${a===accounts.main?'selected':''}>${a}</option>`).join('');
+    const checksDiv = document.getElementById('otherAccountsChecks');
+    checksDiv.innerHTML = available.map(a => `
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:500;cursor:pointer">
+            <input type="checkbox" value="${a}" ${(accounts.others||[]).includes(a)?'checked':''} class="other-account-check">
+            ${a}
+        </label>
+    `).join('');
+    document.getElementById('configModal').classList.add('open');
+}
+function closeConfig(){document.getElementById('configModal').classList.remove('open')}
+async function saveConfig(){
+    const main=document.getElementById('mainAccount').value;
+    const others=Array.from(document.querySelectorAll('.other-account-check:checked')).map(el=>el.value);
+    await fetch('/api/accounts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({main,others})});
+    accounts={...accounts,main,others};
+    closeConfig();
+    showStatus('✅ Comptes sauvegardés');
+    render();
+}
+
+let statusHideTimer=null;
+function showStatus(msg){
+    const bar=document.getElementById('statusBar');
+    bar.textContent=msg;bar.classList.add('show');
+    if(statusHideTimer) clearTimeout(statusHideTimer);
+    statusHideTimer=setTimeout(()=>bar.classList.remove('show'),4000);
+}
+
+// ── Init ───────────────────────────────────────────────────────────────────
+document.getElementById('startDate').value = new Date().toISOString().slice(0,10);
+init();
+// Refresh léger du buffer uniquement (pas tout le grid) toutes les 20s
+setInterval(async()=>{
+    const res=await fetch('/api/buffer');
+    const buf=await res.json();
+    updateBufferBar(buf.pending,buf.pending+buf.needed);
+},20000);
+</script>
+</body>
+</html>
