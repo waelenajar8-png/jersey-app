@@ -233,6 +233,7 @@ h1{font-size:24px;margin:0;font-weight:800;letter-spacing:-0.02em}
         <button class="btn-sec" style="padding:6px 12px;font-size:12px" onclick="selectAll()">⭐ Tout → Compte principal</button>
         <button class="btn-sec" style="padding:6px 12px;font-size:12px;display:none" id="deselectBtn" onclick="deselectAll()">✖️ Désélectionner tout</button>
         <button class="btn-sec" style="padding:6px 12px;font-size:12px;background:rgba(248,113,113,.1);border-color:rgba(248,113,113,.3);color:var(--danger)" onclick="unassignAll()">🗑️ Tout désassigner</button>
+        <button class="btn-sec" onclick="copyFromTiktok()" style="padding:6px 12px;font-size:12px;background:rgba(225,48,108,.15);border-color:rgba(225,48,108,.3);color:#e1306c">📋 Copier TikToks vers Instagram</button>
         <button class="btn-sec" onclick="showAutopilot()" style="padding:6px 12px;font-size:12px;background:rgba(139,92,246,.15);border-color:rgba(139,92,246,.3);color:#a78bfa">🚁 Pilote auto</button>
         <span id="selCount"></span>
         <!-- Sélection rapide N TikToks -->
@@ -1036,6 +1037,19 @@ function assign(key, account){
     _pendingAssigns[key] = account||'';
     if(_assignTimer) clearTimeout(_assignTimer);
     _assignTimer = setTimeout(flushAssigns, 400);
+}
+
+async function copyFromTiktok(){
+    if(!confirm('Copier tous les TikToks de la file d\'attente TikTok vers Instagram ?\n(Les doublons déjà présents seront ignorés)')) return;
+    showStatus('⏳ Copie en cours...');
+    const res = await fetch('/api/queue_ig/copy_from_tiktok', {method:'POST'});
+    const d = await res.json();
+    if(d.success){
+        showStatus(`✅ ${d.copied} TikTok(s) copiés vers Instagram — ${d.skipped} déjà présents`);
+        await loadAll();
+    } else {
+        showStatus('❌ Erreur lors de la copie');
+    }
 }
 
 async function unassignAll(){
