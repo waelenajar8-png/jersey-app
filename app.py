@@ -1508,7 +1508,7 @@ def schedule_instagram(image_urls, caption, publish_time_iso, blog_id, timezone=
         "instagramData": {
             "autoPublish": True,
             "isAiGenerated": False,
-            "type": "CAROUSEL"
+            "type": "POST"
         }
     }
     
@@ -3092,26 +3092,6 @@ def api_dispatch_ig_smart():
 @app.route("/api/queue_ig/copy_from_tiktok", methods=["POST"])
 def api_copy_tiktok_to_ig():
     """Copie tous les TikToks de la file d'attente vers la file d'attente Instagram"""
-    keys = [k for k in r2_list_keys(PFX_QUEUE) if "/imgs/" not in k]
-    copied = 0
-    skipped = 0
-    for k in keys:
-        t = r2_get_json(k)
-        if not t: continue
-        ig_key = k.replace(PFX_QUEUE, PFX_QUEUE_IG)
-        # Vérifier si déjà dans queue_ig
-        existing = r2_get_json(ig_key)
-        if existing:
-            skipped += 1
-            continue
-        ig_meta = {**t, "platform": "instagram", "ig_status": "pending", "account": None}
-        r2_put_json(ig_key, ig_meta)
-        copied += 1
-    return jsonify({"success": True, "copied": copied, "skipped": skipped})
-
-@app.route("/api/queue_ig/copy_from_tiktok", methods=["POST"])
-def api_copy_tiktok_to_ig():
-    """Copie tous les TikToks de la file d'attente TikTok vers Instagram"""
     keys = [k for k in r2_list_keys(PFX_QUEUE) if "/imgs/" not in k]
     copied = 0
     skipped = 0
