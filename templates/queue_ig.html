@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>File d'attente — TikToks</title>
+<title>📸 Instagram — File d'attente</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
@@ -224,7 +224,7 @@ h1{font-size:24px;margin:0;font-weight:800;letter-spacing:-0.02em}
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
             <label style="font-size:12px;color:var(--text-dim);font-weight:600">📅 Début :</label>
             <input type="date" id="startDate" style="padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px">
-            <button class="btn" id="scheduleBtn" disabled onclick="confirmScheduleAll()">🚀 Programmer</button>
+            <button class="btn" id="scheduleBtn" disabled onclick="confirmScheduleAll()">📸 Programmer sur Instagram</button>
         </div>
         <button class="btn-sec btn-danger" id="deleteSelBtn" style="display:none" onclick="deleteSelected()">🗑️ Supprimer sélection</button>
     </div>
@@ -248,7 +248,7 @@ h1{font-size:24px;margin:0;font-weight:800;letter-spacing:-0.02em}
     </div>
 
     <div class="filters-row">
-        <input type="text" class="search-input" id="searchInput" placeholder="🔍 N° TikTok ou flocage..." oninput="applyFilters()">
+        <input type="text" class="search-input" id="searchInput" placeholder="🔍 N° post ou flocage..." oninput="applyFilters()">
         <select class="search-input" id="sortSelect" onchange="applyFilters()">
             <option value="num_asc">Tri : N° croissant</option>
             <option value="num_desc">Tri : N° décroissant</option>
@@ -292,7 +292,7 @@ h1{font-size:24px;margin:0;font-weight:800;letter-spacing:-0.02em}
                 <button onclick="pickRandomFloc()" title="Flocage aléatoire depuis la bibliothèque"
                     style="padding:10px 14px;background:var(--accent-dim);border:1px solid rgba(74,222,128,.3);color:var(--accent);border-radius:10px;cursor:pointer;font-size:14px;font-weight:700;white-space:nowrap">🎲 Aléatoire</button>
             </div>
-            <!-- Flocages du TikTok courant pour choisir rapidement -->
+            <!-- Flocages du post courant -->
             <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px">Flocages du TikTok :</div>
             <div id="regenFlocList" style="display:flex;flex-wrap:wrap;gap:6px"></div>
         </div>
@@ -328,10 +328,10 @@ h1{font-size:24px;margin:0;font-weight:800;letter-spacing:-0.02em}
 <!-- Modal config comptes -->
 <div class="modal-bg" id="configModal">
     <div class="modal">
-        <h2>⚙️ Configuration des comptes TikTok</h2>
+        <h2>⚙️ Configuration compte Instagram</h2>
         <label>Compte principal (celui qui performe le mieux)</label>
         <select id="mainAccount" class="account-select" style="padding:9px 11px"></select>
-        <div class="modal-hint">Les TikToks que tu sélectionnes manuellement iront sur ce compte</div>
+        <div class="modal-hint">Les posts que tu sélectionnes iront sur ce compte Instagram</div>
         <label>Autres comptes (dispatch automatique)</label>
         <div id="otherAccountsChecks" style="display:flex;flex-direction:column;gap:6px;margin-top:6px"></div>
         <div class="modal-hint">Le reste sera dispatché automatiquement sur ces comptes</div>
@@ -369,7 +369,7 @@ let _displayCount=20; // nombre affiché (infinite scroll)
 let totalCount=0;
 let selectedForMain=new Set();
 let checkedForDelete=new Set();
-let accounts={main:'',others:[]};
+let accounts={main:'Volakits Instagram',others:[]};
 let customSlots={};
 let currentUserFilter='all';
 let currentAccountFilter='all';
@@ -378,8 +378,9 @@ let currentSort='num_asc';
 let _cacheLoaded=false;
 
 async function init(){
-    const [acRes, bufRes] = await Promise.all([fetch('/api/accounts'), fetch('/api/buffer')]);
-    accounts = await acRes.json();
+    const [bufRes] = await Promise.all([fetch('/api/buffer')]);
+    // Compte Instagram fixe
+    accounts = {main: 'Volakits Instagram', others: [], available: ['Volakits Instagram']};
     const buf = await bufRes.json();
     updateBufferBar(buf.pending, buf.pending + buf.needed);
     await loadAll();
@@ -404,7 +405,7 @@ async function loadAll(){
     try {
         const sr = await fetch('/api/queue_ig/schedule/status').then(r=>r.json());
         if(sr.success && sr.pending === false && sr.completed_at){
-            let msg = `✅ Dernière programmation (${sr.completed_at}) : ${sr.scheduled} TikTok(s) programmés`;
+            let msg = `✅ Dernière programmation (${sr.completed_at}) : ${sr.scheduled} post(s) Instagram programmés`;
             if(sr.errors?.length){
                 msg += `\n⚠️ ${sr.errors.length} échec(s) :\n` + sr.errors.map((e,i)=>`${i+1}. ${e}`).join('\n');
             }
@@ -535,7 +536,7 @@ function renderImgsGridHtml(t){
     // Utiliser thumb_url (chargé en une seule requête) sinon première image_url
     const thumb=t.thumb_url||(t.image_urls&&t.image_urls[0])||'';
     const total=t.image_count||t.image_keys?.length||t.image_urls?.length||0;
-    return `<div style="position:relative;cursor:pointer" onclick="openImgEditor('${t.r2_key}','${t.id}','TikTok ${t.number}')">
+    return `<div style="position:relative;cursor:pointer" onclick="openImgEditor('${t.r2_key}','${t.id}','Post #${t.number}')">
         <div class="img-item" data-index="0">
             <img src="${thumb}" loading="lazy" onerror="this.style.opacity='.15'">
             <div class="img-num">1/${total}</div>
@@ -597,7 +598,7 @@ function render(){
     selCountEl.textContent=selectedForMain.size>0?`${selectedForMain.size} sélectionné(s) → ${accounts.main||'compte principal'}`:'';
 
     if(!list.length){
-        grid.innerHTML='<div class="empty" style="grid-column:1/-1">📭 Aucun TikTok trouvé<br><br>Génère des images sur le <a href="/" style="color:var(--accent)">Générateur</a></div>';
+        grid.innerHTML='<div class="empty" style="grid-column:1/-1">📭 Aucun post Instagram trouvé<br><br>Génère des images sur le <a href="/" style="color:var(--accent)">Générateur</a></div>';
         return;
     }
 
@@ -614,7 +615,7 @@ function renderCard(t){
                 <div>
                     <div class="card-num">
                         <input type="checkbox" ${checked?'checked':''} onchange="toggleCheckDelete('${t.r2_key}')" style="accent-color:var(--danger)">
-                        TikTok ${t.number} <span style="font-size:10px;color:var(--text-dim)">${t.image_keys?.length||0} images</span>
+                        Post #${t.number} <span style="font-size:10px;color:var(--text-dim)">${t.image_keys?.length||0} images</span>
                     </div>
                     <div class="card-meta">${t.user} · ${date}</div>
                     ${t.recovered ? `<div style="font-size:10px;color:#fbbf24;background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.3);border-radius:6px;padding:2px 6px;margin-top:3px;display:inline-block">⚠️ Récupéré · prévu le ${t.recovered_original_date ? new Date(t.recovered_original_date).toLocaleString('fr-FR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit',timeZone:'Europe/Paris'}) : '?'} · ${t.recovered_original_account||'?'}</div>` : ''}
@@ -632,12 +633,11 @@ function renderCard(t){
                 </select>
                 <select class="account-select" style="margin-top:4px" onchange="setSlot('${t.r2_key}',this.value)">
                     <option value="">⏰ Créneau auto</option>
-                    <option value="10:00">10h00 (Main)</option>
-                    <option value="15:00">15h00 (Main)</option>
-                    <option value="18:30">18h30 (Main)</option>
-                    <option value="21:00">21h00 (Main)</option>
-                    <option value="14:00">16h00 (Autres)</option>
-                    <option value="18:30">20h30 (Autres)</option>
+                    <option value="07:00">09h00</option>
+                    <option value="10:00">12h00</option>
+                    <option value="13:00">15h00</option>
+                    <option value="16:00">18h00</option>
+                    <option value="19:00">21h00</option>
                     <option value="custom">🕐 Heure personnalisée...</option>
                 </select>
                 <input type="datetime-local" class="account-select" id="custom-${t.r2_key.replace(/[^a-z0-9]/gi,'_')}" style="margin-top:4px;display:none" onchange="setCustomTime('${t.r2_key}',this.value)">
@@ -648,7 +648,7 @@ function renderCard(t){
                     <div class="del-btn" onclick="deleteTiktok('${t.r2_key}')">🗑️</div>
                 </div>
                 <button class="schedule-one-btn" onclick="scheduleOne('${t.r2_key}')" ${!t.account?'disabled':''}>
-                    🚀 Programmer ce TikTok
+                    📸 Programmer sur Instagram ce TikTok
                 </button>
                 <div class="card-status" id="status-${t.id}"></div>
             </div>
@@ -1084,7 +1084,7 @@ async function dispatchAuto(){
         const res = await fetch('/api/queue_ig/dispatch_smart', {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'});
         const d = await res.json();
         if(!d.success){showStatus('❌ Erreur dispatch');return}
-        if(d.count === 0){showStatus('✅ Tous les TikToks sont déjà assignés');return}
+        if(d.count === 0){showStatus('✅ Tous les posts sont déjà assignés');return}
         const details = Object.entries(d.by_account||{}).map(([acc,n])=>`${acc}: ${n}`).join(' | ');
         showStatus(`✅ ${d.count} TikToks répartis — ${details}`);
         await loadAll();
@@ -1208,7 +1208,7 @@ async function scheduleAll(){
                     updateCounters();
                     await loadAll();
                     if(sr.scheduled !== undefined){
-                        let msg = `✅ ${sr.scheduled}/${sr.total||sr.scheduled} TikTok(s) programmés`;
+                        let msg = `✅ ${sr.scheduled}/${sr.total||sr.scheduled} post(s) Instagram programmés`;
                         if(sr.errors?.length){
                             msg += `<br>⚠️ ${sr.errors.length} échec(s) :<br>` + sr.errors.map((e,i)=>`${i+1}. ${e}`).join('<br>');
                         }
@@ -1236,7 +1236,7 @@ async function scheduleAll(){
     if(d.errors?.length){
         showStatus(`✅ ${d.scheduled}/${total} programmés — ⚠️ ${d.errors.length} échec(s)`);
     } else {
-        showStatus(`✅ ${d.scheduled} TikTok(s) programmés avec succès !`);
+        showStatus(`✅ ${d.scheduled} post(s) Instagram programmés avec succès !`);
     }
     _sessionAssigns.clear();
     updateCounters();
