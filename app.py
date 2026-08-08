@@ -3109,26 +3109,6 @@ def api_copy_tiktok_to_ig():
         copied += 1
     return jsonify({"success": True, "copied": copied, "skipped": skipped})
 
-@app.route("/api/queue_ig/copy_from_tiktok", methods=["POST"])
-def api_copy_tiktok_to_ig():
-    """Copie tous les TikToks de la file d'attente TikTok vers Instagram"""
-    keys = [k for k in r2_list_keys(PFX_QUEUE) if "/imgs/" not in k]
-    copied = 0
-    skipped = 0
-    for k in keys:
-        t = r2_get_json(k)
-        if not t: continue
-        ig_key = k.replace(PFX_QUEUE, PFX_QUEUE_IG)
-        # Vérifier si déjà dans queue_ig
-        existing = r2_get_json(ig_key)
-        if existing:
-            skipped += 1
-            continue
-        ig_meta = {**t, "platform": "instagram", "ig_status": "pending", "account": None}
-        r2_put_json(ig_key, ig_meta)
-        copied += 1
-    return jsonify({"success": True, "copied": copied, "skipped": skipped})
-
 @app.route("/api/queue_ig/unassign_all", methods=["POST"])
 def api_unassign_ig_all():
     keys = [k for k in r2_list_keys(PFX_QUEUE_IG) if "/imgs/" not in k]
