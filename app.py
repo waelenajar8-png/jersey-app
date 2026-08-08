@@ -479,7 +479,7 @@ INSTAGRAM_ACCOUNTS = {
 }
 
 # Créneaux Instagram (UTC) — 9h/12h/15h/18h/21h Paris (UTC+2)
-INSTAGRAM_SCHEDULE_TIMES = ["07:00", "10:00", "13:00", "16:00", "19:00"]
+INSTAGRAM_SCHEDULE_TIMES = ["05:00", "07:00", "10:00", "13:00", "16:00", "19:00", "21:00"]  # 7h/9h/12h/15h/18h/21h/23h Paris
 
 # Préfixes R2 pour la queue Instagram
 PFX_QUEUE_IG     = "queue_ig/"
