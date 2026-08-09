@@ -183,6 +183,19 @@ h1{font-size:24px;margin:0;font-weight:800;letter-spacing:-0.02em}
 .recap-item{padding:6px 0;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;font-weight:500}
 .recap-item:last-child{border-bottom:none}
 .conflict-warn{background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.3);color:var(--warn);padding:8px 12px;border-radius:8px;font-size:12px;margin-top:8px}
+
+/* ── Menus déroulants de navigation ────────────────────────────────── */
+.navmenu{position:relative;display:inline-block}
+.navmenu-btn{color:var(--text-dim);background:none;border:none;font-family:inherit;font-size:13px;font-weight:600;padding:6px 10px;border-radius:8px;cursor:pointer;transition:all .15s ease;display:flex;align-items:center;gap:4px}
+.navmenu-btn:hover,.navmenu.open .navmenu-btn{color:var(--text);background:var(--panel-hover)}
+.navmenu-btn .chev{font-size:9px;opacity:.6;transition:transform .18s ease}
+.navmenu.open .navmenu-btn .chev{transform:rotate(180deg)}
+.navmenu-drop{position:absolute;top:calc(100% + 6px);left:0;min-width:190px;background:var(--panel);border:1px solid var(--border-strong);border-radius:12px;box-shadow:var(--shadow-md);padding:6px;z-index:200;opacity:0;visibility:hidden;transform:translateY(-6px);transition:all .16s cubic-bezier(.16,1,.3,1)}
+.navmenu.open .navmenu-drop{opacity:1;visibility:visible;transform:translateY(0)}
+.navmenu-drop a{display:flex;align-items:center;gap:8px;color:var(--text-dim);text-decoration:none;font-size:13px;font-weight:600;padding:9px 11px;border-radius:8px;transition:all .13s ease;white-space:nowrap}
+.navmenu-drop a:hover{color:var(--text);background:var(--panel-hover)}
+.navmenu-drop a.current{color:var(--accent);background:var(--accent-dim)}
+@media(max-width:640px){.navmenu-drop{position:fixed;left:12px;right:12px;min-width:0}}
 </style>
 </head>
 <body>
@@ -193,16 +206,45 @@ h1{font-size:24px;margin:0;font-weight:800;letter-spacing:-0.02em}
             <div style="color:var(--text-dim);font-size:12px;margin-top:2px">Images générées, groupées par 7, prêtes à programmer</div>
         </div>
         <div class="nav">
-            <a href="/">🎨 Générateur</a>
-            <a href="/generator2" style="color:#f59e0b">📦 Gén. V2</a>
-            <a href="/scheduled">✅ Programmés</a>
-            <a href="/queue_ig" style="color:#e1306c">📸 Instagram</a>
-            <a href="/dashboard">📊 Dashboard</a>
-            <a href="/calendar">📅 Calendrier</a>
-            <a href="/stats">📈 Stats</a>
-            <a href="/monitor">👀 Monitor</a>
-            <button class="config-btn" onclick="openConfig()">⚙️ Comptes</button>
-            <button class="theme-btn" id="themeBtn">☀️</button>
+        <div class="navmenu" data-menu>
+            <button class="navmenu-btn" data-menu-btn>🎨 Génération <span class="chev">▼</span></button>
+            <div class="navmenu-drop">
+                <a href="/">🎨 Générateur</a>
+                <a href="/templates">🗂️ Templates</a>
+                <a href="/categories">🏷️ Catégories S/A/B</a>
+            </div>
+        </div>
+        <div class="navmenu" data-menu>
+            <button class="navmenu-btn" data-menu-btn>♺ Génération V2 <span class="chev">▼</span></button>
+            <div class="navmenu-drop">
+                <a href="/generator2">📦 Générateur V2</a>
+                <a href="/templates2">📦 Templates V2</a>
+            </div>
+        </div>
+        <div class="navmenu" data-menu>
+            <button class="navmenu-btn" data-menu-btn>📋 Publication <span class="chev">▼</span></button>
+            <div class="navmenu-drop">
+                <a href="/queue" class="current">📋 File TikTok</a>
+                <a href="/queue_ig" style="color:#e1306c">📸 File Instagram</a>
+                <a href="/scheduled">✅ Programmés</a>
+            </div>
+        </div>
+        <div class="navmenu" data-menu>
+            <button class="navmenu-btn" data-menu-btn>📊 Suivi <span class="chev">▼</span></button>
+            <div class="navmenu-drop">
+                <a href="/dashboard">📊 Dashboard</a>
+                <a href="/stats">📈 Stats</a>
+                <a href="/monitor">👀 Monitor</a>
+                <a href="/calendar">📅 Calendrier</a>
+            </div>
+        </div>
+        <div class="navmenu" data-menu>
+            <button class="navmenu-btn" data-menu-btn>🔧 Outils <span class="chev">▼</span></button>
+            <div class="navmenu-drop">
+                <a href="/remove_box">🗑️ Supprimer boîte</a>
+            </div>
+        </div>
+        <button class="theme-btn" id="themeBtn">☀️</button>
         </div>
     </div>
 
@@ -1433,6 +1475,23 @@ setInterval(async()=>{
     const buf=await res.json();
     updateBufferBar(buf.pending,buf.pending+buf.needed);
 },20000);
+
+// ── Menus déroulants de navigation ──────────────────────────────────
+(function(){
+    const menus=document.querySelectorAll('[data-menu]');
+    menus.forEach(m=>{
+        const btn=m.querySelector('[data-menu-btn]');
+        if(!btn)return;
+        btn.addEventListener('click',e=>{
+            e.stopPropagation();
+            const wasOpen=m.classList.contains('open');
+            menus.forEach(x=>x.classList.remove('open'));
+            if(!wasOpen)m.classList.add('open');
+        });
+    });
+    document.addEventListener('click',()=>menus.forEach(m=>m.classList.remove('open')));
+    document.addEventListener('keydown',e=>{if(e.key==='Escape')menus.forEach(m=>m.classList.remove('open'))});
+})();
 </script>
 </body>
 </html>
