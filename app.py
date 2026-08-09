@@ -2848,6 +2848,9 @@ def scheduled_page(): return render_template("scheduled.html")
 @app.route("/templates")
 def templates_page(): return render_template("templates.html")
 
+@app.route("/categories")
+def categories_page(): return render_template("categories.html")
+
 @app.route("/queue_ig")
 def page_queue_ig(): return render_template("queue_ig.html")
 
