@@ -155,7 +155,7 @@ _job_sessions_lock = threading.Lock()
 # Nombre de workers parallèles pour la génération
 WORKER_COUNT = 50
 
-def _get_or_create_session(session_id, total):
+def _get_or_create_session(session_id, total, carousel_size=None, carousel_plan=None, carousel_assets=None):
     with _job_sessions_lock:
         if session_id not in _job_sessions:
             _job_sessions[session_id] = {
@@ -169,12 +169,68 @@ def _get_or_create_session(session_id, total):
                 "tiktoks_created": [],
                 "buffer_remaining": 0,
                 "user": None,
+                # Plan S/A/B pré-calculé pour ce carousel
+                "carousel_size":   carousel_size,
+                "carousel_plan":   carousel_plan   or [],
+                "carousel_assets": carousel_assets or [],
+                # Suivi par carousel (buffer séparé, intégrité S/A/B)
+                "pending_by_carousel": {},  # {carousel_idx: [{"r2_key","floc","template_key","pos"}, ...]}
+                "results_by_carousel": {},  # {carousel_idx: {"success","failed","total","flushed"}}
+                "leftover_count":   0,
+                "leftover_indices": [],
             }
         return _job_sessions[session_id]
+
+def _basic_quality_check(img_b64):
+    """
+    Contrôles techniques basiques sur une image générée.
+    Retourne (True, None) si OK, (False, "raison") si problème détecté.
+    Pas de Gemini Vision, pas d'analyse sémantique, pas de détection de contenu.
+    """
+    # 1. Base64 décodable
+    try:
+        img_bytes = base64.b64decode(img_b64)
+    except Exception:
+        return False, "base64 non décodable"
+
+    # 2. Taille minimale (image non vide / non corrompue)
+    if len(img_bytes) < 10_000:  # < 10 KB → probablement vide ou corrompue
+        return False, f"image trop petite ({len(img_bytes)} bytes)"
+
+    # 3. PIL peut ouvrir et vérifier l'intégrité de l'image
+    try:
+        from PIL import Image
+        import io
+        img = Image.open(io.BytesIO(img_bytes))
+        img.verify()  # vérifie l'intégrité sans charger tous les pixels en RAM
+    except Exception as e:
+        return False, f"image corrompue ou illisible: {e}"
+
+    # 4. Dimensions minimales
+    try:
+        from PIL import Image
+        import io
+        img2 = Image.open(io.BytesIO(img_bytes))
+        w, h = img2.size
+        if w < 256 or h < 256:
+            return False, f"dimensions trop petites: {w}x{h}"
+    except Exception:
+        pass  # si on ne peut pas lire les dimensions, on laisse passer
+
+    return True, None
+
 
 def _update_session(session_id, success, image_b64=None, floc=None, error=None, idx=None, user=None, template_key=""):
     batch = None
     session_user = None
+
+    # Contrôle technique basique AVANT stockage R2 (image_b64 encore disponible)
+    if success and image_b64:
+        qc_ok, qc_reason = _basic_quality_check(image_b64)
+        if not qc_ok:
+            print(f"[QC] ❌ Image idx={idx} rejetée: {qc_reason}")
+            success = False
+            error = f"Contrôle qualité échoué: {qc_reason}"
 
     # Sauvegarder l'image dans R2 temp AVANT le lock — libère la RAM immédiatement
     r2_img_key = None
@@ -192,20 +248,74 @@ def _update_session(session_id, success, image_b64=None, floc=None, error=None, 
         if not s:
             return
         s["done"] += 1
-        if success and r2_img_key:
-            s["results"].append({"r2_key": r2_img_key, "floc": floc, "orig_index": idx, "template_key": template_key})
-            s["pending_buffer"].append({"r2_key": r2_img_key, "floc": floc, "template_key": template_key})
+        session_user = s.get("user") or user
+
+        all_carousels_sess = s.get("all_carousels", [])
+        use_carousel_routing = bool(all_carousels_sess) and idx is not None
+
+        # Variables de flush (déterminées ci-dessous)
+        batch_carousel   = None   # liste d'items du carousel à créer (multi-carousel)
+        batch_c_target   = None   # taille cible du carousel à créer
+        batch_c_idx      = None   # carousel_idx concerné
+        legacy_batch     = None   # batch du buffer global (generate_single)
+
+        if use_carousel_routing:
+            # Trouver le carousel_idx de cette image
+            c_idx = None
+            c_target = 7
+            for c in all_carousels_sess:
+                if c["global_start"] <= idx <= c["global_end"]:
+                    c_idx = c["carousel_idx"]
+                    c_target = c["target_size"]
+                    break
+
+            if c_idx is not None:
+                # Initialiser les structures du carousel si première image
+                if c_idx not in s["pending_by_carousel"]:
+                    s["pending_by_carousel"][c_idx] = []
+                if c_idx not in s["results_by_carousel"]:
+                    s["results_by_carousel"][c_idx] = {"success": 0, "failed": 0, "total": c_target, "flushed": False}
+
+                if success and r2_img_key:
+                    s["results"].append({"r2_key": r2_img_key, "floc": floc, "orig_index": idx, "template_key": template_key})
+                    s["pending_by_carousel"][c_idx].append({
+                        "r2_key": r2_img_key, "floc": floc,
+                        "template_key": template_key, "pos": idx,
+                    })
+                    s["results_by_carousel"][c_idx]["success"] += 1
+                else:
+                    s["errors"] += 1
+                    s["results"].append({"r2_key": None, "floc": floc or "", "orig_index": idx, "error": error or "Erreur inconnue"})
+                    s["results_by_carousel"][c_idx]["failed"] += 1
+
+                # Ce carousel est-il complètement résolu ?
+                rc = s["results_by_carousel"][c_idx]
+                if not rc.get("flushed") and (rc["success"] + rc["failed"]) >= rc["total"]:
+                    rc["flushed"] = True
+                    batch_carousel = s["pending_by_carousel"].pop(c_idx, [])
+                    batch_c_target = rc["total"]
+                    batch_c_idx    = c_idx
+            else:
+                # idx hors de tout carousel planifié (leftover) → comptabiliser en erreur
+                s["errors"] += 1
+                s["results"].append({"r2_key": None, "floc": floc or "", "orig_index": idx, "error": error or "Image hors carousel (leftover)"})
         else:
-            s["errors"] += 1
-            s["results"].append({"r2_key": None, "floc": floc or "", "orig_index": idx, "error": error or "Erreur inconnue"})
+            # Pas de routing multi-carousel → comportement global conservé (generate_single)
+            if success and r2_img_key:
+                s["results"].append({"r2_key": r2_img_key, "floc": floc, "orig_index": idx, "template_key": template_key})
+                s["pending_buffer"].append({"r2_key": r2_img_key, "floc": floc, "template_key": template_key})
+            else:
+                s["errors"] += 1
+                s["results"].append({"r2_key": None, "floc": floc or "", "orig_index": idx, "error": error or "Erreur inconnue"})
+            # Flush legacy tous les 7 (comportement d'origine)
+            pending = s["pending_buffer"]
+            if len(pending) >= 7:
+                legacy_batch = pending[:7]
+                s["pending_buffer"] = pending[7:]
+
         if s["done"] >= s["total"]:
             s["status"] = "done"
-        pending = s["pending_buffer"]
-        session_user = s.get("user") or user
-        if len(pending) >= TIKTOK_SIZE:
-            batch = pending[:TIKTOK_SIZE]
-            s["pending_buffer"] = pending[TIKTOK_SIZE:]
-        # Sauvegarder dans R2 toutes les 10 images pour survivre aux crashes
+
         done_count = s["done"]
         total_count = s["total"]
         session_start = s.get("created_at","")
@@ -228,69 +338,162 @@ def _update_session(session_id, success, image_b64=None, floc=None, error=None, 
         except Exception:
             pass
 
-    if batch:
+    # ── Flush carousel complet (multi-carousel) ──────────────────────────────
+    if batch_carousel is not None:
+        rc_failed = 0
+        with _job_sessions_lock:
+            s = _job_sessions.get(session_id)
+            if s:
+                rc_failed = s.get("results_by_carousel", {}).get(batch_c_idx, {}).get("failed", 0)
+
+        if not batch_carousel:
+            print(f"[SESSION] ❌ Carousel {batch_c_idx} vide — toutes les images ont échoué, non créé")
+        elif rc_failed > 0:
+            # Une ou plusieurs positions échouées → NE PAS créer un carousel incomplet
+            print(f"[SESSION] ❌ Carousel {batch_c_idx} incomplet ({rc_failed} position(s) échouée(s) sur {batch_c_target}) — non créé, plan S/A/B préservé")
+        else:
+            try:
+                # TRI PAR POSITION obligatoire — workers asynchrones, ordre non garanti
+                batch_carousel.sort(key=lambda x: x["pos"])
+                imgs = []
+                for r in batch_carousel:
+                    try:
+                        obj = get_r2().get_object(Bucket=R2_BUCKET, Key=r["r2_key"])
+                        imgs.append(base64.b64encode(obj["Body"].read()).decode())
+                        get_r2().delete_object(Bucket=R2_BUCKET, Key=r["r2_key"])
+                    except Exception:
+                        imgs.append(None)
+                flocs = [r["floc"] for r in batch_carousel]
+                tkeys = [r.get("template_key","") for r in batch_carousel]
+                created, remaining = add_to_buffer_and_create_tiktoks(imgs, flocs, session_user, tkeys, target_size=batch_c_target, atomic=True)
+                with _job_sessions_lock:
+                    s = _job_sessions.get(session_id)
+                    if s:
+                        s["tiktoks_created"].extend(created)
+                        s["buffer_remaining"] = remaining
+                print(f"[SESSION] ✅ Carousel {batch_c_idx} créé ({batch_c_target} images) — {len(created)} TikTok(s)")
+            except Exception as e:
+                print(f"[SESSION] Erreur création carousel {batch_c_idx}: {e}")
+
+    # ── Flush legacy (generate_single) ───────────────────────────────────────
+    if legacy_batch is not None:
         try:
-            # Lire les images depuis R2 temp
             imgs = []
-            for r in batch:
+            for r in legacy_batch:
                 try:
                     obj = get_r2().get_object(Bucket=R2_BUCKET, Key=r["r2_key"])
                     imgs.append(base64.b64encode(obj["Body"].read()).decode())
-                    # Supprimer le fichier temp R2 après lecture
                     get_r2().delete_object(Bucket=R2_BUCKET, Key=r["r2_key"])
                 except Exception:
                     imgs.append(None)
-            flocs = [r["floc"] for r in batch]
-            tkeys = [r.get("template_key","") for r in batch]
-            created, remaining = add_to_buffer_and_create_tiktoks(imgs, flocs, session_user, tkeys)
+            flocs = [r["floc"] for r in legacy_batch]
+            tkeys = [r.get("template_key","") for r in legacy_batch]
+            created, remaining = add_to_buffer_and_create_tiktoks(imgs, flocs, session_user, tkeys, target_size=len(legacy_batch))
             with _job_sessions_lock:
                 s = _job_sessions.get(session_id)
                 if s:
                     s["tiktoks_created"].extend(created)
                     s["buffer_remaining"] = remaining
-            print(f"[SESSION] ✅ {len(created)} TikTok(s) créé(s) en cours de génération")
+            print(f"[SESSION] ✅ {len(created)} TikTok(s) créé(s) (buffer legacy)")
         except Exception as e:
-            print(f"[SESSION] Erreur création TikTok intermédiaire: {e}")
+            print(f"[SESSION] Erreur création TikTok legacy: {e}")
 
 def _finalize_session(session_id, user):
-    """Crée les TikToks depuis les images restantes (< 7) à la fin — atomique pour éviter les doublons"""
+    """
+    Traite les carousels non encore flushés à la fin du bulk.
+    Chaque carousel est traité individuellement avec sa propre target_size.
+    Un carousel incomplet (positions échouées) n'est PAS créé avec des images d'un autre.
+    Le buffer legacy (generate_single) est traité séparément.
+    """
     with _job_sessions_lock:
         s = _job_sessions.get(session_id)
         if not s:
             return
-        # Vider pending_buffer atomiquement pour éviter double traitement
-        pending = s["pending_buffer"][:]
-        s["pending_buffer"] = []  # ← reset atomique sous lock
         session_user = s.get("user") or user
+        all_carousels_sess = s.get("all_carousels", [])
+        use_carousel_routing = bool(all_carousels_sess)
 
-    if not pending:
-        return
+        # Récupérer et vider atomiquement les structures par carousel
+        pending_by_carousel = dict(s.get("pending_by_carousel", {}))
+        results_by_carousel = dict(s.get("results_by_carousel", {}))
+        s["pending_by_carousel"] = {}
 
-    # Lire les images depuis R2 temp
-    valid = [r for r in pending if r.get("r2_key")]
-    if not valid:
-        return
+        # Buffer legacy (generate_single)
+        legacy_pending = s["pending_buffer"][:]
+        s["pending_buffer"] = []
 
-    imgs = []
-    for r in valid:
-        try:
-            obj = get_r2().get_object(Bucket=R2_BUCKET, Key=r["r2_key"])
-            imgs.append(base64.b64encode(obj["Body"].read()).decode())
-            get_r2().delete_object(Bucket=R2_BUCKET, Key=r["r2_key"])
-        except Exception:
-            imgs.append(None)
-    flocs = [r["floc"] for r in valid]
-    tkeys = [r.get("template_key","") for r in valid]
-    try:
-        created, remaining = add_to_buffer_and_create_tiktoks(imgs, flocs, session_user, tkeys)
-        with _job_sessions_lock:
-            s = _job_sessions.get(session_id)
-            if s:
-                s["tiktoks_created"].extend(created)
-                s["buffer_remaining"] = remaining
-        print(f"[SESSION] Finalisation: {len(created)} TikTok(s), {remaining} images en buffer")
-    except Exception as e:
-        print(f"[SESSION] Erreur finalisation: {e}")
+    # ── Traiter chaque carousel individuellement (multi-carousel) ────────────
+    if use_carousel_routing:
+        c_map = {c["carousel_idx"]: c for c in all_carousels_sess}
+        for c_idx, items in pending_by_carousel.items():
+            rc = results_by_carousel.get(c_idx, {})
+            if rc.get("flushed"):
+                continue  # déjà créé dans _update_session
+            c_info   = c_map.get(c_idx, {})
+            c_target = c_info.get("target_size", 7)
+            failed   = rc.get("failed", 0)
+
+            if not items:
+                print(f"[FINALIZE] Carousel {c_idx} vide — ignoré")
+                continue
+            if failed > 0:
+                print(f"[FINALIZE] ❌ Carousel {c_idx} incomplet ({failed} échec(s) sur {c_target}) — non créé, plan S/A/B préservé")
+                continue
+            # Sécurité : nombre d'images doit correspondre exactement à target_size
+            valid = [r for r in items if r.get("r2_key")]
+            if len(valid) != c_target:
+                print(f"[FINALIZE] ❌ Carousel {c_idx}: {len(valid)} images valides ≠ target {c_target} — non créé")
+                continue
+
+            # TRI PAR POSITION obligatoire avant flush (workers asynchrones)
+            valid.sort(key=lambda x: x["pos"])
+            imgs = []
+            for r in valid:
+                try:
+                    obj = get_r2().get_object(Bucket=R2_BUCKET, Key=r["r2_key"])
+                    imgs.append(base64.b64encode(obj["Body"].read()).decode())
+                    get_r2().delete_object(Bucket=R2_BUCKET, Key=r["r2_key"])
+                except Exception:
+                    imgs.append(None)
+            flocs = [r["floc"] for r in valid]
+            tkeys = [r.get("template_key","") for r in valid]
+            try:
+                created, remaining = add_to_buffer_and_create_tiktoks(imgs, flocs, session_user, tkeys, target_size=c_target, atomic=True)
+                with _job_sessions_lock:
+                    s = _job_sessions.get(session_id)
+                    if s:
+                        s["tiktoks_created"].extend(created)
+                        s["buffer_remaining"] = remaining
+                        if c_idx in s.get("results_by_carousel", {}):
+                            s["results_by_carousel"][c_idx]["flushed"] = True
+                print(f"[FINALIZE] ✅ Carousel {c_idx} créé ({c_target} images) — {len(created)} TikTok(s)")
+            except Exception as e:
+                print(f"[FINALIZE] Erreur création carousel {c_idx}: {e}")
+
+    # ── Traiter le buffer legacy (generate_single) ───────────────────────────
+    if legacy_pending:
+        valid = [r for r in legacy_pending if r.get("r2_key")]
+        if valid:
+            imgs = []
+            for r in valid:
+                try:
+                    obj = get_r2().get_object(Bucket=R2_BUCKET, Key=r["r2_key"])
+                    imgs.append(base64.b64encode(obj["Body"].read()).decode())
+                    get_r2().delete_object(Bucket=R2_BUCKET, Key=r["r2_key"])
+                except Exception:
+                    imgs.append(None)
+            flocs = [r["floc"] for r in valid]
+            tkeys = [r.get("template_key","") for r in valid]
+            try:
+                created, remaining = add_to_buffer_and_create_tiktoks(imgs, flocs, session_user, tkeys)
+                with _job_sessions_lock:
+                    s = _job_sessions.get(session_id)
+                    if s:
+                        s["tiktoks_created"].extend(created)
+                        s["buffer_remaining"] = remaining
+                print(f"[FINALIZE] Legacy: {len(created)} TikTok(s), {remaining} en buffer")
+            except Exception as e:
+                print(f"[FINALIZE] Erreur legacy: {e}")
 
 def _run_bulk_async(session_id, items, user, resolution):
     """Phase 1 : Gemini en parallèle. Phase 2 : Replicate séquentiel → zéro 429"""
@@ -304,32 +507,145 @@ def _run_bulk_async(session_id, items, user, resolution):
     # ── Phase 1 : Gemini en parallèle (WORKER_COUNT workers) ─────────────
     print(f"[BULK] Phase 1 — Gemini sur {len(items)} images avec {WORKER_COUNT} workers...")
 
-    # Charger pepites et normaux UNE SEULE FOIS avant les workers
-    import random as _rnd
-    try:
-        _floc_data = r2_get_json("meta/flocages.json") or {}
-        _pepites_list = _floc_data.get("pepites", PEPITE_FLOCAGES) or PEPITE_FLOCAGES
-        _all_flocs = _floc_data.get("flocages", DEFAULT_FLOCAGES) or DEFAULT_FLOCAGES
-        _pepites_set_lower = {p.lower().strip() for p in _pepites_list}
-        _normaux_list = [f for f in _all_flocs if f.lower().strip() not in _pepites_set_lower]
-    except Exception:
-        _pepites_list = PEPITE_FLOCAGES
-        _normaux_list = [f for f in DEFAULT_FLOCAGES if f.lower().strip() not in {p.lower().strip() for p in PEPITE_FLOCAGES}]
+    # ── Calculer TOUS les carousels du bulk avant les workers ────────────────
+    # Chaque carousel est une unité indépendante avec sa propre taille et son propre plan S/A/B.
+    # L'anti-répétition est mis à jour carousel par carousel pour rester cohérent.
+    n_items = len(items)
 
-    # Assigner pépite ou normal selon la position dans le TikTok
-    # Images dont (index % 7) < 4 → pépite, sinon → normal
+    # Charger catégories et recent_used UNE SEULE FOIS pour tout le bulk
+    _tmpl_cats_bulk = _load_templates_categories()
+    _floc_cats_bulk = _load_flocages_categories()
+    _recent_state   = _get_recent_used()  # état initial, mis à jour carousel par carousel
+
+    all_carousels  = []     # [{carousel_idx, target_size, plan, assets, global_start, global_end}, ...]
+    _assets_by_idx = {}     # {global_idx: asset_dict} — couvre tous les indices du bulk
+
+    # ── Partitionner le bulk en carousels de tailles valides (somme == n_items) ──
+    import random as _rng_mod
+    carousel_sizes, leftover_count = partition_bulk_into_carousels(n_items, _rng_mod.Random())
+
+    print(f"[BULK] {n_items} images demandées → {len(carousel_sizes)} carousel(s): {carousel_sizes}")
+
+    global_idx   = 0
+    carousel_idx = 0
+    for c_size in carousel_sizes:
+        c_plan  = build_carousel_plan(c_size)
+        c_assets = select_carousel_assets(
+            c_plan,
+            tmpl_cats=_tmpl_cats_bulk,
+            floc_cats=_floc_cats_bulk,
+            recent_override=_recent_state,
+        )
+        c_global_end = global_idx + c_size - 1  # exact — pas de troncature
+
+        if c_assets is None:
+            # MODE 2, config insuffisante pour ce carousel : skipper proprement
+            print(f"[BULK] ⚠️ Carousel {carousel_idx} annulé (config_insuffisante) — indices {global_idx}→{c_global_end} sans assets")
+            for g in range(global_idx, c_global_end + 1):
+                _assets_by_idx[g] = None  # sentinelle explicite
+        else:
+            # Mapper chaque asset sur son index global dans le bulk
+            for local_pos, asset in enumerate(c_assets):
+                g_idx = global_idx + local_pos
+                _assets_by_idx[g_idx] = {**asset, "carousel_idx": carousel_idx}
+
+            # Anti-répétition incrémental : mettre à jour recent_state carousel par carousel
+            _recent_state["templates"] = (
+                _recent_state["templates"] + [a["template_key"] for a in c_assets if a.get("template_key")]
+            )[-ANTI_REPEAT_PENALTY_LAST_N:]
+            _recent_state["flocages"] = (
+                _recent_state["flocages"] + [a["flocage"] for a in c_assets if a.get("flocage")]
+            )[-ANTI_REPEAT_PENALTY_LAST_N:]
+
+        print(f"[BULK] Carousel {carousel_idx} = {c_size} images (indices {global_idx}→{c_global_end})")
+
+        all_carousels.append({
+            "carousel_idx":  carousel_idx,
+            "target_size":   c_size,               # taille exacte réelle du carousel
+            "plan":          c_plan,
+            "assets":        c_assets or [],
+            "global_start":  global_idx,
+            "global_end":    c_global_end,          # exact, pas de min()
+            "ok":            c_assets is not None,
+        })
+        global_idx   += c_size
+        carousel_idx += 1
+
+    # ── Traçabilité des images leftover (non plaçables en carousel complet) ──
+    leftover_indices = list(range(global_idx, n_items))  # indices au-delà des carousels
+    if leftover_count > 0 or leftover_indices:
+        # leftover_count vient du partitionnement (zone morte) ; leftover_indices = indices réels
+        print(f"[BULK] ⚠️ {len(leftover_indices)} image(s) non plaçable(s) : minimum carousel = 7")
+        print(f"[BULK] ⚠️ Indices leftover : {leftover_indices}")
+        # Marquer ces indices comme sentinelle leftover (rejetés proprement dans gemini_one)
+        for g in leftover_indices:
+            _assets_by_idx[g] = "__LEFTOVER__"
+
+    print(f"[BULK] {carousel_idx} carousel(s) planifié(s) pour {n_items} images: " +
+          ", ".join(f"C{c['carousel_idx']}={c['target_size']}img({'OK' if c['ok'] else 'SKIP'})"
+                    for c in all_carousels))
+
+    # Mettre à jour la session avec le plan complet multi-carousel + traçabilité leftover
+    with _job_sessions_lock:
+        s = _job_sessions.get(session_id)
+        if s:
+            s["all_carousels"]    = all_carousels
+            s["carousel_size"]    = all_carousels[0]["target_size"] if all_carousels else 7
+            s["leftover_count"]   = len(leftover_indices)
+            s["leftover_indices"] = leftover_indices
+
     def gemini_one(item):
+        import random as _rnd
         idx = item["_index"]
         try:
             # Échelonner le démarrage — évite de spammer 50 requêtes simultanées
             time.sleep(idx * 0.1 % 3)  # délai 0-3s selon l'index
-            pos_in_tiktok = idx % TIKTOK_SIZE  # 0-6
-            if pos_in_tiktok < 4 and _pepites_list:
-                floc_str = _rnd.choice(_pepites_list)
-            elif _normaux_list:
-                floc_str = _rnd.choice(_normaux_list)
+
+            # Lire l'asset depuis l'index global pré-calculé
+            asset = _assets_by_idx.get(idx)
+
+            # Image leftover : non plaçable en carousel complet → rejetée proprement
+            if asset == "__LEFTOVER__":
+                print(f"[BULK] ⏭️ Image idx={idx} leftover — non générée (minimum carousel = 7)")
+                _update_session(session_id, False,
+                                error="Image leftover : non plaçable dans un carousel complet (min 7)",
+                                idx=idx)
+                return
+
+            if asset is None:
+                # Sentinelle explicite : carousel annulé pour config_insuffisante
+                print(f"[BULK] ❌ Image idx={idx} rejetée — carousel annulé (config_insuffisante)")
+                _update_session(session_id, False,
+                                error="Carousel annulé : configuration S/A/B insuffisante pour ce tier",
+                                idx=idx)
+                return
+
+            if asset and asset.get("flocage"):
+                floc_str = asset["flocage"]
+                # Utiliser la template pré-sélectionnée si l'item n'en a pas déjà une
+                if not item.get("template_key") and asset.get("template_key"):
+                    item["template_key"] = asset["template_key"]
             else:
-                floc_str = _rnd.choice(_pepites_list or DEFAULT_FLOCAGES)
+                # Sécurité : asset présent mais flocage vide (ne devrait pas arriver)
+                print(f"[BULK] ⚠️ Asset idx={idx} sans flocage — fallback pépites/normaux")
+                try:
+                    _floc_data    = r2_get_json("meta/flocages.json") or {}
+                    _pepites_list = _floc_data.get("pepites", PEPITE_FLOCAGES) or PEPITE_FLOCAGES
+                    _all_flocs    = _floc_data.get("flocages", DEFAULT_FLOCAGES) or DEFAULT_FLOCAGES
+                    _pepites_set  = {p.lower().strip() for p in _pepites_list}
+                    _normaux_list = [f for f in _all_flocs if f.lower().strip() not in _pepites_set]
+                except Exception:
+                    _pepites_list = PEPITE_FLOCAGES
+                    _normaux_list = [f for f in DEFAULT_FLOCAGES
+                                     if f.lower().strip() not in {p.lower().strip() for p in PEPITE_FLOCAGES}]
+                c_size_fallback = asset.get("carousel_idx") and all_carousels[asset["carousel_idx"]]["target_size"] or 7
+                pos_in_carousel = idx % max(c_size_fallback, 7)
+                if pos_in_carousel < 4 and _pepites_list:
+                    floc_str = _rnd.choice(_pepites_list)
+                elif _normaux_list:
+                    floc_str = _rnd.choice(_normaux_list)
+                else:
+                    floc_str = _rnd.choice(_pepites_list or DEFAULT_FLOCAGES)
             parts = [p.strip() for p in floc_str.split("/")]
             fname = parts[0] if parts else ""
             fnum  = parts[1] if len(parts) > 1 else "2"
@@ -440,20 +756,82 @@ def _run_bulk_async(session_id, items, user, resolution):
 API_KEY        = os.environ.get("GEMINI_API_KEY")
 MODEL_URL      = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-image:generateContent"
 COST_PER_IMAGE = 0.069
-TIKTOK_SIZE    = 7
 FIXED_CAPTION  = "3 Maillot Acheté 1 Offert 🎁 #volakits #ete #foot"
-# Créneaux de publication en UTC, PAR COMPTE (le principal poste plus souvent que les autres)
-# Conversion heure française (UTC+2 été) → UTC : soustraire 2h
-SCHEDULE_TIMES_BY_ACCOUNT = {
-    "Volakits Main (wael)": ["08:00", "13:00", "16:30", "19:00"],  # 4x/jour — 10h/15h/18h30/21h Paris (UTC+2)
-    "Volakits 1 (seik)":    ["14:00", "18:30"],  # 16h/20h30 Paris
-    "Volakits 2 (momo)":    ["14:00", "18:30"],  # 16h/20h30 Paris
-    "Volakits 6 (wassim)":  ["14:00", "18:30"],  # 16h/20h30 Paris
+
+# ── Taille carousel dynamique ──────────────────────────────────────────────
+# Distribution en % — doit sommer à 100
+CAROUSEL_SIZE_DISTRIBUTION = {
+    7:  5,
+    8:  20,
+    9:  30,
+    10: 30,
+    11: 10,
+    12: 5,
 }
-SCHEDULE_TIMES_DEFAULT = ["08:30", "15:30"]  # 2x/jour par defaut
+
+# Segmentation S/A/B stricte par taille de carousel
+CAROUSEL_SEGMENT_PLAN = {
+    7:  {"S": 4, "A": 2, "B": 1},
+    8:  {"S": 4, "A": 2, "B": 2},
+    9:  {"S": 4, "A": 3, "B": 2},
+    10: {"S": 4, "A": 3, "B": 3},
+    11: {"S": 4, "A": 4, "B": 3},
+    12: {"S": 4, "A": 4, "B": 4},
+}
+
+# Anti-répétition : nb de derniers éléments pénalisés (pas exclus)
+ANTI_REPEAT_PENALTY_LAST_N = 20
+
+# ── Scheduler : fenêtres horaires en UTC (Paris UTC+2 en été) ─────────────
+# 3 publications/jour : matin ~10h, après-midi ~16h, soir ~21h30
+# Fenêtres en UTC — NOTE : prévoir gestion changement d'heure (UTC+1 hiver) au BLOC 7
+SCHEDULE_WINDOWS_BY_ACCOUNT = {
+    "Volakits Main (wael)": [
+        {"start": "07:30", "end": "08:30"},   # 09:30–10:30 Paris (UTC+2 été)
+        {"start": "13:30", "end": "14:30"},   # 15:30–16:30 Paris (UTC+2 été)
+        {"start": "19:00", "end": "20:00"},   # 21:00–22:00 Paris (UTC+2 été)
+    ],
+    "Volakits 1 (seik)": [
+        {"start": "07:30", "end": "08:30"},
+        {"start": "13:30", "end": "14:30"},
+        {"start": "19:00", "end": "20:00"},
+    ],
+    "Volakits 2 (momo)": [
+        {"start": "07:30", "end": "08:30"},
+        {"start": "13:30", "end": "14:30"},
+        {"start": "19:00", "end": "20:00"},
+    ],
+    "Volakits 6 (wassim)": [
+        {"start": "07:30", "end": "08:30"},
+        {"start": "13:30", "end": "14:30"},
+        {"start": "19:00", "end": "20:00"},
+    ],
+}
+SCHEDULE_WINDOWS_DEFAULT = [
+    {"start": "07:30", "end": "08:30"},
+    {"start": "13:30", "end": "14:30"},
+    {"start": "19:00", "end": "20:00"},
+]
+
+# Conserver pour compatibilité — sera remplacé au BLOC 7
+# ── [DEPRECATED] Ancien système de créneaux fixes ──────────────────────────
+# Remplacé par SCHEDULE_WINDOWS_BY_ACCOUNT + get_or_create_slot_time (fenêtres
+# aléatoires persistées). Conservé pour rétrocompatibilité — plus AUCUN code
+# fonctionnel ne l'utilise pour la programmation réelle. Ne pas réintroduire
+# d'usage : cela créerait un second système de scheduling concurrent.
+SCHEDULE_TIMES_BY_ACCOUNT = {
+    "Volakits Main (wael)": ["08:00", "13:00", "16:30", "19:00"],
+    "Volakits 1 (seik)":    ["14:00", "18:30"],
+    "Volakits 2 (momo)":    ["14:00", "18:30"],
+    "Volakits 6 (wassim)":  ["14:00", "18:30"],
+}
+SCHEDULE_TIMES_DEFAULT = ["08:30", "15:30"]
 
 def get_schedule_times_for_account(account):
-    """Retourne les créneaux horaires (UTC) pour un compte donné"""
+    """[DEPRECATED] Ancien système de créneaux fixes.
+    Remplacé par SCHEDULE_WINDOWS_BY_ACCOUNT + get_or_create_slot_time.
+    Conservé uniquement pour rétrocompatibilité — ne plus utiliser pour la
+    programmation réelle (créerait un système de scheduling concurrent)."""
     return SCHEDULE_TIMES_BY_ACCOUNT.get(account, SCHEDULE_TIMES_DEFAULT)
 
 R2_ENDPOINT   = os.environ.get("R2_ENDPOINT")
@@ -1290,7 +1668,56 @@ def get_buffer():
 def _save_buffer(buf):
     return r2_put_json(KEY_BUFFER, buf)
 
-def add_to_buffer_and_create_tiktoks(new_images_b64, new_flockages, user, new_template_keys=None):
+def add_to_buffer_and_create_tiktoks(new_images_b64, new_flockages, user, new_template_keys=None, target_size=None, atomic=False):
+    # atomic=True : les images fournies constituent EXACTEMENT un carousel déjà validé
+    #   (chemin multi-carousel depuis _update_session / _finalize_session).
+    #   → création directe du TikTok, SANS passer par le buffer global buffer/pending.json.
+    #   → garantit l'intégrité : aucun mélange possible avec un résidu ou un autre carousel.
+    # atomic=False : comportement legacy (generate_single) — accumulation dans le buffer global.
+
+    if atomic:
+        # Filtrer les images valides (None = échec lecture R2) en gardant l'alignement
+        valid_imgs, valid_flocs, valid_tkeys = [], [], []
+        for i, img in enumerate(new_images_b64):
+            if img:
+                valid_imgs.append(img)
+                valid_flocs.append(new_flockages[i] if i < len(new_flockages) else "")
+                valid_tkeys.append(new_template_keys[i] if new_template_keys and i < len(new_template_keys) else "")
+
+        # Sécurité : un carousel atomique doit contenir exactement sa taille cible
+        expected = target_size if target_size else len(valid_imgs)
+        if len(valid_imgs) != expected:
+            print(f"[BUFFER] ❌ Carousel atomique incomplet ({len(valid_imgs)}/{expected}) — non créé, intégrité préservée")
+            return [], 0
+
+        # Déterminer l'utilisateur (sans écrire dans le buffer global)
+        buf_user = user
+        try:
+            buf_ref = get_buffer()
+            if buf_ref.get("user"):
+                buf_user = buf_ref["user"]
+        except Exception:
+            pass
+
+        tiktok_num = get_next_tiktok_number()
+        print(f"[BUFFER] Création atomique TikTok {tiktok_num} ({len(valid_imgs)} images, target={expected})")
+        # preserve_order=True : l'ordre S/A/B (position↔flocage↔image) ne doit PAS être réordonné
+        _save_tiktok(tiktok_num, valid_imgs, buf_user, valid_flocs, valid_tkeys, preserve_order=True)
+        # Anti-répétition : un seul appel par carousel (pas de double comptage)
+        try:
+            _update_recent_used(
+                template_keys=[tk for tk in valid_tkeys if tk],
+                flocage_names=[f for f in valid_flocs if f],
+            )
+        except Exception as e:
+            print(f"[ANTI-REPEAT] Erreur update après TikTok atomique {tiktok_num}: {e}")
+        return [tiktok_num], 0
+
+    # ── Chemin legacy (generate_single) — buffer global accumulateur (INCHANGÉ) ──
+    # target_size : taille du carousel courant (issu du plan S/A/B)
+    # Si absent ou < 7 → 7 par défaut pour rétrocompatibilité (generate_single, etc.)
+    effective_size = target_size if (target_size and target_size >= 7) else 7
+
     # Phase 1 : mettre à jour le buffer sous lock (rapide)
     with _buffer_lock:
         buf = get_buffer()
@@ -1300,19 +1727,19 @@ def add_to_buffer_and_create_tiktoks(new_images_b64, new_flockages, user, new_te
         buf["flockages"].extend(new_flockages)
         if "template_keys" not in buf: buf["template_keys"] = []
         buf["template_keys"].extend(new_template_keys if new_template_keys else [""] * len(new_images_b64))
-        print(f"[BUFFER] Now has {len(buf['images_b64'])} images")
-        # Extraire les batches à créer
+        print(f"[BUFFER] Now has {len(buf['images_b64'])} images (target={effective_size})")
+        # Extraire les batches à créer selon la taille cible du carousel
         batches = []
         buf_user = buf["user"]
-        while len(buf["images_b64"]) >= TIKTOK_SIZE:
-            batch_b64  = buf["images_b64"][:TIKTOK_SIZE]
-            batch_floc = buf["flockages"][:TIKTOK_SIZE]
-            batch_tkeys = buf.get("template_keys", [])[:TIKTOK_SIZE]
-            tiktok_num = get_next_tiktok_number()
+        while len(buf["images_b64"]) >= effective_size:
+            batch_b64   = buf["images_b64"][:effective_size]
+            batch_floc  = buf["flockages"][:effective_size]
+            batch_tkeys = buf.get("template_keys", [])[:effective_size]
+            tiktok_num  = get_next_tiktok_number()
             batches.append((tiktok_num, batch_b64, batch_floc, batch_tkeys))
-            buf["images_b64"] = buf["images_b64"][TIKTOK_SIZE:]
-            buf["flockages"]  = buf["flockages"][TIKTOK_SIZE:]
-            if "template_keys" in buf: buf["template_keys"] = buf["template_keys"][TIKTOK_SIZE:]
+            buf["images_b64"] = buf["images_b64"][effective_size:]
+            buf["flockages"]  = buf["flockages"][effective_size:]
+            if "template_keys" in buf: buf["template_keys"] = buf["template_keys"][effective_size:]
         remaining = len(buf["images_b64"])
         _save_buffer(buf)
 
@@ -1322,6 +1749,14 @@ def add_to_buffer_and_create_tiktoks(new_images_b64, new_flockages, user, new_te
         print(f"[BUFFER] Creating TikTok {tiktok_num}...")
         _save_tiktok(tiktok_num, batch_b64, buf_user, batch_floc, batch_tkeys)
         created.append(tiktok_num)
+        # Anti-répétition : mettre à jour immédiatement après chaque carousel créé
+        try:
+            _update_recent_used(
+                template_keys=[tk for tk in batch_tkeys if tk],
+                flocage_names=[f for f in batch_floc if f],
+            )
+        except Exception as e:
+            print(f"[ANTI-REPEAT] Erreur update après TikTok {tiktok_num}: {e}")
 
     print(f"[BUFFER] Done — {len(created)} TikToks created, {remaining} pending")
     return created, remaining
@@ -1609,33 +2044,511 @@ def _draw_normaux(n=3):
         return []
     return _random.sample(_normaux_cache, min(n, len(_normaux_cache)))
 
-def _save_tiktok(num, images_b64, user, flockages=None, template_keys=None):
+# ══════════════════════════════════════════════════════════════════════════════
+# BLOC 2 — Catégories S/A/B : lecture/écriture + anti-répétition
+#
+# IMPORTANT — état initial :
+# Les catégories S/A/B ne sont pas encore remplies manuellement.
+# Tant qu'elles sont vides, toutes les fonctions retombent sur le
+# comportement existant (pépites/normaux ou sélection aléatoire globale).
+# Le bot ne plante pas si meta/templates_categories.json n'existe pas.
+# ══════════════════════════════════════════════════════════════════════════════
+
+def _load_templates_categories():
+    """
+    Lit meta/templates_categories.json depuis R2.
+    Format : {"S": ["templates/img01.jpg", ...], "A": [...], "B": [...]}
+    Si le fichier n'existe pas ou est vide → retourne {"S":[],"A":[],"B":[]}
+    sans erreur. Le bot continue avec le fallback aléatoire global.
+    """
+    try:
+        data = r2_get_json("meta/templates_categories.json") or {}
+        return {
+            "S": data.get("S", []),
+            "A": data.get("A", []),
+            "B": data.get("B", []),
+        }
+    except Exception as e:
+        print(f"[CATEGORIES] Erreur lecture templates_categories.json: {e}")
+        return {"S": [], "A": [], "B": []}
+
+def _save_templates_categories(cats):
+    """Persiste meta/templates_categories.json dans R2."""
+    try:
+        r2_put_json("meta/templates_categories.json", {
+            "S": cats.get("S", []),
+            "A": cats.get("A", []),
+            "B": cats.get("B", []),
+        })
+        return True
+    except Exception as e:
+        print(f"[CATEGORIES] Erreur écriture templates_categories.json: {e}")
+        return False
+
+def _categories_are_empty(cats):
+    """Retourne True si toutes les catégories S/A/B sont vides."""
+    return not cats.get("S") and not cats.get("A") and not cats.get("B")
+
+def _load_flocages_categories():
+    """
+    Lit les catégories S/A/B des flocages depuis meta/flocages.json.
+
+    Priorité :
+      1. Si "categories" présent et non vide → utiliser S/A/B directement
+      2. Si "categories" absent mais "pepites" présent → pepites=S, reste=B, A vide
+      3. Si rien → {"S":[],"A":[],"B":[]} — le fallback global prendra le relais
+
+    Retourne un dict {"S":[...],"A":[...],"B":[...]}.
+    Ne plante jamais.
+    """
+    try:
+        data = r2_get_json("meta/flocages.json") or {}
+        if "categories" in data:
+            cats = data["categories"]
+            result = {
+                "S": cats.get("S", []),
+                "A": cats.get("A", []),
+                "B": cats.get("B", []),
+            }
+            # Si categories existe mais est vide → essayer l'ancien format pepites
+            if _categories_are_empty(result) and data.get("pepites"):
+                all_flocs   = data.get("flocages", DEFAULT_FLOCAGES)
+                pepites     = data.get("pepites", [])
+                pepites_set = {p.lower().strip() for p in pepites}
+                normaux     = [f for f in all_flocs if f.lower().strip() not in pepites_set]
+                print("[CATEGORIES] categories vides → fallback pepites→S, normaux→B")
+                return {"S": pepites, "A": [], "B": normaux}
+            return result
+        elif data.get("pepites"):
+            # Ancien format uniquement — migration transparente à la volée
+            all_flocs   = data.get("flocages", DEFAULT_FLOCAGES)
+            pepites     = data.get("pepites", PEPITE_FLOCAGES)
+            pepites_set = {p.lower().strip() for p in pepites}
+            normaux     = [f for f in all_flocs if f.lower().strip() not in pepites_set]
+            print("[CATEGORIES] flocages.json ancien format → pepites=S, normaux=B")
+            return {"S": pepites, "A": [], "B": normaux}
+        else:
+            # Rien de disponible — le fallback global prendra le relais
+            print("[CATEGORIES] Aucune catégorie flocages disponible → fallback global")
+            return {"S": [], "A": [], "B": []}
+    except Exception as e:
+        print(f"[CATEGORIES] Erreur lecture flocages categories: {e}")
+        return {"S": [], "A": [], "B": []}
+
+def _save_flocages_categories(cats):
+    """
+    Persiste les catégories S/A/B dans meta/flocages.json
+    en conservant les champs existants (flocages, pepites) pour rétrocompatibilité.
+    """
+    try:
+        data = r2_get_json("meta/flocages.json") or {}
+        data["categories"] = {
+            "S": cats.get("S", []),
+            "A": cats.get("A", []),
+            "B": cats.get("B", []),
+        }
+        r2_put_json("meta/flocages.json", data)
+        return True
+    except Exception as e:
+        print(f"[CATEGORIES] Erreur écriture flocages categories: {e}")
+        return False
+
+# ── Anti-répétition ──────────────────────────────────────────────────────────
+_recent_used_lock = threading.Lock()
+
+def _get_recent_used():
+    """
+    Lit meta/recent_used.json depuis R2.
+    Format : {"templates": [...], "flocages": [...]}
+    Les éléments les plus récents sont en fin de liste.
+    Retourne des listes vides si le fichier n'existe pas encore.
+    """
+    try:
+        data = r2_get_json("meta/recent_used.json") or {}
+        return {
+            "templates": data.get("templates", []),
+            "flocages":  data.get("flocages",  []),
+        }
+    except Exception:
+        return {"templates": [], "flocages": []}
+
+def _update_recent_used(template_keys, flocage_names):
+    """
+    Ajoute les éléments d'un carousel terminé dans l'historique anti-répétition.
+    Conserve uniquement les ANTI_REPEAT_PENALTY_LAST_N derniers de chaque type.
+    Appelé après création d'un carousel.
+    """
+    with _recent_used_lock:
+        try:
+            data = _get_recent_used()
+            data["templates"] = (data["templates"] + list(template_keys))[-ANTI_REPEAT_PENALTY_LAST_N:]
+            data["flocages"]  = (data["flocages"]  + list(flocage_names))[-ANTI_REPEAT_PENALTY_LAST_N:]
+            r2_put_json("meta/recent_used.json", data)
+        except Exception as e:
+            print(f"[ANTI-REPEAT] Erreur mise à jour recent_used: {e}")
+
+def _penalized_sample(pool, n, recent_used, already_used_in_carousel):
+    """
+    Sélectionne n éléments parmi pool avec pénalisation des récemment utilisés.
+
+    Règles :
+    - Évite les doublons intra-carousel (already_used_in_carousel)
+    - Éléments dans recent_used → poids 0.1 (pénalisés, pas exclus)
+    - Si pool trop petit après exclusion doublons → utilise tout le pool
+    - Retourne toujours quelque chose si pool non vide
+    """
+    import random as _rnd
+
+    # Exclure d'abord les doublons intra-carousel
+    available = [x for x in pool if x not in already_used_in_carousel]
+    if len(available) < n:
+        # Pool insuffisant après exclusion doublons → utiliser tout le pool
+        available = list(pool)
+    if not available:
+        return []
+    if len(available) <= n:
+        return list(available)
+
+    recent_set = set(recent_used)
+    weights = [0.1 if x in recent_set else 1.0 for x in available]
+
+    chosen = []
+    remaining = list(available)
+    remaining_weights = list(weights)
+
+    for _ in range(min(n, len(remaining))):
+        if not remaining:
+            break
+        total = sum(remaining_weights)
+        if total <= 0:
+            pick = _rnd.choice(remaining)
+        else:
+            r = _rnd.random() * total
+            cumul = 0.0
+            pick = remaining[-1]
+            for elem, w in zip(remaining, remaining_weights):
+                cumul += w
+                if r <= cumul:
+                    pick = elem
+                    break
+        chosen.append(pick)
+        idx = remaining.index(pick)
+        remaining.pop(idx)
+        remaining_weights.pop(idx)
+
+    return chosen
+
+# ══════════════════════════════════════════════════════════════════════════════
+# BLOC 3 — Sélection contrôlée S/A/B : taille carousel, plan, assets
+#
+# FALLBACK COMPLET si catégories vides :
+# - get_carousel_size()      → fonctionne toujours (pas de dépendance aux catégories)
+# - build_carousel_plan()    → fonctionne toujours
+# - select_carousel_assets() → si toutes les catégories sont vides :
+#     templates : sélection aléatoire parmi toutes les templates R2
+#     flocages  : ancien système pépites+normaux
+#   Le bot se comporte exactement comme avant jusqu'au remplissage des catégories.
+# ══════════════════════════════════════════════════════════════════════════════
+
+def get_carousel_size():
+    """
+    Tire aléatoirement une taille de carousel selon CAROUSEL_SIZE_DISTRIBUTION.
+    Distribution pondérée — 8/9/10 images représentent 80% des cas.
+    Fonctionne toujours, indépendamment des catégories S/A/B.
+    """
+    import random as _rnd
+    sizes = list(CAROUSEL_SIZE_DISTRIBUTION.keys())
+    weights = [CAROUSEL_SIZE_DISTRIBUTION[s] for s in sizes]
+    total = sum(weights)
+    r = _rnd.random() * total
+    cumul = 0
+    for size, w in zip(sizes, weights):
+        cumul += w
+        if r <= cumul:
+            return size
+    return sizes[-1]
+
+def partition_bulk_into_carousels(n_items, rng=None):
+    """
+    Découpe n_items en tailles de carousels ∈ [7,12] avec somme == n_items.
+
+    Retourne (sizes, leftover) :
+      - sizes    : liste de tailles, chacune dans [7,12]
+      - leftover : nombre d'images non plaçables (< 7), jamais transformées en carousel tronqué
+
+    La distribution CAROUSEL_SIZE_DISTRIBUTION est une cible statistique, pas une
+    contrainte stricte par bulk. On tire les tailles selon cette distribution puis
+    on corrige l'écart pour que la somme soit exactement n_items.
+
+    Cas "zone morte" : certaines valeurs (ex: 13) ne sont pas décomposables en
+    tailles [7,12]. On place alors autant de carousels complets que possible et
+    on signale le reste via leftover (jamais de carousel < 7).
+    """
+    import random as _random
+    if rng is None:
+        rng = _random.Random()
+    if n_items < 7:
+        return [], n_items
+
+    avg = sum(s * w for s, w in CAROUSEL_SIZE_DISTRIBUTION.items()) / sum(CAROUSEL_SIZE_DISTRIBUTION.values())
+
+    # k faisable = nombre de carousels tel que n_items ∈ [k*7, k*12]
+    feasible_k = [k for k in range(1, n_items // 7 + 1) if k * 7 <= n_items <= k * 12]
+
+    if not feasible_k:
+        # Zone morte : placer au mieux, signaler le reste en leftover
+        k = max(1, round(n_items / avg))
+        sizes, remaining = [], n_items
+        for _ in range(k):
+            if remaining < 7:
+                break
+            s = min(12, max(7, min(remaining, get_carousel_size())))
+            if remaining - s < 0:
+                s = remaining
+            if s < 7:
+                break
+            sizes.append(s)
+            remaining -= s
+        return sizes, remaining
+
+    # Choisir k le plus proche du ratio idéal n_items/avg
+    ideal_k = n_items / avg
+    k = min(feasible_k, key=lambda kk: abs(kk - ideal_k))
+
+    # Tirer k tailles selon la distribution
+    sizes = [get_carousel_size() for _ in range(k)]
+
+    # Corriger l'écart pour que sum(sizes) == n_items (en restant dans [7,12])
+    diff = n_items - sum(sizes)
+    guard = 0
+    while diff != 0 and guard < 100000:
+        guard += 1
+        idx = rng.randrange(len(sizes))
+        if diff > 0 and sizes[idx] < 12:
+            sizes[idx] += 1
+            diff -= 1
+        elif diff < 0 and sizes[idx] > 7:
+            sizes[idx] -= 1
+            diff += 1
+
+    rng.shuffle(sizes)
+    return sizes, 0
+
+def build_carousel_plan(carousel_size):
+    """
+    Construit le plan S/A/B strict pour un carousel de taille donnée.
+    Retourne une liste de dicts : [{"pos": 1, "tier": "S"}, ...]
+
+    La segmentation est stricte : toutes les S d'abord, puis A, puis B.
+    Les counts viennent de CAROUSEL_SEGMENT_PLAN.
+    Fonctionne toujours, indépendamment des catégories S/A/B.
+    """
+    plan_counts = CAROUSEL_SEGMENT_PLAN.get(carousel_size, {"S": 4, "A": 2, "B": 1})
+    plan = []
+    pos = 1
+    for tier in ("S", "A", "B"):
+        for _ in range(plan_counts.get(tier, 0)):
+            plan.append({"pos": pos, "tier": tier})
+            pos += 1
+    return plan
+
+def select_carousel_assets(plan, tmpl_cats=None, floc_cats=None, recent_override=None):
+    """
+    Pour chaque slot du plan, sélectionne un template et un flocage du tier correspondant.
+
+    Paramètres optionnels (pour éviter des appels R2 répétés dans un bulk multi-carousel) :
+      tmpl_cats      : résultat de _load_templates_categories() déjà chargé
+      floc_cats      : résultat de _load_flocages_categories() déjà chargé
+      recent_override: état recent_used courant (dict {"templates":[],"flocages":[]})
+
+    DEUX MODES EXCLUSIFS — aucun fallback inter-tier :
+
+    MODE 1 — catégorisation inactive (toutes S/A/B vides) :
+      templates → sélection aléatoire parmi toutes les clés R2 templates/
+      flocages  → ancien système _draw_pepites/_draw_normaux selon position
+      Comportement identique à l'ancien bot.
+
+    MODE 2 — catégorisation active (au moins une catégorie non vide) :
+      position S → pool S UNIQUEMENT
+      position A → pool A UNIQUEMENT
+      position B → pool B UNIQUEMENT
+      Si un tier nécessaire est vide → carousel marqué config_insuffisante,
+      retourne None. Aucun fallback inter-tier, aucun DEFAULT_FLOCAGES.
+
+    Retourne une liste de dicts ou None si config insuffisante en MODE 2.
+    """
+    import random as _rnd
+
+    # Charger les données si non fournies (appels existants sans paramètres)
+    if tmpl_cats is None:
+        tmpl_cats = _load_templates_categories()
+    if floc_cats is None:
+        floc_cats = _load_flocages_categories()
+    recent = recent_override if recent_override is not None else _get_recent_used()
+
+    tmpl_cats_empty = _categories_are_empty(tmpl_cats)
+    floc_cats_empty = _categories_are_empty(floc_cats)
+
+    # Détecter le mode actif — STRICT GLOBAL
+    # MODE 1 : les DEUX côtés (templates ET flocages) sont totalement vides
+    #          → comportement legacy ancien bot (fallback global des deux côtés).
+    # MODE 2 : dès qu'AU MOINS un côté est configuré → catégorisation active.
+    #          → les DEUX côtés doivent être configurés en S/A/B stricts.
+    #          → si un côté (ou un tier) est vide → config_insuffisante, aucun fallback.
+    mode1 = tmpl_cats_empty and floc_cats_empty
+
+    if mode1:
+        print("[ASSETS] MODE 1 — S/A/B non configurés → comportement ancien bot (legacy)")
+    else:
+        print(f"[ASSETS] MODE 2 STRICT — catégorisation active "
+              f"(templates_vides={tmpl_cats_empty}, flocages_vides={floc_cats_empty})")
+        # STRICT GLOBAL : en MODE 2, si un côté entier est vide → config insuffisante immédiate
+        if tmpl_cats_empty:
+            print("[ASSETS] ❌ CONFIG INSUFFISANTE: catégorisation active mais templates S/A/B totalement vides")
+            return None
+        if floc_cats_empty:
+            print("[ASSETS] ❌ CONFIG INSUFFISANTE: catégorisation active mais flocages S/A/B totalement vides")
+            return None
+
+    # ── Fallback MODE 1 uniquement ────────────────────────────────────────────
+    _all_template_keys_cache = None
+    def _get_all_template_keys():
+        nonlocal _all_template_keys_cache
+        if _all_template_keys_cache is None:
+            try:
+                _all_template_keys_cache = r2_list_keys(PFX_TEMPLATES) or []
+            except Exception:
+                _all_template_keys_cache = []
+        return _all_template_keys_cache
+
+    def _get_fallback_flocage_mode1(pos_0based):
+        """MODE 1 uniquement : ancien comportement pépites/normaux selon position."""
+        if pos_0based < 4:
+            drawn = _draw_pepites(1)
+            return drawn[0] if drawn else (_draw_normaux(1) or [DEFAULT_FLOCAGES[0]])[0]
+        else:
+            drawn = _draw_normaux(1)
+            return drawn[0] if drawn else (_draw_pepites(1) or [DEFAULT_FLOCAGES[0]])[0]
+
+    used_templates = []
+    used_flocages  = []
+
+    # Regrouper par tier pour une sélection groupée (meilleure diversité)
+    slots_by_tier = {"S": [], "A": [], "B": []}
+    for slot in plan:
+        slots_by_tier[slot["tier"]].append(slot)
+
+    selected_by_tier = {}
+    for tier in ("S", "A", "B"):
+        n = len(slots_by_tier[tier])
+        if n == 0:
+            selected_by_tier[tier] = {"templates": [], "flocages": [], "ok": True}
+            continue
+
+        # ── Sélection templates ──────────────────────────────────────────────
+        if mode1:
+            # MODE 1 : aléatoire parmi toutes les templates R2
+            all_keys = _get_all_template_keys()
+            if all_keys:
+                chosen_tmpls = _penalized_sample(all_keys, n, recent["templates"], used_templates)
+                while len(chosen_tmpls) < n:
+                    chosen_tmpls.append(_rnd.choice(all_keys))
+            else:
+                chosen_tmpls = [""] * n
+        else:
+            # MODE 2 : pool du tier UNIQUEMENT, aucun fallback inter-tier
+            tmpl_pool = tmpl_cats.get(tier, [])
+            if not tmpl_pool:
+                print(f"[ASSETS] ❌ CONFIG INSUFFISANTE: templates tier={tier} vide en MODE 2")
+                selected_by_tier[tier] = {"templates": [], "flocages": [], "ok": False, "error": f"templates_{tier}_vide"}
+                continue
+            chosen_tmpls = _penalized_sample(tmpl_pool, n, recent["templates"], used_templates)
+            while len(chosen_tmpls) < n:
+                chosen_tmpls.append(_rnd.choice(tmpl_pool))
+
+        # ── Sélection flocages ───────────────────────────────────────────────
+        if mode1:
+            # MODE 1 : ancien système pépites/normaux selon position
+            chosen_flocs = []
+            for slot in slots_by_tier[tier]:
+                chosen_flocs.append(_get_fallback_flocage_mode1(slot["pos"] - 1))
+        else:
+            # MODE 2 : pool du tier UNIQUEMENT, aucun fallback inter-tier
+            floc_pool = floc_cats.get(tier, [])
+            if not floc_pool:
+                print(f"[ASSETS] ❌ CONFIG INSUFFISANTE: flocages tier={tier} vide en MODE 2")
+                selected_by_tier[tier] = {"templates": [], "flocages": [], "ok": False, "error": f"flocages_{tier}_vide"}
+                continue
+            chosen_flocs = _penalized_sample(floc_pool, n, recent["flocages"], used_flocages)
+            while len(chosen_flocs) < n:
+                chosen_flocs.append(_rnd.choice(floc_pool))
+
+        used_templates.extend(chosen_tmpls)
+        used_flocages.extend(chosen_flocs)
+        selected_by_tier[tier] = {"templates": chosen_tmpls, "flocages": chosen_flocs, "ok": True}
+
+    # Vérifier qu'aucun tier nécessaire n'a échoué (MODE 2 uniquement)
+    if not mode1:
+        for tier in ("S", "A", "B"):
+            n = len(slots_by_tier[tier])
+            if n > 0 and not selected_by_tier.get(tier, {}).get("ok", True):
+                err = selected_by_tier[tier].get("error", f"tier_{tier}_vide")
+                print(f"[ASSETS] ❌ Carousel annulé — config_insuffisante: {err}")
+                return None  # Signal explicite : carousel ne peut pas être créé
+
+    # Assembler dans l'ordre du plan
+    assets = []
+    tier_cursors = {"S": 0, "A": 0, "B": 0}
+    for slot in plan:
+        tier = slot["tier"]
+        i    = tier_cursors[tier]
+        tier_data = selected_by_tier.get(tier, {"templates": [], "flocages": []})
+        tmpl = tier_data["templates"][i] if i < len(tier_data["templates"]) else ""
+        floc = tier_data["flocages"][i]  if i < len(tier_data["flocages"])  else ""
+        assets.append({"pos": slot["pos"], "tier": tier, "template_key": tmpl, "flocage": floc})
+        tier_cursors[tier] += 1
+
+    return assets
+
+def _save_tiktok(num, images_b64, user, flockages=None, template_keys=None, preserve_order=False):
     r2 = get_r2()
     if not r2: return False
 
-    # ── Réordonner les flocages : pépites en premier (4 max), normaux ensuite ──
-    # Les flocages ont été tirés individuellement dans gemini_one
+    # ── Ordre des flocages ────────────────────────────────────────────────────
+    # preserve_order=True (carousels atomiques S/A/B) : l'ordre position↔flocage↔image
+    #   a déjà été construit par select_carousel_assets() et trié par pos dans
+    #   _update_session. On NE réordonne PAS — sinon on casserait la segmentation
+    #   S/A/B et l'alignement image↔flocage.
+    # preserve_order=False (legacy generate_single) : ancien comportement — pépites
+    #   d'abord, normaux ensuite.
     import random as _rnd
-    try:
-        floc_data = r2_get_json("meta/flocages.json") or {}
-        pepites_raw = floc_data.get("pepites", PEPITE_FLOCAGES)
-        # Comparaison insensible à la casse
-        pepites_set_lower = {p.lower().strip() for p in pepites_raw}
-    except Exception:
-        pepites_set_lower = {p.lower().strip() for p in PEPITE_FLOCAGES}
-
     provided = [f for f in (flockages or []) if f]
-    if provided:
-        # Réordonner : pépites d'abord, normaux ensuite (comparaison insensible casse)
-        pepites_in = [f for f in provided if f.lower().strip() in pepites_set_lower]
-        normaux_in = [f for f in provided if f.lower().strip() not in pepites_set_lower]
-        final_flockages = pepites_in + normaux_in
+
+    if preserve_order:
+        # Nouveau système : conserver l'ordre exact (déjà S puis A puis B par position)
+        if provided:
+            final_flockages = provided
+        else:
+            # Sécurité : si aucun flocage fourni pour un carousel atomique, ne pas inventer d'ordre
+            final_flockages = []
     else:
-        # Fallback si aucun flocage fourni
-        pepites_chosen = _draw_pepites(4)
-        normaux_chosen = _draw_normaux(3)
-        final_flockages = pepites_chosen + normaux_chosen
-    print(f"[TIKTOK {num}] {len(final_flockages)} flocages: {final_flockages[:2]}...")
+        # ── Legacy : réordonner pépites en premier, normaux ensuite ──
+        try:
+            floc_data = r2_get_json("meta/flocages.json") or {}
+            pepites_raw = floc_data.get("pepites", PEPITE_FLOCAGES)
+            pepites_set_lower = {p.lower().strip() for p in pepites_raw}
+        except Exception:
+            pepites_set_lower = {p.lower().strip() for p in PEPITE_FLOCAGES}
+
+        if provided:
+            pepites_in = [f for f in provided if f.lower().strip() in pepites_set_lower]
+            normaux_in = [f for f in provided if f.lower().strip() not in pepites_set_lower]
+            final_flockages = pepites_in + normaux_in
+        else:
+            pepites_chosen = _draw_pepites(4)
+            normaux_chosen = _draw_normaux(3)
+            final_flockages = pepites_chosen + normaux_chosen
+    print(f"[TIKTOK {num}] {len(final_flockages)} flocages (preserve_order={preserve_order}): {final_flockages[:2]}...")
 
     image_keys = []
     for i, b64 in enumerate(images_b64):
@@ -1992,7 +2905,7 @@ def stats():
 def api_buffer():
     buf = get_buffer()
     pending = len(buf.get("images_b64", []))
-    return jsonify({"pending": pending, "needed": max(0, TIKTOK_SIZE - pending)})
+    return jsonify({"pending": pending, "needed": max(0, 7 - pending), "note": "target_size dynamique selon carousel"})
 
 @app.route("/api/buffer/clear", methods=["POST"])
 def api_buffer_clear():
@@ -2095,7 +3008,7 @@ def api_dispatch_smart():
     
     # Calculer le ratio de créneaux par compte
     all_accounts = list(METRICOOL_ACCOUNTS.keys())
-    total_slots = sum(len(get_schedule_times_for_account(a)) for a in all_accounts)
+    total_slots = sum(len(SCHEDULE_WINDOWS_BY_ACCOUNT.get(a, SCHEDULE_WINDOWS_DEFAULT)) for a in all_accounts)
     
     # Charger tous les TikToks en attente non assignés
     keys = sorted(r2_list_keys(PFX_QUEUE))
@@ -2112,7 +3025,7 @@ def api_dispatch_smart():
     # Répartir proportionnellement
     assignments = {}
     for acc in all_accounts:
-        ratio = len(get_schedule_times_for_account(acc)) / total_slots
+        ratio = len(SCHEDULE_WINDOWS_BY_ACCOUNT.get(acc, SCHEDULE_WINDOWS_DEFAULT)) / total_slots
         assignments[acc] = max(1, round(len(pending) * ratio))
     
     # Ajuster pour avoir exactement len(pending) assignments
@@ -2219,6 +3132,79 @@ def api_schedule_status():
         return result
     return jsonify(result)
 
+def get_or_create_slot_time(account, window_index, date_str):
+    """
+    Retourne l'heure UTC (HH:MM) pour un créneau donné (compte + index fenêtre + date).
+
+    - Si une heure a déjà été persistée pour ce créneau → la réutiliser.
+    - Sinon → tirer aléatoirement dans la fenêtre et persister.
+
+    Garantit qu'un redémarrage du bot ne recalcule pas une nouvelle heure.
+    Protection : si l'heure tirée est trop proche d'un autre créneau du même
+    compte/date (< 90 min), on retente jusqu'à trouver un horaire acceptable.
+    """
+    import random as _rnd
+
+    plan_r2_key = "meta/scheduled_slots_plan.json"
+    persist_key = f"{account}|{date_str}|{window_index}"
+
+    # Lire le plan persisté depuis R2
+    try:
+        plan = r2_get_json(plan_r2_key) or {}
+    except Exception:
+        plan = {}
+
+    # Si déjà calculé → réutiliser sans recalcul
+    if persist_key in plan:
+        return plan[persist_key]
+
+    # Trouver la fenêtre correspondante
+    windows = SCHEDULE_WINDOWS_BY_ACCOUNT.get(account, SCHEDULE_WINDOWS_DEFAULT)
+    w_idx = window_index % len(windows)
+    window = windows[w_idx]
+
+    start_h, start_m = map(int, window["start"].split(":"))
+    end_h,   end_m   = map(int, window["end"].split(":"))
+    start_total = start_h * 60 + start_m
+    end_total   = end_h   * 60 + end_m
+
+    # Collecter les heures déjà planifiées pour ce compte/date (protection espacement)
+    existing_minutes = []
+    for k, v in plan.items():
+        if k.startswith(f"{account}|{date_str}|"):
+            try:
+                eh, em = map(int, v.split(":"))
+                existing_minutes.append(eh * 60 + em)
+            except Exception:
+                pass
+
+    # Tirer une heure respectant l'espacement minimum de 90 min
+    chosen_total = None
+    for _ in range(20):
+        candidate = _rnd.randint(start_total, end_total)
+        too_close = any(abs(candidate - et) < 90 for et in existing_minutes)
+        if not too_close:
+            chosen_total = candidate
+            break
+
+    if chosen_total is None:
+        # Impossible d'éviter les conflits → milieu de la fenêtre
+        chosen_total = (start_total + end_total) // 2
+        print(f"[SCHEDULER] ⚠️ Conflit inévitable {account}/{date_str}/{window_index} → milieu fenêtre")
+
+    time_str = f"{chosen_total // 60:02d}:{chosen_total % 60:02d}"
+
+    # Persister pour survivre aux redémarrages Railway
+    try:
+        plan[persist_key] = time_str
+        r2_put_json(plan_r2_key, plan)
+        print(f"[SCHEDULER] Créneau persisté: {account} {date_str} fenêtre {window_index} → {time_str} UTC")
+    except Exception as e:
+        print(f"[SCHEDULER] Erreur persistance créneau: {e}")
+
+    return time_str
+
+
 def _do_schedule_data(data=None):
     if data is None:
         data = request.json or {}
@@ -2272,8 +3258,9 @@ def _do_schedule_data(data=None):
         # Forcer un rebuild complet pour avoir les vrais créneaux occupés
         used_slots_idx = rebuild_used_slots_index()
         used_slots = set(used_slots_idx.get(account, []))
-        account_times = get_schedule_times_for_account(account)
-        
+        account_windows = SCHEDULE_WINDOWS_BY_ACCOUNT.get(account, SCHEDULE_WINDOWS_DEFAULT)
+        n_windows = len(account_windows)
+
         # Repartir depuis maintenant pour trouver les trous
         scan_date = start_date
         scan_index = 0
@@ -2324,16 +3311,20 @@ def _do_schedule_data(data=None):
 
             if not use_custom:
                 # Scanner depuis le début pour trouver le premier trou disponible
+                # Utilise get_or_create_slot_time → heure aléatoire dans la fenêtre, persistée
                 while True:
-                    h,m = map(int, account_times[scan_index % len(account_times)].split(":"))
-                    slot_dt = datetime(scan_date.year,scan_date.month,scan_date.day,h,m,tzinfo=timezone.utc)
-                    slot_iso = slot_dt.isoformat()
+                    window_index = scan_index % n_windows
+                    date_str     = scan_date.isoformat()
+                    time_str     = get_or_create_slot_time(account, window_index, date_str)
+                    h, m         = map(int, time_str.split(":"))
+                    slot_dt      = datetime(scan_date.year, scan_date.month, scan_date.day, h, m, tzinfo=timezone.utc)
+                    slot_iso     = slot_dt.isoformat()
                     is_future_enough = slot_dt > now + timedelta(minutes=30)
                     if is_future_enough and slot_iso not in used_slots:
                         used_slots.add(slot_iso)
                         break
                     scan_index += 1
-                    if scan_index % len(account_times) == 0:
+                    if scan_index % n_windows == 0:
                         scan_date += timedelta(days=1)
 
             dt_str = slot_dt.isoformat()
@@ -2618,9 +3609,10 @@ def api_fix_slots():
     # Trier par date de programmation actuelle
     tiktoks.sort(key=lambda x: x[1].get("scheduled_at", ""))
 
-    # Recalculer les créneaux avec les bons horaires
-    account_times = get_schedule_times_for_account(account)
-    print(f"[FIX_SLOTS] {account}: {len(tiktoks)} TikToks, créneaux: {account_times}")
+    # Recalculer les créneaux avec le système de fenêtres aléatoires persistées
+    account_windows = SCHEDULE_WINDOWS_BY_ACCOUNT.get(account, SCHEDULE_WINDOWS_DEFAULT)
+    n_windows = len(account_windows)
+    print(f"[FIX_SLOTS] {account}: {len(tiktoks)} TikToks, {n_windows} fenêtres/jour")
 
     # Réinitialiser les créneaux utilisés pour ce compte
     used_slots_idx = get_used_slots_index()
@@ -2638,15 +3630,18 @@ def api_fix_slots():
         key, tiktok_data = item
         metricool_post_id_fix = tiktok_data.get("metricool_post_id")
 
-        # Trouver le prochain créneau disponible
+        # Trouver le prochain créneau disponible (fenêtres aléatoires persistées)
         while True:
-            h, m = map(int, account_times[slot_index % len(account_times)].split(":"))
+            window_index = slot_index % n_windows
+            date_str = slot_date.isoformat()
+            time_str = get_or_create_slot_time(account, window_index, date_str)
+            h, m = map(int, time_str.split(":"))
             slot_dt = datetime(slot_date.year, slot_date.month, slot_date.day, h, m, tzinfo=timezone.utc)
             slot_iso = slot_dt.isoformat()
             if slot_dt > now + timedelta(minutes=30) and slot_iso not in used_slots:
                 break
             slot_index += 1
-            if slot_index % len(account_times) == 0:
+            if slot_index % n_windows == 0:
                 slot_date = slot_date + timedelta(days=1)
 
         new_dt_str = slot_dt.isoformat()
@@ -2680,7 +3675,7 @@ def api_fix_slots():
         add_used_slot(account, new_dt_str)
 
         slot_index += 1
-        if slot_index % len(account_times) == 0:
+        if slot_index % n_windows == 0:
             slot_date = slot_date + timedelta(days=1)
 
     # Supprimer les anciens créneaux de l'index
@@ -2875,7 +3870,7 @@ def api_autopilot_plan():
         if acc: queue_by_acc[acc] = queue_by_acc.get(acc, 0) + 1
     
     for acc in all_accounts:
-        slots_per_day = len(get_schedule_times_for_account(acc))
+        slots_per_day = len(SCHEDULE_WINDOWS_BY_ACCOUNT.get(acc, SCHEDULE_WINDOWS_DEFAULT))
         tiktoks_needed = slots_per_day * days
         already_scheduled = scheduled_by_acc.get(acc, 0)
         in_queue = queue_by_acc.get(acc, 0)
@@ -2885,9 +3880,9 @@ def api_autopilot_plan():
             "scheduled": already_scheduled,
             "in_queue": in_queue,
             "missing": missing,
-            "images_to_generate": missing * TIKTOK_SIZE
+            "images_to_generate": missing * 9  # estimation : taille moyenne carousel (distribution 7-12)
         }
-        total_needed += missing * TIKTOK_SIZE
+        total_needed += missing * 9  # estimation : taille moyenne carousel
     
     return jsonify({
         "days": days,
@@ -3242,8 +4237,71 @@ def api_get_flocages():
 @app.route("/api/flocages", methods=["POST"])
 def api_save_flocages():
     data = request.json
-    r2_put_json("meta/flocages.json", {"flocages": data.get("flocages", [])})
+    # Merger au lieu d'écraser — préserve les catégories S/A/B et les pepites existants
+    existing = r2_get_json("meta/flocages.json") or {}
+    existing["flocages"] = data.get("flocages", [])
+    r2_put_json("meta/flocages.json", existing)
     return jsonify({"success": True})
+
+# ── Routes catégories templates S/A/B (BLOC 2) ──────────────────────────────
+@app.route("/api/templates/categories", methods=["GET"])
+def api_get_templates_categories():
+    """Retourne les catégories S/A/B des templates"""
+    return jsonify(_load_templates_categories())
+
+@app.route("/api/templates/categories", methods=["POST"])
+def api_save_templates_categories():
+    """Sauvegarde les catégories S/A/B des templates"""
+    data = request.json or {}
+    ok = _save_templates_categories({"S": data.get("S", []), "A": data.get("A", []), "B": data.get("B", [])})
+    return jsonify({"success": ok})
+
+# ── Routes catégories flocages S/A/B (BLOC 2) ───────────────────────────────
+@app.route("/api/flocages/categories", methods=["GET"])
+def api_get_flocages_categories():
+    """Retourne les catégories S/A/B des flocages"""
+    return jsonify(_load_flocages_categories())
+
+@app.route("/api/flocages/categories", methods=["POST"])
+def api_save_flocages_categories():
+    """Sauvegarde les catégories S/A/B des flocages"""
+    data = request.json or {}
+    ok = _save_flocages_categories({"S": data.get("S", []), "A": data.get("A", []), "B": data.get("B", [])})
+    return jsonify({"success": ok})
+
+# ── Routes anti-répétition (BLOC 2) ─────────────────────────────────────────
+@app.route("/api/recent_used", methods=["GET"])
+def api_get_recent_used_route():
+    """Retourne les éléments récemment utilisés (debug/info)"""
+    return jsonify(_get_recent_used())
+
+@app.route("/api/recent_used/reset", methods=["POST"])
+def api_reset_recent_used():
+    """Remet à zéro l'historique anti-répétition"""
+    try:
+        r2_put_json("meta/recent_used.json", {"templates": [], "flocages": []})
+        return jsonify({"success": True})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+# ── Routes scheduler plan persisté (BLOC 7) ─────────────────────────────────
+@app.route("/api/scheduler/slots_plan", methods=["GET"])
+def api_get_slots_plan():
+    """Retourne le plan d'heures persistées par créneau (debug/info)"""
+    try:
+        plan = r2_get_json("meta/scheduled_slots_plan.json") or {}
+        return jsonify(plan)
+    except Exception as e:
+        return jsonify({"error": str(e)})
+
+@app.route("/api/scheduler/slots_plan/reset", methods=["POST"])
+def api_reset_slots_plan():
+    """Vide le plan d'heures persistées (force recalcul des créneaux)"""
+    try:
+        r2_put_json("meta/scheduled_slots_plan.json", {})
+        return jsonify({"success": True})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
 
 @app.route("/remove_box")
 def remove_box_page():
@@ -3871,10 +4929,17 @@ def api_calendar():
     return jsonify({
         "events": events,
         "accounts": accounts_list,
+        # schedule_times : conservé pour rétrocompat frontend (calendar.html lit .length)
+        # Généré depuis les fenêtres → .length = nb réel de publications/jour (3)
         "schedule_times": {
-            acc: get_schedule_times_for_account(acc)
+            acc: [f'{w["start"]}-{w["end"]}' for w in SCHEDULE_WINDOWS_BY_ACCOUNT.get(acc, SCHEDULE_WINDOWS_DEFAULT)]
             for acc in accounts_list
-        }
+        },
+        # schedule_windows : nouveau format complet (fenêtres), pour évolution frontend
+        "schedule_windows": {
+            acc: SCHEDULE_WINDOWS_BY_ACCOUNT.get(acc, SCHEDULE_WINDOWS_DEFAULT)
+            for acc in accounts_list
+        },
     })
 
 
