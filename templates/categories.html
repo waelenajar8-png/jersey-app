@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Catégories S/A/B — Générateur</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root[data-theme="dark"]{
+    --bg:#0a0b0f; --bg-elevated:#0f1117;
+    --panel:#15171e; --panel-hover:#1a1d26;
+    --border:#242832; --border-strong:#323847;
+    --accent:#4ade80; --accent-grad:linear-gradient(135deg,#4ade80,#22d3ee); --accent-dim:rgba(74,222,128,.12);
+    --text:#f1f3f6; --text-dim:#8b93a3; --text-faint:#5b6373;
+    --danger:#f87171; --danger-dim:rgba(248,113,113,.12);
+    --tier-s:#fbbf24; --tier-s-dim:rgba(251,191,36,.15);
+    --tier-a:#60a5fa; --tier-a-dim:rgba(96,165,250,.15);
+    --tier-b:#94a3b8; --tier-b-dim:rgba(148,163,184,.15);
+    --shadow-sm:0 1px 2px rgba(0,0,0,.3);
+    --shadow-md:0 4px 12px rgba(0,0,0,.35),0 1px 3px rgba(0,0,0,.3);
+    --shadow-glow:0 0 0 1px rgba(74,222,128,.15),0 4px 16px rgba(74,222,128,.08);
+}
+:root[data-theme="light"]{
+    --bg:#f7f8fa; --bg-elevated:#ffffff;
+    --panel:#ffffff; --panel-hover:#f9fafb;
+    --border:#e5e7eb; --border-strong:#d1d5db;
+    --accent:#16a34a; --accent-grad:linear-gradient(135deg,#16a34a,#0891b2); --accent-dim:rgba(22,163,74,.08);
+    --text:#0f172a; --text-dim:#64748b; --text-faint:#94a3b8;
+    --danger:#dc2626; --danger-dim:rgba(220,38,38,.08);
+    --tier-s:#d97706; --tier-s-dim:rgba(217,119,6,.1);
+    --tier-a:#2563eb; --tier-a-dim:rgba(37,99,235,.1);
+    --tier-b:#64748b; --tier-b-dim:rgba(100,116,139,.1);
+    --shadow-sm:0 1px 2px rgba(15,23,42,.06);
+    --shadow-md:0 4px 12px rgba(15,23,42,.08),0 1px 3px rgba(15,23,42,.06);
+    --shadow-glow:0 0 0 1px rgba(22,163,74,.12),0 4px 16px rgba(22,163,74,.06);
+}
+*{box-sizing:border-box}
+::selection{background:var(--accent);color:#0a0b0f}
+body{margin:0;font-family:'Inter',-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;padding:32px 24px;letter-spacing:-0.01em;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1280px;margin:0 auto}
+@keyframes fadeInUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+.topbar{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:24px;flex-wrap:wrap;gap:12px}
+h1{font-size:24px;margin:0;font-weight:800;letter-spacing:-0.02em}
+.nav{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+@media(max-width:640px){
+    .topbar{flex-direction:column;align-items:stretch}
+    .nav{flex-wrap:nowrap;overflow-x:auto;padding-bottom:4px;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+    .nav::-webkit-scrollbar{display:none}
+    .nav a,.theme-btn{flex-shrink:0}
+}
+.nav a{color:var(--text-dim);text-decoration:none;font-size:13px;font-weight:600;padding:6px 10px;border-radius:8px;transition:all .15s ease}
+.nav a:hover{color:var(--text);background:var(--panel-hover)}
+.nav a.active{color:var(--text);background:var(--accent-dim)}
+.btn{padding:11px 20px;background:var(--accent-grad);color:#06170d;border:none;border-radius:11px;font-size:13.5px;font-weight:700;cursor:pointer;box-shadow:var(--shadow-glow);transition:all .18s cubic-bezier(.16,1,.3,1)}
+.btn:hover:not(:disabled){transform:translateY(-1.5px);box-shadow:0 6px 20px rgba(74,222,128,.25),var(--shadow-glow)}
+.btn:disabled{opacity:0.4;cursor:not-allowed;box-shadow:none}
+.btn-sec{padding:10px 18px;background:var(--panel);border:1px solid var(--border);color:var(--text);border-radius:10px;font-size:12.5px;font-weight:600;cursor:pointer;transition:all .15s ease}
+.btn-sec:hover{border-color:var(--border-strong);transform:translateY(-1px);box-shadow:var(--shadow-sm)}
+.theme-btn{background:var(--panel);border:1px solid var(--border);color:var(--text);padding:6px 12px;border-radius:100px;cursor:pointer;font-size:13px;font-weight:600;box-shadow:var(--shadow-sm);transition:all .15s ease}
+.theme-btn:hover{border-color:var(--border-strong);transform:translateY(-1px)}
+
+/* Onglets */
+.tabs{display:flex;gap:6px;margin-bottom:20px;border-bottom:1px solid var(--border);padding-bottom:0}
+.tab{padding:12px 20px;background:none;border:none;color:var(--text-dim);font-size:14px;font-weight:600;cursor:pointer;border-bottom:2px solid transparent;transition:all .15s ease;margin-bottom:-1px}
+.tab:hover{color:var(--text)}
+.tab.active{color:var(--text);border-bottom-color:var(--accent)}
+
+/* Barre d'outils */
+.toolbar{display:flex;gap:10px;margin-bottom:20px;flex-wrap:wrap;align-items:center}
+.count{color:var(--text-dim);font-size:13px;font-weight:500}
+.filter-tabs{display:flex;gap:4px;background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:3px}
+.filter-tab{padding:6px 14px;background:none;border:none;color:var(--text-dim);font-size:12.5px;font-weight:600;cursor:pointer;border-radius:7px;transition:all .15s ease}
+.filter-tab:hover{color:var(--text)}
+.filter-tab.active{background:var(--panel-hover);color:var(--text)}
+.search{flex:1;min-width:180px;padding:10px 14px;background:var(--bg-elevated);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:13px;font-family:inherit}
+.search:focus{outline:none;border-color:var(--accent)}
+
+/* Badges tier */
+.tier-badge{display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:22px;border-radius:6px;font-size:12px;font-weight:800;padding:0 6px}
+.tier-S{background:var(--tier-s-dim);color:var(--tier-s)}
+.tier-A{background:var(--tier-a-dim);color:var(--tier-a)}
+.tier-B{background:var(--tier-b-dim);color:var(--tier-b)}
+.tier-none{background:var(--panel-hover);color:var(--text-faint)}
+
+/* Stats de répartition */
+.stats-row{display:flex;gap:10px;margin-bottom:20px;flex-wrap:wrap}
+.stat-pill{display:flex;align-items:center;gap:8px;padding:8px 14px;background:var(--panel);border:1px solid var(--border);border-radius:10px;font-size:13px;font-weight:600}
+.stat-pill .dot{width:9px;height:9px;border-radius:50%}
+.dot-S{background:var(--tier-s)}.dot-A{background:var(--tier-a)}.dot-B{background:var(--tier-b)}.dot-none{background:var(--text-faint)}
+
+/* Grille templates */
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:16px}
+.card{background:var(--bg-elevated);border:1px solid var(--border);border-radius:14px;overflow:hidden;transition:all .18s ease;animation:fadeInUp .3s ease both}
+.card:hover{border-color:var(--border-strong);box-shadow:var(--shadow-md)}
+.card.has-S{border-color:var(--tier-s)}
+.card.has-A{border-color:var(--tier-a)}
+.card.has-B{border-color:var(--tier-b)}
+.card-img{width:100%;aspect-ratio:9/16;object-fit:cover;background:var(--panel);display:block}
+.card-body{padding:10px 12px}
+.card-name{font-size:11.5px;color:var(--text-dim);font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:8px}
+.tier-buttons{display:flex;gap:5px}
+.tier-btn{flex:1;padding:7px 0;background:var(--panel);border:1px solid var(--border);color:var(--text-dim);font-size:13px;font-weight:800;cursor:pointer;border-radius:8px;transition:all .12s ease}
+.tier-btn:hover{border-color:var(--border-strong);color:var(--text)}
+.tier-btn.active-S{background:var(--tier-s-dim);border-color:var(--tier-s);color:var(--tier-s)}
+.tier-btn.active-A{background:var(--tier-a-dim);border-color:var(--tier-a);color:var(--tier-a)}
+.tier-btn.active-B{background:var(--tier-b-dim);border-color:var(--tier-b);color:var(--tier-b)}
+.card-actions{display:flex;gap:5px;margin-top:6px}
+.mini-btn{flex:1;padding:5px 0;background:none;border:1px solid var(--border);color:var(--text-faint);font-size:10.5px;font-weight:600;cursor:pointer;border-radius:7px;transition:all .12s ease}
+.mini-btn:hover{color:var(--text-dim);border-color:var(--border-strong)}
+.mini-btn.danger:hover{color:var(--danger);border-color:var(--danger)}
+
+/* Liste flocages */
+.floc-list{display:flex;flex-direction:column;gap:8px}
+.floc-row{display:flex;align-items:center;gap:14px;padding:12px 16px;background:var(--bg-elevated);border:1px solid var(--border);border-radius:12px;transition:all .15s ease;animation:fadeInUp .25s ease both}
+.floc-row:hover{border-color:var(--border-strong)}
+.floc-row.has-S{border-left:3px solid var(--tier-s)}
+.floc-row.has-A{border-left:3px solid var(--tier-a)}
+.floc-row.has-B{border-left:3px solid var(--tier-b)}
+.floc-fields{flex:1;display:flex;gap:10px;align-items:center;flex-wrap:wrap;min-width:0}
+.floc-name{font-size:14px;font-weight:700}
+.floc-num{display:inline-flex;align-items:center;justify-content:center;min-width:26px;height:26px;background:var(--panel-hover);border-radius:6px;font-size:13px;font-weight:800;color:var(--accent)}
+.floc-below{font-size:13px;color:var(--text-dim);font-weight:500}
+.floc-raw{font-size:11px;color:var(--text-faint);font-family:monospace}
+.floc-tier-buttons{display:flex;gap:5px;flex-shrink:0}
+.floc-tier-btn{width:34px;padding:7px 0;background:var(--panel);border:1px solid var(--border);color:var(--text-dim);font-size:13px;font-weight:800;cursor:pointer;border-radius:8px;transition:all .12s ease}
+.floc-tier-btn:hover{border-color:var(--border-strong);color:var(--text)}
+.floc-tier-btn.active-S{background:var(--tier-s-dim);border-color:var(--tier-s);color:var(--tier-s)}
+.floc-tier-btn.active-A{background:var(--tier-a-dim);border-color:var(--tier-a);color:var(--tier-a)}
+.floc-tier-btn.active-B{background:var(--tier-b-dim);border-color:var(--tier-b);color:var(--tier-b)}
+.floc-remove{padding:7px 12px;background:none;border:1px solid var(--border);color:var(--text-faint);font-size:11px;font-weight:600;cursor:pointer;border-radius:8px;flex-shrink:0;transition:all .12s ease}
+.floc-remove:hover{color:var(--danger);border-color:var(--danger)}
+
+.section{display:none}
+.section.active{display:block}
+.empty{text-align:center;padding:60px 20px;color:var(--text-faint);font-size:14px}
+.loading{text-align:center;padding:60px 20px;color:var(--text-dim);font-size:14px}
+.save-bar{position:fixed;bottom:0;left:0;right:0;background:var(--panel);border-top:1px solid var(--border-strong);padding:14px 24px;display:flex;align-items:center;justify-content:space-between;gap:16px;box-shadow:0 -4px 20px rgba(0,0,0,.2);transform:translateY(100%);transition:transform .25s cubic-bezier(.16,1,.3,1);z-index:100}
+.save-bar.visible{transform:translateY(0)}
+.save-bar .info{font-size:13px;color:var(--text-dim);font-weight:500}
+.save-bar .actions{display:flex;gap:10px}
+.toast{position:fixed;top:24px;right:24px;background:var(--panel);border:1px solid var(--accent);color:var(--text);padding:14px 20px;border-radius:12px;font-size:13.5px;font-weight:600;box-shadow:var(--shadow-md);transform:translateX(400px);transition:transform .3s cubic-bezier(.16,1,.3,1);z-index:200}
+.toast.visible{transform:translateX(0)}
+.toast.error{border-color:var(--danger)}
+.warn-box{background:var(--danger-dim);border:1px solid var(--danger);border-radius:12px;padding:14px 18px;margin-bottom:20px;font-size:13px;color:var(--text);line-height:1.5}
+.warn-box b{color:var(--danger)}
+.pad-bottom{height:80px}
+</style>
+</head>
+<body>
+<div class="wrap">
+    <div class="topbar">
+        <h1>🏷️ Catégories S / A / B</h1>
+        <div class="nav">
+            <a href="/">🎨 Générateur</a>
+            <a href="/templates">🖼️ Templates</a>
+            <a href="/categories" class="active">🏷️ Catégories</a>
+            <a href="/queue">📋 File d'attente</a>
+            <a href="/scheduled">✅ Programmés</a>
+            <a href="/calendar">📅 Calendrier</a>
+            <button class="theme-btn" id="themeBtn">☀️ Mode clair</button>
+        </div>
+    </div>
+
+    <div class="warn-box">
+        ℹ️ Tant que les catégories S/A/B sont <b>totalement vides des deux côtés</b> (templates ET flocages),
+        le bot utilise l'ancien système. Dès que tu commences à classer, le <b>MODE strict</b> s'active :
+        il faudra que <b>templates ET flocages</b> aient leurs 3 niveaux S/A/B remplis pour générer.
+    </div>
+
+    <div class="tabs">
+        <button class="tab active" data-tab="templates">🖼️ Templates</button>
+        <button class="tab" data-tab="flocages">✍️ Flocages</button>
+    </div>
+
+    <!-- ══════════ SECTION TEMPLATES ══════════ -->
+    <div class="section active" id="section-templates">
+        <div class="stats-row" id="tmpl-stats"></div>
+        <div class="toolbar">
+            <div class="filter-tabs" id="tmpl-filters">
+                <button class="filter-tab active" data-filter="all">Tous</button>
+                <button class="filter-tab" data-filter="S">S</button>
+                <button class="filter-tab" data-filter="A">A</button>
+                <button class="filter-tab" data-filter="B">B</button>
+                <button class="filter-tab" data-filter="none">Non classés</button>
+            </div>
+            <input type="text" class="search" id="tmpl-search" placeholder="Rechercher un template…">
+            <span class="count" id="tmpl-count"></span>
+        </div>
+        <div class="grid" id="tmpl-grid">
+            <div class="loading">Chargement des templates…</div>
+        </div>
+    </div>
+
+    <!-- ══════════ SECTION FLOCAGES ══════════ -->
+    <div class="section" id="section-flocages">
+        <div class="stats-row" id="floc-stats"></div>
+        <div class="toolbar">
+            <div class="filter-tabs" id="floc-filters">
+                <button class="filter-tab active" data-filter="all">Tous</button>
+                <button class="filter-tab" data-filter="S">S</button>
+                <button class="filter-tab" data-filter="A">A</button>
+                <button class="filter-tab" data-filter="B">B</button>
+                <button class="filter-tab" data-filter="none">Non classés</button>
+            </div>
+            <input type="text" class="search" id="floc-search" placeholder="Rechercher un flocage…">
+            <span class="count" id="floc-count"></span>
+        </div>
+        <div class="floc-list" id="floc-list">
+            <div class="loading">Chargement des flocages…</div>
+        </div>
+    </div>
+
+    <div class="pad-bottom"></div>
+</div>
+
+<!-- Barre de sauvegarde -->
+<div class="save-bar" id="saveBar">
+    <div class="info" id="saveInfo">Modifications non enregistrées</div>
+    <div class="actions">
+        <button class="btn-sec" id="discardBtn">Annuler</button>
+        <button class="btn" id="saveBtn">💾 Enregistrer</button>
+    </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ─────────── Thème ───────────
+const themeBtn=document.getElementById('themeBtn');
+function applyTheme(t){document.documentElement.setAttribute('data-theme',t);themeBtn.textContent=t==='dark'?'☀️ Mode clair':'🌙 Mode sombre';localStorage.setItem('theme',t)}
+applyTheme(localStorage.getItem('theme')||'dark');
+themeBtn.onclick=()=>applyTheme(document.documentElement.getAttribute('data-theme')==='dark'?'light':'dark');
+
+// ─────────── État ───────────
+let templates=[];        // [{key,name,url}]
+let flocages=[];         // [string "NOM / N / SOUS"]
+let tmplCats={S:[],A:[],B:[]};   // key → tier (dérivé en map)
+let flocCats={S:[],A:[],B:[]};
+let tmplTierMap={};      // key → 'S'|'A'|'B'
+let flocTierMap={};      // floc → 'S'|'A'|'B'
+let dirty=false;
+let tmplFilter='all', flocFilter='all';
+
+// ─────────── Onglets ───────────
+document.querySelectorAll('.tab').forEach(tab=>{
+    tab.onclick=()=>{
+        document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+        document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
+        tab.classList.add('active');
+        document.getElementById('section-'+tab.dataset.tab).classList.add('active');
+    };
+});
+
+// ─────────── Filtres ───────────
+document.querySelectorAll('#tmpl-filters .filter-tab').forEach(b=>{
+    b.onclick=()=>{document.querySelectorAll('#tmpl-filters .filter-tab').forEach(x=>x.classList.remove('active'));b.classList.add('active');tmplFilter=b.dataset.filter;renderTemplates();};
+});
+document.querySelectorAll('#floc-filters .filter-tab').forEach(b=>{
+    b.onclick=()=>{document.querySelectorAll('#floc-filters .filter-tab').forEach(x=>x.classList.remove('active'));b.classList.add('active');flocFilter=b.dataset.filter;renderFlocages();};
+});
+document.getElementById('tmpl-search').oninput=renderTemplates;
+document.getElementById('floc-search').oninput=renderFlocages;
+
+// ─────────── Toast ───────────
+function toast(msg,isError){
+    const t=document.getElementById('toast');
+    t.textContent=msg;t.className='toast visible'+(isError?' error':'');
+    setTimeout(()=>t.className='toast',2600);
+}
+
+// ─────────── Dirty state ───────────
+function setDirty(v){
+    dirty=v;
+    document.getElementById('saveBar').classList.toggle('visible',v);
+}
+
+// ─────────── Chargement ───────────
+async function loadAll(){
+    try{
+        const [tmplRes,tmplCatRes,flocRes,flocCatRes]=await Promise.all([
+            fetch('/api/templates').then(r=>r.json()),
+            fetch('/api/templates/categories').then(r=>r.json()),
+            fetch('/api/flocages').then(r=>r.json()),
+            fetch('/api/flocages/categories').then(r=>r.json()),
+        ]);
+        templates=tmplRes.templates||[];
+        tmplCats={S:tmplCatRes.S||[],A:tmplCatRes.A||[],B:tmplCatRes.B||[]};
+        flocages=flocRes.flocages||[];
+        flocCats={S:flocCatRes.S||[],A:flocCatRes.A||[],B:flocCatRes.B||[]};
+        rebuildMaps();
+        renderTemplates();
+        renderFlocages();
+    }catch(e){
+        toast('Erreur de chargement: '+e.message,true);
+        document.getElementById('tmpl-grid').innerHTML='<div class="empty">Erreur de chargement</div>';
+        document.getElementById('floc-list').innerHTML='<div class="empty">Erreur de chargement</div>';
+    }
+}
+
+function rebuildMaps(){
+    tmplTierMap={};
+    ['S','A','B'].forEach(tier=>tmplCats[tier].forEach(k=>tmplTierMap[k]=tier));
+    flocTierMap={};
+    ['S','A','B'].forEach(tier=>flocCats[tier].forEach(f=>flocTierMap[f]=tier));
+}
+
+// ─────────── Rendu templates ───────────
+function renderTemplates(){
+    const q=document.getElementById('tmpl-search').value.toLowerCase();
+    const grid=document.getElementById('tmpl-grid');
+    let list=templates.filter(t=>{
+        const tier=tmplTierMap[t.key]||'none';
+        if(tmplFilter!=='all'&&tier!==tmplFilter)return false;
+        if(q&&!t.name.toLowerCase().includes(q))return false;
+        return true;
+    });
+    document.getElementById('tmpl-count').textContent=`${list.length} / ${templates.length}`;
+    renderTmplStats();
+    if(!list.length){grid.innerHTML='<div class="empty">Aucun template dans ce filtre</div>';return;}
+    grid.innerHTML=list.map(t=>{
+        const tier=tmplTierMap[t.key]||null;
+        const cls=tier?'has-'+tier:'';
+        return `<div class="card ${cls}" data-key="${encodeURIComponent(t.key)}">
+            <img class="card-img" src="${t.url}" loading="lazy" alt="${t.name}">
+            <div class="card-body">
+                <div class="card-name" title="${t.name}">${t.name}</div>
+                <div class="tier-buttons">
+                    ${['S','A','B'].map(x=>`<button class="tier-btn ${tier===x?'active-'+x:''}" onclick="setTmplTier('${encodeURIComponent(t.key)}','${x}')">${x}</button>`).join('')}
+                </div>
+                <div class="card-actions">
+                    ${tier?`<button class="mini-btn" onclick="setTmplTier('${encodeURIComponent(t.key)}',null)">Retirer du rang</button>`:''}
+                    <button class="mini-btn danger" onclick="deleteTmpl('${encodeURIComponent(t.key)}','${t.name.replace(/'/g,"")}')">🗑 Supprimer</button>
+                </div>
+            </div>
+        </div>`;
+    }).join('');
+}
+
+function renderTmplStats(){
+    const s=tmplCats.S.length,a=tmplCats.A.length,b=tmplCats.B.length;
+    const none=templates.length-s-a-b;
+    document.getElementById('tmpl-stats').innerHTML=`
+        <div class="stat-pill"><span class="dot dot-S"></span>S : ${s}</div>
+        <div class="stat-pill"><span class="dot dot-A"></span>A : ${a}</div>
+        <div class="stat-pill"><span class="dot dot-B"></span>B : ${b}</div>
+        <div class="stat-pill"><span class="dot dot-none"></span>Non classés : ${none<0?0:none}</div>`;
+}
+
+window.setTmplTier=function(encKey,tier){
+    const key=decodeURIComponent(encKey);
+    ['S','A','B'].forEach(t=>{tmplCats[t]=tmplCats[t].filter(k=>k!==key);});
+    if(tier)tmplCats[tier].push(key);
+    rebuildMaps();renderTemplates();setDirty(true);
+};
+
+window.deleteTmpl=function(encKey,name){
+    const key=decodeURIComponent(encKey);
+    if(!confirm(`Supprimer DÉFINITIVEMENT le template "${name}" du stockage R2 ?\n\nCette action est irréversible. Le fichier sera supprimé.\n\n(Pour juste le retirer du classement sans le supprimer, utilise "Retirer du rang".)`))return;
+    fetch('/api/templates/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key})})
+        .then(r=>r.json()).then(()=>{
+            templates=templates.filter(t=>t.key!==key);
+            ['S','A','B'].forEach(t=>{tmplCats[t]=tmplCats[t].filter(k=>k!==key);});
+            rebuildMaps();renderTemplates();
+            // Persister le retrait de la catégorie aussi
+            saveTmplCats(true);
+            toast('Template supprimé');
+        }).catch(e=>toast('Erreur suppression: '+e.message,true));
+};
+
+// ─────────── Rendu flocages ───────────
+function parseFloc(f){
+    const parts=f.split('/').map(p=>p.trim());
+    return {name:parts[0]||'',num:parts[1]||'',below:parts[2]||''};
+}
+function renderFlocages(){
+    const q=document.getElementById('floc-search').value.toLowerCase();
+    const list=document.getElementById('floc-list');
+    let items=flocages.filter(f=>{
+        const tier=flocTierMap[f]||'none';
+        if(flocFilter!=='all'&&tier!==flocFilter)return false;
+        if(q&&!f.toLowerCase().includes(q))return false;
+        return true;
+    });
+    document.getElementById('floc-count').textContent=`${items.length} / ${flocages.length}`;
+    renderFlocStats();
+    if(!items.length){list.innerHTML='<div class="empty">Aucun flocage dans ce filtre</div>';return;}
+    list.innerHTML=items.map(f=>{
+        const tier=flocTierMap[f]||null;
+        const p=parseFloc(f);
+        const cls=tier?'has-'+tier:'';
+        const enc=encodeURIComponent(f);
+        return `<div class="floc-row ${cls}">
+            <div class="floc-fields">
+                <span class="floc-name">${p.name}</span>
+                ${p.num?`<span class="floc-num">${p.num}</span>`:''}
+                ${p.below?`<span class="floc-below">${p.below}</span>`:''}
+            </div>
+            <div class="floc-tier-buttons">
+                ${['S','A','B'].map(x=>`<button class="floc-tier-btn ${tier===x?'active-'+x:''}" onclick="setFlocTier('${enc}','${x}')">${x}</button>`).join('')}
+            </div>
+            ${tier?`<button class="floc-remove" onclick="setFlocTier('${enc}',null)">Retirer</button>`:''}
+        </div>`;
+    }).join('');
+}
+
+function renderFlocStats(){
+    const s=flocCats.S.length,a=flocCats.A.length,b=flocCats.B.length;
+    const none=flocages.length-s-a-b;
+    document.getElementById('floc-stats').innerHTML=`
+        <div class="stat-pill"><span class="dot dot-S"></span>S : ${s}</div>
+        <div class="stat-pill"><span class="dot dot-A"></span>A : ${a}</div>
+        <div class="stat-pill"><span class="dot dot-B"></span>B : ${b}</div>
+        <div class="stat-pill"><span class="dot dot-none"></span>Non classés : ${none<0?0:none}</div>`;
+}
+
+window.setFlocTier=function(encF,tier){
+    const f=decodeURIComponent(encF);
+    ['S','A','B'].forEach(t=>{flocCats[t]=flocCats[t].filter(x=>x!==f);});
+    if(tier)flocCats[tier].push(f);
+    rebuildMaps();renderFlocages();setDirty(true);
+};
+
+// ─────────── Sauvegarde ───────────
+async function saveTmplCats(silent){
+    const r=await fetch('/api/templates/categories',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(tmplCats)});
+    const d=await r.json();
+    if(!d.success)throw new Error('templates');
+    return d;
+}
+async function saveFlocCats(){
+    const r=await fetch('/api/flocages/categories',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(flocCats)});
+    const d=await r.json();
+    if(!d.success)throw new Error('flocages');
+    return d;
+}
+
+document.getElementById('saveBtn').onclick=async()=>{
+    const btn=document.getElementById('saveBtn');btn.disabled=true;btn.textContent='Enregistrement…';
+    try{
+        await Promise.all([saveTmplCats(),saveFlocCats()]);
+        setDirty(false);
+        toast('✅ Classements enregistrés');
+    }catch(e){
+        toast('Erreur d\'enregistrement: '+e.message,true);
+    }finally{
+        btn.disabled=false;btn.textContent='💾 Enregistrer';
+    }
+};
+
+document.getElementById('discardBtn').onclick=()=>{
+    if(confirm('Annuler toutes les modifications non enregistrées ?')){
+        setDirty(false);loadAll();
+    }
+};
+
+window.addEventListener('beforeunload',(e)=>{
+    if(dirty){e.preventDefault();e.returnValue='';}
+});
+
+loadAll();
+</script>
+</body>
+</html>
