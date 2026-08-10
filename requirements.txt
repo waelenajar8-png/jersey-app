@@ -5,3 +5,4 @@ boto3
 piexif
 cryptography
 Pillow
+tzdata
