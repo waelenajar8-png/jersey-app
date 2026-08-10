@@ -386,17 +386,18 @@ function renderTemplates(){
         const cls=tier?'has-'+tier:'';
         const ord=orderMap[t.key];
         const orderBadge=ord?`<div class="order-badge order-${ord.tier}">#${String(ord.num).padStart(3,'0')}</div>`:'';
-        return `<div class="card ${cls}" data-key="${encodeURIComponent(t.key)}">
+        const gi=templates.indexOf(t);
+        return `<div class="card ${cls}" data-tmpl-idx="${gi}">
             ${orderBadge}
-            <img class="card-img" src="${t.url}" loading="lazy" alt="${t.name}">
+            <img class="card-img" src="${t.url}" loading="lazy" alt="${escapeHtml(t.name)}">
             <div class="card-body">
-                <div class="card-name" title="${t.name}">${t.name}</div>
+                <div class="card-name" title="${escapeHtml(t.name)}">${escapeHtml(t.name)}</div>
                 <div class="tier-buttons">
-                    ${['S','A','B'].map(x=>`<button class="tier-btn ${tier===x?'active-'+x:''}" onclick="setTmplTier('${encodeURIComponent(t.key)}','${x}')">${x}</button>`).join('')}
+                    ${['S','A','B'].map(x=>`<button class="tier-btn ${tier===x?'active-'+x:''}" data-tmpl-idx="${gi}" data-tier="${x}">${x}</button>`).join('')}
                 </div>
                 <div class="card-actions">
-                    ${tier?`<button class="mini-btn" onclick="setTmplTier('${encodeURIComponent(t.key)}',null)">Retirer du rang</button>`:''}
-                    <button class="mini-btn danger" onclick="deleteTmpl('${encodeURIComponent(t.key)}','${t.name.replace(/'/g,"")}')">🗑 Supprimer</button>
+                    ${tier?`<button class="mini-btn" data-tmpl-idx="${gi}" data-tier="" data-action="tier">Retirer du rang</button>`:''}
+                    <button class="mini-btn danger" data-tmpl-idx="${gi}" data-action="delete">🗑 Supprimer</button>
                 </div>
             </div>
         </div>`;
@@ -413,25 +414,47 @@ function renderTmplStats(){
         <div class="stat-pill"><span class="dot dot-none"></span>Non classés : ${none<0?0:none}</div>`;
 }
 
-window.setTmplTier=function(encKey,tier){
-    const key=decodeURIComponent(encKey);
+function applyTmplTier(key,tier){
     ['S','A','B'].forEach(t=>{tmplCats[t]=tmplCats[t].filter(k=>k!==key);});
     if(tier)tmplCats[tier].push(key);
     rebuildMaps();renderTemplates();setDirty(true);
-};
-
-window.deleteTmpl=function(encKey,name){
-    const key=decodeURIComponent(encKey);
+}
+function doDeleteTmpl(key,name){
     if(!confirm(`Supprimer DÉFINITIVEMENT le template "${name}" du stockage R2 ?\n\nCette action est irréversible. Le fichier sera supprimé.\n\n(Pour juste le retirer du classement sans le supprimer, utilise "Retirer du rang".)`))return;
     fetch('/api/templates/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key})})
         .then(r=>r.json()).then(()=>{
             templates=templates.filter(t=>t.key!==key);
             ['S','A','B'].forEach(t=>{tmplCats[t]=tmplCats[t].filter(k=>k!==key);});
             rebuildMaps();renderTemplates();
-            // Persister le retrait de la catégorie aussi
             saveTmplCats(true);
             toast('Template supprimé');
         }).catch(e=>toast('Erreur suppression: '+e.message,true));
+}
+// Délégation d'événements pour la grille templates (robuste caractères spéciaux)
+document.getElementById('tmpl-grid').addEventListener('click',e=>{
+    const btn=e.target.closest('[data-tmpl-idx]');
+    if(!btn)return;
+    const idx=parseInt(btn.dataset.tmplIdx,10);
+    if(isNaN(idx)||idx<0||idx>=templates.length)return;
+    const t=templates[idx];
+    if(!t)return;
+    const action=btn.dataset.action;
+    if(action==='delete'){
+        doDeleteTmpl(t.key,(t.name||'').replace(/"/g,''));
+    }else{
+        // bouton S/A/B ou "Retirer du rang" (data-tier vide)
+        if(btn.dataset.tier===undefined)return;
+        applyTmplTier(t.key,btn.dataset.tier||null);
+    }
+});
+// Compat
+window.setTmplTier=function(encKey,tier){
+    let key;try{key=decodeURIComponent(encKey);}catch(_){key=encKey;}
+    applyTmplTier(key,tier);
+};
+window.deleteTmpl=function(encKey,name){
+    let key;try{key=decodeURIComponent(encKey);}catch(_){key=encKey;}
+    doDeleteTmpl(key,name);
 };
 
 // ─────────── Rendu flocages ───────────
@@ -451,23 +474,30 @@ function renderFlocages(){
     document.getElementById('floc-count').textContent=`${items.length} / ${flocages.length}`;
     renderFlocStats();
     if(!items.length){list.innerHTML='<div class="empty">Aucun flocage dans ce filtre</div>';return;}
-    list.innerHTML=items.map(f=>{
+    list.innerHTML=items.map((f,i)=>{
         const tier=flocTierMap[f]||null;
         const p=parseFloc(f);
         const cls=tier?'has-'+tier:'';
-        const enc=encodeURIComponent(f);
+        // On utilise l'index dans le tableau `flocages` comme référence (data-idx),
+        // pas le texte du flocage — évite tout bug lié aux apostrophes/caractères spéciaux.
+        const gi=flocages.indexOf(f);
         return `<div class="floc-row ${cls}">
             <div class="floc-fields">
-                <span class="floc-name">${p.name}</span>
-                ${p.num?`<span class="floc-num">${p.num}</span>`:''}
-                ${p.below?`<span class="floc-below">${p.below}</span>`:''}
+                <span class="floc-name">${escapeHtml(p.name)}</span>
+                ${p.num?`<span class="floc-num">${escapeHtml(p.num)}</span>`:''}
+                ${p.below?`<span class="floc-below">${escapeHtml(p.below)}</span>`:''}
             </div>
             <div class="floc-tier-buttons">
-                ${['S','A','B'].map(x=>`<button class="floc-tier-btn ${tier===x?'active-'+x:''}" onclick="setFlocTier('${enc}','${x}')">${x}</button>`).join('')}
+                ${['S','A','B'].map(x=>`<button class="floc-tier-btn ${tier===x?'active-'+x:''}" data-floc-idx="${gi}" data-tier="${x}">${x}</button>`).join('')}
             </div>
-            ${tier?`<button class="floc-remove" onclick="setFlocTier('${enc}',null)">Retirer</button>`:''}
+            ${tier?`<button class="floc-remove" data-floc-idx="${gi}" data-tier="">Retirer</button>`:''}
         </div>`;
     }).join('');
+}
+
+// Échappe le HTML pour un affichage sûr (apostrophes, <, >, &, guillemets)
+function escapeHtml(s){
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 
 function renderFlocStats(){
@@ -480,11 +510,25 @@ function renderFlocStats(){
         <div class="stat-pill"><span class="dot dot-none"></span>Non classés : ${none<0?0:none}</div>`;
 }
 
-window.setFlocTier=function(encF,tier){
-    const f=decodeURIComponent(encF);
+function applyFlocTier(f,tier){
     ['S','A','B'].forEach(t=>{flocCats[t]=flocCats[t].filter(x=>x!==f);});
     if(tier)flocCats[tier].push(f);
     rebuildMaps();renderFlocages();setDirty(true);
+}
+// Délégation d'événements : robuste face aux apostrophes et caractères spéciaux
+document.getElementById('floc-list').addEventListener('click',e=>{
+    const btn=e.target.closest('[data-floc-idx]');
+    if(!btn)return;
+    const idx=parseInt(btn.dataset.flocIdx,10);
+    if(isNaN(idx)||idx<0||idx>=flocages.length)return;
+    const f=flocages[idx];
+    const tier=btn.dataset.tier||null;
+    applyFlocTier(f,tier);
+});
+// Compat : garder setFlocTier accessible si appelé ailleurs
+window.setFlocTier=function(encF,tier){
+    let f;try{f=decodeURIComponent(encF);}catch(_){f=encF;}
+    applyFlocTier(f,tier);
 };
 
 // ─────────── Sauvegarde ───────────
