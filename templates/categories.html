@@ -91,11 +91,15 @@ h1{font-size:24px;margin:0;font-weight:800;letter-spacing:-0.02em}
 
 /* Grille templates */
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:16px}
-.card{background:var(--bg-elevated);border:1px solid var(--border);border-radius:14px;overflow:hidden;transition:all .18s ease;animation:fadeInUp .3s ease both}
+.card{position:relative;background:var(--bg-elevated);border:1px solid var(--border);border-radius:14px;overflow:hidden;transition:all .18s ease;animation:fadeInUp .3s ease both}
 .card:hover{border-color:var(--border-strong);box-shadow:var(--shadow-md)}
 .card.has-S{border-color:var(--tier-s)}
 .card.has-A{border-color:var(--tier-a)}
 .card.has-B{border-color:var(--tier-b)}
+.order-badge{position:absolute;top:8px;left:8px;z-index:5;font-size:12px;font-weight:800;padding:3px 8px;border-radius:8px;letter-spacing:.02em;box-shadow:0 2px 6px rgba(0,0,0,.3);color:#0a0b0f}
+.order-badge.order-S{background:var(--tier-s)}
+.order-badge.order-A{background:var(--tier-a)}
+.order-badge.order-B{background:var(--tier-b)}
 .card-img{width:100%;aspect-ratio:9/16;object-fit:cover;background:var(--panel);display:block}
 .card-body{padding:10px 12px}
 .card-name{font-size:11.5px;color:var(--text-dim);font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:8px}
@@ -351,9 +355,23 @@ function rebuildMaps(){
 }
 
 // ─────────── Rendu templates ───────────
+function buildTmplOrderMap(){
+    // Numérotation visuelle #001,#002... dans l'ordre S puis A puis B
+    // (ne touche PAS aux vrais noms de fichiers R2 — purement cosmétique)
+    const orderMap={};
+    let n=0;
+    ['S','A','B'].forEach(tier=>{
+        tmplCats[tier].forEach(key=>{
+            n++;
+            orderMap[key]={num:n,tier:tier};
+        });
+    });
+    return orderMap;
+}
 function renderTemplates(){
     const q=document.getElementById('tmpl-search').value.toLowerCase();
     const grid=document.getElementById('tmpl-grid');
+    const orderMap=buildTmplOrderMap();
     let list=templates.filter(t=>{
         const tier=tmplTierMap[t.key]||'none';
         if(tmplFilter!=='all'&&tier!==tmplFilter)return false;
@@ -366,7 +384,10 @@ function renderTemplates(){
     grid.innerHTML=list.map(t=>{
         const tier=tmplTierMap[t.key]||null;
         const cls=tier?'has-'+tier:'';
+        const ord=orderMap[t.key];
+        const orderBadge=ord?`<div class="order-badge order-${ord.tier}">#${String(ord.num).padStart(3,'0')}</div>`:'';
         return `<div class="card ${cls}" data-key="${encodeURIComponent(t.key)}">
+            ${orderBadge}
             <img class="card-img" src="${t.url}" loading="lazy" alt="${t.name}">
             <div class="card-body">
                 <div class="card-name" title="${t.name}">${t.name}</div>
