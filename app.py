@@ -782,35 +782,37 @@ CAROUSEL_SEGMENT_PLAN = {
 # Anti-répétition : nb de derniers éléments pénalisés (pas exclus)
 ANTI_REPEAT_PENALTY_LAST_N = 20
 
-# ── Scheduler : fenêtres horaires en UTC (Paris UTC+2 en été) ─────────────
-# 3 publications/jour : matin ~10h, après-midi ~16h, soir ~21h30
-# Fenêtres en UTC — NOTE : prévoir gestion changement d'heure (UTC+1 hiver) au BLOC 7
+# ── Scheduler : fenêtres horaires en HEURE DE PARIS (locale) ──────────────
+# 3 publications/jour : matin ~10h, après-midi ~16h, soir ~21h30 (heure française)
+# La conversion vers UTC est AUTOMATIQUE selon la saison (été UTC+2 / hiver UTC+1)
+# via ZoneInfo("Europe/Paris") dans get_or_create_slot_time(). On garde donc les
+# mêmes horaires français été comme hiver, sans recalcul manuel.
 SCHEDULE_WINDOWS_BY_ACCOUNT = {
     "Volakits Main (wael)": [
-        {"start": "07:30", "end": "08:30"},   # 09:30–10:30 Paris (UTC+2 été)
-        {"start": "13:30", "end": "14:30"},   # 15:30–16:30 Paris (UTC+2 été)
-        {"start": "19:00", "end": "20:00"},   # 21:00–22:00 Paris (UTC+2 été)
+        {"start": "09:30", "end": "10:30"},   # matin ~10h Paris
+        {"start": "15:30", "end": "16:30"},   # après-midi ~16h Paris
+        {"start": "21:00", "end": "22:00"},   # soir ~21h30 Paris
     ],
     "Volakits 1 (seik)": [
-        {"start": "07:30", "end": "08:30"},
-        {"start": "13:30", "end": "14:30"},
-        {"start": "19:00", "end": "20:00"},
+        {"start": "09:30", "end": "10:30"},
+        {"start": "15:30", "end": "16:30"},
+        {"start": "21:00", "end": "22:00"},
     ],
     "Volakits 2 (momo)": [
-        {"start": "07:30", "end": "08:30"},
-        {"start": "13:30", "end": "14:30"},
-        {"start": "19:00", "end": "20:00"},
+        {"start": "09:30", "end": "10:30"},
+        {"start": "15:30", "end": "16:30"},
+        {"start": "21:00", "end": "22:00"},
     ],
     "Volakits 6 (wassim)": [
-        {"start": "07:30", "end": "08:30"},
-        {"start": "13:30", "end": "14:30"},
-        {"start": "19:00", "end": "20:00"},
+        {"start": "09:30", "end": "10:30"},
+        {"start": "15:30", "end": "16:30"},
+        {"start": "21:00", "end": "22:00"},
     ],
 }
 SCHEDULE_WINDOWS_DEFAULT = [
-    {"start": "07:30", "end": "08:30"},
-    {"start": "13:30", "end": "14:30"},
-    {"start": "19:00", "end": "20:00"},
+    {"start": "09:30", "end": "10:30"},
+    {"start": "15:30", "end": "16:30"},
+    {"start": "21:00", "end": "22:00"},
 ]
 
 # Conserver pour compatibilité — sera remplacé au BLOC 7
@@ -3139,14 +3141,20 @@ def get_or_create_slot_time(account, window_index, date_str):
     """
     Retourne l'heure UTC (HH:MM) pour un créneau donné (compte + index fenêtre + date).
 
-    - Si une heure a déjà été persistée pour ce créneau → la réutiliser.
-    - Sinon → tirer aléatoirement dans la fenêtre et persister.
+    Les fenêtres SCHEDULE_WINDOWS_* sont définies en HEURE DE PARIS. On tire une heure
+    aléatoire dans la fenêtre en heure de Paris, puis on convertit en UTC selon la saison
+    de la date concernée (été UTC+2 / hiver UTC+1) via ZoneInfo("Europe/Paris").
+    Ainsi les horaires français restent constants été comme hiver.
 
-    Garantit qu'un redémarrage du bot ne recalcule pas une nouvelle heure.
-    Protection : si l'heure tirée est trop proche d'un autre créneau du même
-    compte/date (< 90 min), on retente jusqu'à trouver un horaire acceptable.
+    - Si une heure a déjà été persistée pour ce créneau → la réutiliser TELLE QUELLE
+      (les créneaux déjà dans meta/scheduled_slots_plan.json ne sont jamais recalculés).
+    - Sinon → tirer aléatoirement dans la fenêtre Paris, convertir en UTC, persister.
+
+    L'espacement minimum de 90 min entre créneaux est calculé en HEURE DE PARIS.
     """
     import random as _rnd
+    from zoneinfo import ZoneInfo
+    paris_tz = ZoneInfo("Europe/Paris")
 
     plan_r2_key = "meta/scheduled_slots_plan.json"
     persist_key = f"{account}|{date_str}|{window_index}"
@@ -3157,35 +3165,40 @@ def get_or_create_slot_time(account, window_index, date_str):
     except Exception:
         plan = {}
 
-    # Si déjà calculé → réutiliser sans recalcul
+    # Si déjà calculé → réutiliser sans recalcul (protège l'existant)
     if persist_key in plan:
         return plan[persist_key]
 
-    # Trouver la fenêtre correspondante
+    # Trouver la fenêtre correspondante (heures en Paris)
     windows = SCHEDULE_WINDOWS_BY_ACCOUNT.get(account, SCHEDULE_WINDOWS_DEFAULT)
     w_idx = window_index % len(windows)
     window = windows[w_idx]
 
     start_h, start_m = map(int, window["start"].split(":"))
     end_h,   end_m   = map(int, window["end"].split(":"))
-    start_total = start_h * 60 + start_m
-    end_total   = end_h   * 60 + end_m
+    start_total = start_h * 60 + start_m   # minutes Paris
+    end_total   = end_h   * 60 + end_m     # minutes Paris
 
-    # Collecter les heures déjà planifiées pour ce compte/date (protection espacement)
-    existing_minutes = []
+    # Collecter les heures Paris déjà planifiées pour ce compte/date (espacement 90 min)
+    # Les valeurs persistées sont en UTC → on les reconvertit en Paris pour comparer.
+    y, mo, d = map(int, date_str.split("-"))
+    existing_minutes_paris = []
     for k, v in plan.items():
         if k.startswith(f"{account}|{date_str}|"):
             try:
-                eh, em = map(int, v.split(":"))
-                existing_minutes.append(eh * 60 + em)
+                uh, um = map(int, v.split(":"))
+                # v est une heure UTC → reconvertir en Paris pour ce jour
+                utc_dt = datetime(y, mo, d, uh, um, tzinfo=timezone.utc)
+                p_dt   = utc_dt.astimezone(paris_tz)
+                existing_minutes_paris.append(p_dt.hour * 60 + p_dt.minute)
             except Exception:
                 pass
 
-    # Tirer une heure respectant l'espacement minimum de 90 min
+    # Tirer une heure Paris respectant l'espacement minimum de 90 min (en Paris)
     chosen_total = None
     for _ in range(20):
         candidate = _rnd.randint(start_total, end_total)
-        too_close = any(abs(candidate - et) < 90 for et in existing_minutes)
+        too_close = any(abs(candidate - et) < 90 for et in existing_minutes_paris)
         if not too_close:
             chosen_total = candidate
             break
@@ -3195,13 +3208,17 @@ def get_or_create_slot_time(account, window_index, date_str):
         chosen_total = (start_total + end_total) // 2
         print(f"[SCHEDULER] ⚠️ Conflit inévitable {account}/{date_str}/{window_index} → milieu fenêtre")
 
-    time_str = f"{chosen_total // 60:02d}:{chosen_total % 60:02d}"
+    # Convertir l'heure Paris tirée → UTC pour la date concernée (gère été/hiver)
+    paris_dt = datetime(y, mo, d, chosen_total // 60, chosen_total % 60, tzinfo=paris_tz)
+    utc_dt   = paris_dt.astimezone(timezone.utc)
+    time_str = utc_dt.strftime("%H:%M")   # heure UTC finale, persistée
 
     # Persister pour survivre aux redémarrages Railway
     try:
         plan[persist_key] = time_str
         r2_put_json(plan_r2_key, plan)
-        print(f"[SCHEDULER] Créneau persisté: {account} {date_str} fenêtre {window_index} → {time_str} UTC")
+        print(f"[SCHEDULER] Créneau persisté: {account} {date_str} fenêtre {window_index} → "
+              f"{chosen_total//60:02d}:{chosen_total%60:02d} Paris = {time_str} UTC")
     except Exception as e:
         print(f"[SCHEDULER] Erreur persistance créneau: {e}")
 
