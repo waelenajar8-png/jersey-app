@@ -2853,6 +2853,38 @@ def templates_page(): return render_template("templates.html")
 @app.route("/categories")
 def categories_page(): return render_template("categories.html")
 
+# ── Module de suivi des influenceurs ──────────────────────────────────────
+INFLUENCEURS_R2_KEY = "meta/influenceurs.json"
+
+@app.route("/influenceurs")
+def influenceurs_page(): return render_template("influenceurs.html")
+
+@app.route("/api/influenceurs", methods=["GET"])
+def api_get_influenceurs():
+    """Retourne la liste complète des influenceurs depuis R2."""
+    try:
+        data = r2_get_json(INFLUENCEURS_R2_KEY) or {"influenceurs": []}
+        if "influenceurs" not in data:
+            data = {"influenceurs": []}
+        return jsonify(data)
+    except Exception as e:
+        print(f"[INFLU] Erreur lecture: {e}")
+        return jsonify({"influenceurs": []})
+
+@app.route("/api/influenceurs", methods=["POST"])
+def api_save_influenceurs():
+    """Sauvegarde la liste complète des influenceurs dans R2 (remplace tout)."""
+    try:
+        payload = request.json or {}
+        influenceurs = payload.get("influenceurs", [])
+        if not isinstance(influenceurs, list):
+            return jsonify({"success": False, "error": "format invalide"}), 400
+        r2_put_json(INFLUENCEURS_R2_KEY, {"influenceurs": influenceurs})
+        return jsonify({"success": True, "count": len(influenceurs)})
+    except Exception as e:
+        print(f"[INFLU] Erreur sauvegarde: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
 @app.route("/queue_ig")
 def page_queue_ig(): return render_template("queue_ig.html")
 
