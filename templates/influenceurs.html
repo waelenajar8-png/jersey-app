@@ -66,18 +66,35 @@ h1{font-size:24px;margin:0;font-weight:800;letter-spacing:-0.02em}
 @media(max-width:640px){.navmenu-drop{position:fixed;left:12px;right:12px;min-width:0}}
 
 /* Stats bar */
-.stats-row{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:20px}
-.stat-pill{display:flex;align-items:center;gap:7px;background:var(--panel);border:1px solid var(--border);border-radius:100px;padding:7px 14px;font-size:13px;font-weight:600;color:var(--text-dim)}
+.stats-row{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px}
+.stat-pill{display:flex;align-items:center;gap:7px;background:var(--panel);border:1px solid var(--border);border-radius:100px;padding:7px 14px;font-size:13px;font-weight:600;color:var(--text-dim);cursor:default}
 .stat-pill b{color:var(--text);font-weight:700}
 .dot{width:8px;height:8px;border-radius:50%}
 .dot-total{background:var(--accent)}
 .dot-urgent{background:var(--danger)}
 .dot-warn{background:var(--warn)}
+.dot-pipe{background:var(--text-faint)}
+
+/* Pipeline mini-counters */
+.pipeline-row{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:18px}
+.pipe-chip{background:var(--panel);border:1px solid var(--border);border-radius:9px;padding:6px 11px;font-size:12px;font-weight:600;color:var(--text-dim);cursor:pointer;transition:all .13s;user-select:none}
+.pipe-chip:hover{border-color:var(--border-strong);color:var(--text)}
+.pipe-chip.active{background:var(--accent-dim);border-color:transparent;color:var(--accent)}
+.pipe-chip b{color:var(--text);font-weight:800;margin-left:4px}
+.pipe-chip.active b{color:var(--accent)}
 
 /* Add form */
-.add-card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:20px;display:flex;gap:10px;flex-wrap:wrap;align-items:center}
-.add-card input{background:var(--bg-elevated);border:1px solid var(--border);color:var(--text);border-radius:9px;padding:10px 13px;font-size:13.5px;font-family:inherit;flex:1;min-width:160px}
-.add-card input:focus{outline:none;border-color:var(--accent)}
+.add-card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:16px;display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.add-card input,.add-card select{background:var(--bg-elevated);border:1px solid var(--border);color:var(--text);border-radius:9px;padding:10px 13px;font-size:13.5px;font-family:inherit;flex:1;min-width:140px}
+.add-card input:focus,.add-card select:focus{outline:none;border-color:var(--accent)}
+.add-card select{max-width:150px;flex:0 1 auto}
+
+/* Toolbar : recherche + filtres */
+.toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:16px}
+.search-input{flex:1;min-width:200px;background:var(--panel);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:10px 14px;font-size:13.5px;font-family:inherit}
+.search-input:focus{outline:none;border-color:var(--accent)}
+.filter-select{background:var(--panel);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:10px 14px;font-size:13px;font-family:inherit;cursor:pointer}
+.filter-select:focus{outline:none;border-color:var(--accent)}
 
 /* Section headers */
 .section-head{display:flex;align-items:center;gap:10px;margin:22px 0 12px;font-size:14px;font-weight:700;cursor:pointer;user-select:none}
@@ -97,9 +114,16 @@ h1{font-size:24px;margin:0;font-weight:800;letter-spacing:-0.02em}
 .influ-name{font-size:16px;font-weight:700;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .influ-name a{color:var(--accent);text-decoration:none;font-size:13px;font-weight:600}
 .influ-name a:hover{text-decoration:underline}
-.influ-meta{font-size:12.5px;color:var(--text-dim);margin-top:3px;display:flex;gap:12px;flex-wrap:wrap}
+.plat-tag{font-size:10.5px;font-weight:700;padding:2px 7px;border-radius:6px;background:var(--panel-hover);color:var(--text-dim);text-transform:uppercase;letter-spacing:.03em}
+.influ-meta{font-size:12.5px;color:var(--text-dim);margin-top:3px;display:flex;gap:12px;flex-wrap:wrap;align-items:center}
 .influ-meta a{color:var(--text-dim);text-decoration:none}
 .influ-meta a:hover{color:var(--accent)}
+
+/* Quick actions (visible sans déplier) */
+.quick-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+.quick-btn{padding:6px 11px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;border:1px solid var(--border);background:var(--bg-elevated);color:var(--text);transition:all .12s}
+.quick-btn:hover{border-color:var(--border-strong);transform:translateY(-1px)}
+.quick-btn.primary{background:var(--accent-dim);border-color:transparent;color:var(--accent)}
 
 /* Status pipeline */
 .status-badge{padding:5px 12px;border-radius:100px;font-size:12px;font-weight:700;white-space:nowrap}
@@ -125,6 +149,7 @@ h1{font-size:24px;margin:0;font-weight:800;letter-spacing:-0.02em}
 .field input:focus,.field textarea:focus,.field select:focus{outline:none;border-color:var(--accent)}
 .field textarea{resize:vertical;min-height:60px}
 .field-full{grid-column:1/-1}
+.field-half{grid-column:auto}
 
 /* Action buttons row */
 .actions-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
@@ -133,6 +158,9 @@ h1{font-size:24px;margin:0;font-weight:800;letter-spacing:-0.02em}
 .act-btn.primary{background:var(--accent-dim);border-color:transparent;color:var(--accent)}
 .act-btn.danger{color:var(--danger)}
 .act-btn.danger:hover{background:var(--danger-dim)}
+
+/* Relance history */
+.relance-hist{font-size:11.5px;color:var(--text-faint);margin-top:4px;line-height:1.5}
 
 /* Videos list */
 .video-item{display:flex;gap:8px;align-items:center;margin-bottom:6px}
@@ -154,6 +182,15 @@ h1{font-size:24px;margin:0;font-weight:800;letter-spacing:-0.02em}
 .save-bar{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(100px);background:var(--panel);border:1px solid var(--border-strong);border-radius:100px;padding:12px 22px;box-shadow:var(--shadow-md);display:flex;align-items:center;gap:14px;z-index:300;transition:transform .25s cubic-bezier(.16,1,.3,1)}
 .save-bar.show{transform:translateX(-50%) translateY(0)}
 .save-bar span{font-size:13px;font-weight:600;color:var(--text-dim)}
+.save-bar.err{border-color:var(--danger)}
+.save-bar.err span{color:var(--danger)}
+
+/* Toast conflit / erreur persistante */
+.toast-conflict{position:fixed;top:20px;left:50%;transform:translateX(-50%) translateY(-140px);background:var(--panel);border:1px solid var(--danger);border-radius:12px;padding:16px 20px;box-shadow:var(--shadow-md);z-index:400;max-width:520px;width:calc(100% - 40px);transition:transform .3s cubic-bezier(.16,1,.3,1)}
+.toast-conflict.show{transform:translateX(-50%) translateY(0)}
+.toast-conflict h4{margin:0 0 6px;font-size:14px;color:var(--danger)}
+.toast-conflict p{margin:0 0 12px;font-size:12.5px;color:var(--text-dim);line-height:1.5}
+.toast-conflict .tc-actions{display:flex;gap:8px;flex-wrap:wrap}
 </style>
 </head>
 <body>
@@ -206,15 +243,40 @@ h1{font-size:24px;margin:0;font-weight:800;letter-spacing:-0.02em}
         </div>
     </div>
 
-    <!-- Compteurs -->
+    <!-- Compteurs globaux -->
     <div class="stats-row" id="statsRow"></div>
+
+    <!-- Pipeline par statut (cliquable = filtre) -->
+    <div class="pipeline-row" id="pipelineRow"></div>
 
     <!-- Ajout rapide -->
     <div class="add-card">
         <input type="text" id="addPseudo" placeholder="Pseudo / nom">
         <input type="text" id="addProfil" placeholder="Lien du profil (TikTok/Insta/Snap)">
         <input type="text" id="addWhatsapp" placeholder="WhatsApp / numéro">
-        <button class="btn" onclick="addInfluenceur()">+ Ajouter</button>
+        <select id="addPlatform">
+            <option value="">Plateforme…</option>
+            <option value="TikTok">TikTok</option>
+            <option value="Instagram">Instagram</option>
+            <option value="Snap">Snap</option>
+            <option value="Autre">Autre</option>
+        </select>
+        <button class="btn" id="addBtn">+ Ajouter</button>
+    </div>
+
+    <!-- Recherche + filtres -->
+    <div class="toolbar">
+        <input type="text" class="search-input" id="searchInput" placeholder="🔍 Rechercher (pseudo, note, plateforme…)">
+        <select class="filter-select" id="filterStatus">
+            <option value="">Tous les statuts</option>
+        </select>
+        <select class="filter-select" id="filterUrgency">
+            <option value="">Toutes urgences</option>
+            <option value="urgent">🔴 À traiter</option>
+            <option value="warn">🟡 À surveiller</option>
+            <option value="ok">🟢 En cours</option>
+        </select>
+        <button class="btn-sec" id="exportBtn">⬇️ Export CSV</button>
     </div>
 
     <!-- Liste -->
@@ -223,24 +285,47 @@ h1{font-size:24px;margin:0;font-weight:800;letter-spacing:-0.02em}
 
 <div class="save-bar" id="saveBar"><span id="saveText">💾 Sauvegarde…</span></div>
 
+<!-- Toast conflit (sauvegarde concurrente) -->
+<div class="toast-conflict" id="conflictToast">
+    <h4>⚠️ Conflit de sauvegarde</h4>
+    <p id="conflictMsg">Ces données ont été modifiées ailleurs (autre onglet/appareil) depuis que tu as ouvert la page. Que veux-tu faire ?</p>
+    <div class="tc-actions">
+        <button class="act-btn danger" id="conflictForce">Écraser avec ma version</button>
+        <button class="act-btn primary" id="conflictReload">Recharger la version à jour</button>
+    </div>
+</div>
+
 <script>
-// ── Constantes ──────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════
+// Suivi Influenceurs — V1.1 (12 améliorations, sans API externe)
+// ══════════════════════════════════════════════════════════════════════════
+
 const STATUSES = [
     "À contacter", "Contacté", "En négociation", "Accord",
     "Colis envoyé", "Livré", "Contenu en cours", "Terminé"
 ];
-// Seuil (en jours) au-delà duquel un influenceur passe en "urgent" selon son statut
+
+// Seuils (en jours) par statut → passe en "urgent" au-delà.
+// AMÉLIORATION #3 : ajout des cas Accord(3) sans colis et Colis envoyé(4) sans livraison.
 const RELANCE_THRESHOLD = {
     1: 4,   // Contacté → relancer après 4j sans réponse
     2: 5,   // En négociation → 5j
-    5: 7,   // Livré → si pas de contenu après 7j
+    3: 3,   // Accord conclu → colis à envoyer sous 3j
+    4: 7,   // Colis envoyé → devrait être livré/marqué livré sous 7j
+    5: 7,   // Livré → contenu attendu sous 7j
     6: 10,  // Contenu en cours → 10j
 };
 
 let influenceurs = [];
+let dataVersion = 0;              // version chargée depuis le serveur (contrôle concurrence)
 let saveTimer = null;
-let expanded = new Set();       // ids dépliés
-let collapsedSections = new Set(); // sections repliées
+let dirty = false;                // modifs non sauvegardées
+let pendingConflictSnapshot = null;
+let expanded = new Set();
+let collapsedSections = new Set();
+let searchQuery = '';
+let filterStatus = '';
+let filterUrgency = '';
 
 // ── Chargement ──────────────────────────────────────────────────────────
 async function load(){
@@ -248,73 +333,146 @@ async function load(){
         const r = await fetch('/api/influenceurs');
         const d = await r.json();
         influenceurs = (d.influenceurs||[]).map(normalize);
-    }catch(e){ influenceurs = []; }
+        dataVersion = d.version || 0;
+    }catch(e){ influenceurs = []; dataVersion = 0; }
+    dirty = false;
     render();
 }
 
+// AMÉLIORATION #1 : séparation lastContact (urgence) / lastModified (audit).
+// AMÉLIORATION #6 : champs plateforme, contrepartie, deadline, adresse, addedAt.
+// AMÉLIORATION #8 : historique des relances daté (relanceHistory).
 function normalize(i){
+    const nowIso = new Date().toISOString();
     return {
-        id: i.id || ('inf_'+Date.now()+'_'+Math.random().toString(36).slice(2,7)),
+        id: i.id || genId(),
         pseudo: i.pseudo||'',
         profil: i.profil||'',
         whatsapp: i.whatsapp||'',
-        status: typeof i.status==='number'?i.status:0,
-        lastAction: i.lastAction || new Date().toISOString(),
+        platform: i.platform||'',
+        status: (typeof i.status==='number' && i.status>=0 && i.status<=7) ? i.status : 0,
+        // lastContact = base du calcul d'urgence (contact/relance/statut uniquement)
+        lastContact: i.lastContact || i.lastAction || nowIso,
+        // lastModified = dernière modif quelconque (info seulement)
+        lastModified: i.lastModified || i.lastAction || nowIso,
+        addedAt: i.addedAt || i.lastAction || nowIso,
         relances: i.relances||0,
+        relanceHistory: Array.isArray(i.relanceHistory)?i.relanceHistory:[],
         tracking: i.tracking||'',
         trackingStatus: i.trackingStatus||'',
+        deal: i.deal||'',             // contrepartie : gifting / payé
+        dealAmount: i.dealAmount||'',
+        deadline: i.deadline||'',     // date limite contenu (YYYY-MM-DD)
+        address: i.address||'',
         quota: i.quota||'',
         videos: Array.isArray(i.videos)?i.videos:[],
         notes: i.notes||''
     };
 }
 
-// ── Sauvegarde (debounced) ──────────────────────────────────────────────
+function genId(){ return 'inf_'+Date.now()+'_'+Math.random().toString(36).slice(2,9); }
+
+// ── Sauvegarde (debounced + contrôle de version + re-tentative) ─────────
+// AMÉLIORATION #2 : versioning optimiste, avertissement conflit, retry, dirty flag.
 function scheduleSave(){
+    dirty = true;
     showSave('💾 Sauvegarde…');
     if(saveTimer) clearTimeout(saveTimer);
     saveTimer = setTimeout(doSave, 700);
 }
-async function doSave(){
+
+async function doSave(force){
     try{
         const r = await fetch('/api/influenceurs',{
             method:'POST', headers:{'Content-Type':'application/json'},
-            body: JSON.stringify({influenceurs})
+            body: JSON.stringify({ influenceurs, base_version: dataVersion, force: !!force })
         });
+        if(r.status === 409){
+            // Conflit : un autre onglet a sauvegardé entre-temps
+            const d = await r.json();
+            pendingConflictSnapshot = d;
+            showConflict();
+            return;
+        }
         const d = await r.json();
-        showSave(d.success?'✅ Enregistré':'❌ Erreur', true);
-    }catch(e){ showSave('❌ Erreur réseau', true); }
+        if(d.success){
+            dataVersion = d.version || dataVersion;
+            dirty = false;
+            showSave('✅ Enregistré', true);
+        }else{
+            showSave('❌ Erreur — nouvelle tentative…', false);
+            setTimeout(()=>doSave(force), 3000);  // re-tentative auto
+        }
+    }catch(e){
+        showSave('❌ Réseau — nouvelle tentative…', false);
+        setTimeout(()=>doSave(force), 3000);      // re-tentative auto en cas de coupure
+    }
 }
+
 let saveHideTimer=null;
 function showSave(txt, autohide){
     const bar=document.getElementById('saveBar');
     document.getElementById('saveText').textContent=txt;
+    bar.classList.toggle('err', txt.startsWith('❌'));
     bar.classList.add('show');
     if(saveHideTimer) clearTimeout(saveHideTimer);
     if(autohide) saveHideTimer=setTimeout(()=>bar.classList.remove('show'),1600);
 }
 
-// ── Calcul urgence ──────────────────────────────────────────────────────
+// ── Gestion du conflit de version ───────────────────────────────────────
+function showConflict(){
+    const d = pendingConflictSnapshot || {};
+    const cnt = (d.server_influenceurs||[]).length;
+    document.getElementById('conflictMsg').textContent =
+        `Ces données ont été modifiées ailleurs depuis l'ouverture de la page (version serveur : ${cnt} influenceur(s)). ` +
+        `« Écraser » garde TA version. « Recharger » abandonne tes modifs non sauvegardées et reprend la version à jour.`;
+    document.getElementById('conflictToast').classList.add('show');
+}
+function hideConflict(){ document.getElementById('conflictToast').classList.remove('show'); }
+
+// AMÉLIORATION #2 : avertissement avant fermeture si modifs non sauvegardées
+window.addEventListener('beforeunload', (e)=>{
+    if(dirty){ e.preventDefault(); e.returnValue=''; }
+});
+
+// ── Calcul urgence (basé sur lastContact, PAS lastModified) ─────────────
 function daysSince(iso){
     const d = new Date(iso);
-    return Math.floor((Date.now()-d.getTime())/86400000);
+    const t = d.getTime();
+    if(isNaN(t)) return 0;                    // AMÉLIORATION #11 : date invalide → 0, pas NaN
+    return Math.max(0, Math.floor((Date.now()-t)/86400000));
 }
+
 function urgencyLevel(inf){
-    // Retourne 'urgent' | 'warn' | 'ok'
-    if(inf.status===7) return 'ok'; // terminé
+    if(inf.status===7) return 'ok';           // terminé
+    // AMÉLIORATION #3 : incohérence tracking = problème → urgent
+    if(inf.trackingStatus==='probleme') return 'urgent';
+    // AMÉLIORATION #5 (deadline) : contenu en retard sur deadline sans quota complet
+    if(inf.deadline){
+        const dl = new Date(inf.deadline).getTime();
+        if(!isNaN(dl) && Date.now() > dl){
+            const posted = inf.videos.filter(v=>v&&v.trim()).length;
+            // s'il reste du contenu à poster et deadline passée
+            if(inf.status>=4 && inf.status<7 && posted===0) return 'urgent';
+        }
+    }
     const threshold = RELANCE_THRESHOLD[inf.status];
     if(threshold===undefined) return 'ok';
-    const days = daysSince(inf.lastAction);
+    const days = daysSince(inf.lastContact);
     if(days >= threshold) return 'urgent';
     if(days >= threshold-2) return 'warn';
     return 'ok';
 }
+
 function urgencyReason(inf){
-    const days = daysSince(inf.lastAction);
+    if(inf.trackingStatus==='probleme') return 'Problème de livraison signalé';
+    const days = daysSince(inf.lastContact);
     switch(inf.status){
         case 1: return `Contacté il y a ${days}j, pas de réponse`;
-        case 2: return `En négo depuis ${days}j`;
-        case 5: return `Livré il y a ${days}j, contenu à suivre`;
+        case 2: return `En négociation depuis ${days}j`;
+        case 3: return `Accord conclu il y a ${days}j — colis à envoyer`;
+        case 4: return `Colis envoyé il y a ${days}j — livraison à confirmer`;
+        case 5: return `Livré il y a ${days}j — contenu à suivre`;
         case 6: return `Contenu en cours depuis ${days}j`;
         default: return `${days}j sans action`;
     }
@@ -323,8 +481,22 @@ function urgencyReason(inf){
 // ── Rendu ───────────────────────────────────────────────────────────────
 function render(){
     renderStats();
+    renderPipeline();
+
+    // Appliquer recherche + filtres
+    const q = searchQuery.toLowerCase();
+    const filtered = influenceurs.filter(inf=>{
+        if(filterStatus!=='' && inf.status!==parseInt(filterStatus)) return false;
+        if(filterUrgency!=='' && urgencyLevel(inf)!==filterUrgency) return false;
+        if(q){
+            const hay = (inf.pseudo+' '+inf.notes+' '+inf.platform+' '+inf.quota+' '+inf.deal).toLowerCase();
+            if(!hay.includes(q)) return false;
+        }
+        return true;
+    });
+
     const urgent=[], warn=[], ok=[];
-    influenceurs.forEach(inf=>{
+    filtered.forEach(inf=>{
         const lvl=urgencyLevel(inf);
         if(lvl==='urgent') urgent.push(inf);
         else if(lvl==='warn') warn.push(inf);
@@ -336,16 +508,21 @@ function render(){
         c.innerHTML='<div class="empty">Aucun influenceur pour l\'instant.<br>Ajoute-en un avec le formulaire ci-dessus.</div>';
         return;
     }
+    if(filtered.length===0){
+        c.innerHTML='<div class="empty">Aucun résultat pour ces filtres.</div>';
+        return;
+    }
     let html='';
     if(urgent.length) html+=section('urgent','🔴 Agir maintenant',urgent);
     if(warn.length)   html+=section('warn','🟡 À surveiller',warn);
     if(ok.length)     html+=section('ok','🟢 En cours',ok);
     c.innerHTML=html;
+    bindCards();  // AMÉLIORATION #9 : écouteurs délégués au lieu d'onclick inline
 }
 
 function section(type,title,list){
     const collapsed=collapsedSections.has(type);
-    let h=`<div class="section-head ${type} ${collapsed?'collapsed':''}" onclick="toggleSection('${type}')">
+    let h=`<div class="section-head ${type} ${collapsed?'collapsed':''}" data-section="${type}">
         ${title} <span class="count-badge">${list.length}</span>
         <span class="chev-sec">▼</span></div>`;
     if(!collapsed){
@@ -357,14 +534,22 @@ function section(type,title,list){
 function cardHtml(inf){
     const lvl=urgencyLevel(inf);
     const isOpen=expanded.has(inf.id);
-    const days=daysSince(inf.lastAction);
+    const days=daysSince(inf.lastContact);
     const threshold=RELANCE_THRESHOLD[inf.status];
     const late = threshold!==undefined && days>=threshold;
     const postedCount=inf.videos.filter(v=>v&&v.trim()).length;
+    const eid = escAttr(inf.id);
 
     let reasonLine='';
     if(lvl==='urgent'||lvl==='warn'){
         reasonLine=`<div class="influ-meta"><span style="color:var(--${lvl==='urgent'?'danger':'warn'})">⚠ ${esc(urgencyReason(inf))}</span></div>`;
+    }
+
+    // Historique relances (dernières 3)
+    let histLine='';
+    if(inf.relanceHistory && inf.relanceHistory.length){
+        const last3 = inf.relanceHistory.slice(-3).map(fmtDate).join(' · ');
+        histLine = `<div class="relance-hist">Relances : ${esc(last3)}${inf.relanceHistory.length>3?' …':''}</div>`;
     }
 
     return `<div class="influ-card ${lvl!=='ok'?lvl:''}">
@@ -372,65 +557,91 @@ function cardHtml(inf){
             <div style="flex:1;min-width:180px">
                 <div class="influ-name">
                     ${esc(inf.pseudo||'(sans nom)')}
-                    ${inf.profil?`<a href="${escAttr(inf.profil)}" target="_blank">↗ profil</a>`:''}
+                    ${inf.platform?`<span class="plat-tag">${esc(inf.platform)}</span>`:''}
+                    ${inf.profil?`<a href="${escAttr(inf.profil)}" target="_blank" rel="noopener">↗ profil</a>`:''}
                 </div>
                 <div class="influ-meta">
-                    ${inf.whatsapp?`<a href="https://wa.me/${inf.whatsapp.replace(/[^0-9]/g,'')}" target="_blank">📱 ${esc(inf.whatsapp)}</a>`:''}
+                    ${inf.whatsapp?`<a href="https://wa.me/${inf.whatsapp.replace(/[^0-9]/g,'')}" target="_blank" rel="noopener">📱 ${esc(inf.whatsapp)}</a>`:''}
                     ${postedCount>0||inf.quota?`<span>🎬 ${postedCount}${inf.quota?' / '+esc(inf.quota):' vidéo(s)'}</span>`:''}
+                    ${inf.deal?`<span>💰 ${esc(inf.deal)}${inf.dealAmount?' ('+esc(inf.dealAmount)+')':''}</span>`:''}
                 </div>
                 ${reasonLine}
+                ${histLine}
+                <!-- AMÉLIORATION #1bis : actions fréquentes SANS déplier -->
+                <div class="quick-actions">
+                    ${inf.status<7?`<button class="quick-btn primary" data-act="advance" data-id="${eid}">→ ${esc(STATUSES[inf.status+1])}</button>`:''}
+                    <button class="quick-btn" data-act="relancer" data-id="${eid}">🔄 Relancer${inf.relances?' ('+inf.relances+')':''}</button>
+                </div>
             </div>
             <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-                <span class="status-badge st-${inf.status}">${STATUSES[inf.status]}</span>
+                <span class="status-badge st-${inf.status}">${esc(STATUSES[inf.status])}</span>
                 ${threshold!==undefined?`<span class="days-badge ${late?'late':''}">${days}j</span>`:''}
-                <span class="expand-toggle" onclick="toggleExpand('${inf.id}')">${isOpen?'▲ fermer':'▼ détails'}</span>
+                <span class="expand-toggle" data-act="expand" data-id="${eid}">${isOpen?'▲ fermer':'▼ détails'}</span>
             </div>
         </div>
         <div class="influ-body ${isOpen?'open':''}">
             <div class="field">
                 <label>Statut</label>
-                <select onchange="setField('${inf.id}','status',parseInt(this.value));touchAction('${inf.id}')">
-                    ${STATUSES.map((s,i)=>`<option value="${i}" ${i===inf.status?'selected':''}>${s}</option>`).join('')}
+                <select data-act="status" data-id="${eid}">
+                    ${STATUSES.map((s,i)=>`<option value="${i}" ${i===inf.status?'selected':''}>${esc(s)}</option>`).join('')}
                 </select>
-                <div class="actions-row">
-                    ${inf.status<7?`<button class="act-btn primary" onclick="advance('${inf.id}')">→ ${STATUSES[inf.status+1]}</button>`:''}
-                    <button class="act-btn" onclick="relancer('${inf.id}')">🔄 Relancer (${inf.relances})</button>
-                </div>
+            </div>
+            <div class="field">
+                <label>Plateforme</label>
+                <select data-act="field" data-field="platform" data-id="${eid}">
+                    ${['','TikTok','Instagram','Snap','Autre'].map(p=>`<option value="${p}" ${p===inf.platform?'selected':''}>${p||'—'}</option>`).join('')}
+                </select>
+            </div>
+            <div class="field">
+                <label>Contrepartie</label>
+                <select data-act="field" data-field="deal" data-id="${eid}">
+                    ${['','Gifting','Payé','Gifting + Payé'].map(p=>`<option value="${p}" ${p===inf.deal?'selected':''}>${p||'—'}</option>`).join('')}
+                </select>
+            </div>
+            <div class="field">
+                <label>Montant (si payé)</label>
+                <input type="text" value="${escAttr(inf.dealAmount)}" placeholder="ex: 50€" data-act="field" data-field="dealAmount" data-id="${eid}">
             </div>
             <div class="field">
                 <label>Quota de contenu (flexible)</label>
-                <input type="text" value="${escAttr(inf.quota)}" placeholder="ex: 1 unboxing + 2 playback"
-                    oninput="setField('${inf.id}','quota',this.value)">
+                <input type="text" value="${escAttr(inf.quota)}" placeholder="ex: 1 unboxing + 2 playback" data-act="field" data-field="quota" data-id="${eid}">
+            </div>
+            <div class="field">
+                <label>Deadline contenu</label>
+                <input type="date" value="${escAttr(inf.deadline)}" data-act="field" data-field="deadline" data-id="${eid}">
             </div>
             <div class="field field-full">
                 <label>Numéro de suivi colis</label>
                 <div class="track-row">
-                    <input type="text" value="${escAttr(inf.tracking)}" placeholder="Numéro de suivi"
-                        oninput="setField('${inf.id}','tracking',this.value)" style="flex:1">
-                    <select onchange="setField('${inf.id}','trackingStatus',this.value)" style="max-width:150px">
+                    <input type="text" value="${escAttr(inf.tracking)}" placeholder="Numéro de suivi" data-act="field" data-field="tracking" data-id="${eid}" style="flex:1">
+                    <select data-act="field" data-field="trackingStatus" data-id="${eid}" style="max-width:150px">
                         <option value="" ${!inf.trackingStatus?'selected':''}>—</option>
                         <option value="transit" ${inf.trackingStatus==='transit'?'selected':''}>🚚 En transit</option>
                         <option value="livre" ${inf.trackingStatus==='livre'?'selected':''}>✅ Livré</option>
                         <option value="probleme" ${inf.trackingStatus==='probleme'?'selected':''}>⚠️ Problème</option>
                     </select>
-                    ${inf.tracking?`<a href="https://t.17track.net/en#nums=${encodeURIComponent(inf.tracking)}" target="_blank">↗ 17TRACK</a>`:''}
+                    ${inf.tracking?`<a href="https://t.17track.net/en#nums=${encodeURIComponent(inf.tracking)}" target="_blank" rel="noopener">↗ 17TRACK</a>`:''}
                 </div>
+            </div>
+            <div class="field field-full">
+                <label>Adresse de livraison</label>
+                <input type="text" value="${escAttr(inf.address)}" placeholder="Adresse complète (pour réenvoi éventuel)" data-act="field" data-field="address" data-id="${eid}">
             </div>
             <div class="field field-full">
                 <label>Vidéos postées (liens)</label>
-                <div id="videos-${inf.id}">
+                <div id="videos-${eid}">
                     ${inf.videos.map((v,idx)=>videoRow(inf.id,idx,v)).join('')}
                 </div>
-                <button class="act-btn" onclick="addVideo('${inf.id}')" style="margin-top:6px">+ Ajouter une vidéo</button>
+                <button class="act-btn" data-act="addvideo" data-id="${eid}" style="margin-top:6px">+ Ajouter une vidéo</button>
             </div>
             <div class="field field-full">
                 <label>Notes</label>
-                <textarea placeholder="Notes libres (conditions, historique de conv, remarques…)"
-                    oninput="setField('${inf.id}','notes',this.value)">${esc(inf.notes)}</textarea>
+                <textarea placeholder="Notes libres (conditions, historique de conv, remarques…)" data-act="field" data-field="notes" data-id="${eid}">${esc(inf.notes)}</textarea>
             </div>
             <div class="field field-full">
+                <div class="influ-meta" style="margin-bottom:8px">Ajouté le ${fmtDate(inf.addedAt)}</div>
                 <div class="actions-row">
-                    <button class="act-btn danger" onclick="removeInfluenceur('${inf.id}')">🗑 Supprimer cet influenceur</button>
+                    <button class="act-btn danger" data-act="remove" data-id="${eid}">🗑 Supprimer cet influenceur</button>
                 </div>
             </div>
         </div>
@@ -438,10 +649,10 @@ function cardHtml(inf){
 }
 
 function videoRow(id,idx,val){
+    const eid=escAttr(id);
     return `<div class="video-item">
-        <input type="text" value="${escAttr(val)}" placeholder="Lien de la vidéo"
-            oninput="setVideo('${id}',${idx},this.value)">
-        <span class="rm" onclick="removeVideo('${id}',${idx})">✕</span>
+        <input type="text" value="${escAttr(val)}" placeholder="Lien de la vidéo" data-act="setvideo" data-id="${eid}" data-idx="${idx}">
+        <span class="rm" data-act="rmvideo" data-id="${eid}" data-idx="${idx}">✕</span>
     </div>`;
 }
 
@@ -455,6 +666,49 @@ function renderStats(){
         <div class="stat-pill"><span class="dot dot-warn"></span>À surveiller : <b>${warn}</b></div>`;
 }
 
+// AMÉLIORATION #10 : compteur pipeline par statut, cliquable = filtre
+function renderPipeline(){
+    const counts = STATUSES.map((_,i)=>influenceurs.filter(x=>x.status===i).length);
+    document.getElementById('pipelineRow').innerHTML = STATUSES.map((s,i)=>
+        `<div class="pipe-chip ${filterStatus===String(i)?'active':''}" data-pipe="${i}">${esc(s)}<b>${counts[i]}</b></div>`
+    ).join('');
+    document.querySelectorAll('[data-pipe]').forEach(chip=>{
+        chip.addEventListener('click',()=>{
+            const v=chip.getAttribute('data-pipe');
+            filterStatus = (filterStatus===v)?'':v;
+            document.getElementById('filterStatus').value=filterStatus;
+            render();
+        });
+    });
+}
+
+// ── Écouteurs délégués (AMÉLIORATION #9 : plus d'onclick inline fragile) ──
+function bindCards(){
+    const c=document.getElementById('listContainer');
+    // Sections repliables
+    c.querySelectorAll('[data-section]').forEach(el=>{
+        el.addEventListener('click',()=>toggleSection(el.getAttribute('data-section')));
+    });
+    // Boutons d'action
+    c.querySelectorAll('[data-act]').forEach(el=>{
+        const act=el.getAttribute('data-act');
+        const id=el.getAttribute('data-id');
+        if(act==='advance')      el.addEventListener('click',()=>advance(id));
+        else if(act==='relancer')el.addEventListener('click',()=>relancer(id));
+        else if(act==='expand')  el.addEventListener('click',()=>toggleExpand(id));
+        else if(act==='remove')  el.addEventListener('click',()=>removeInfluenceur(id));
+        else if(act==='addvideo')el.addEventListener('click',()=>addVideo(id));
+        else if(act==='rmvideo') el.addEventListener('click',()=>removeVideo(id,parseInt(el.getAttribute('data-idx'))));
+        else if(act==='status')  el.addEventListener('change',()=>setStatus(id,parseInt(el.value)));
+        else if(act==='setvideo')el.addEventListener('input',()=>setVideo(id,parseInt(el.getAttribute('data-idx')),el.value));
+        else if(act==='field'){
+            const field=el.getAttribute('data-field');
+            const evt=(el.tagName==='SELECT')?'change':'input';
+            el.addEventListener(evt,()=>setField(id,field,el.value));
+        }
+    });
+}
+
 // ── Actions ─────────────────────────────────────────────────────────────
 function find(id){ return influenceurs.find(i=>i.id===id); }
 
@@ -462,11 +716,17 @@ function addInfluenceur(){
     const p=document.getElementById('addPseudo').value.trim();
     const prof=document.getElementById('addProfil').value.trim();
     const wa=document.getElementById('addWhatsapp').value.trim();
+    const plat=document.getElementById('addPlatform').value;
     if(!p && !prof && !wa){ return; }
-    influenceurs.unshift(normalize({pseudo:p,profil:prof,whatsapp:wa,status:0,lastAction:new Date().toISOString()}));
+    const nowIso=new Date().toISOString();
+    influenceurs.unshift(normalize({
+        pseudo:p, profil:prof, whatsapp:wa, platform:plat,
+        status:0, addedAt:nowIso, lastContact:nowIso, lastModified:nowIso
+    }));
     document.getElementById('addPseudo').value='';
     document.getElementById('addProfil').value='';
     document.getElementById('addWhatsapp').value='';
+    document.getElementById('addPlatform').value='';
     render(); scheduleSave();
 }
 
@@ -477,41 +737,58 @@ function removeInfluenceur(id){
     render(); scheduleSave();
 }
 
+// setField NE re-render PAS (AMÉLIORATION #5 : plus de perte de focus)
+// et met à jour lastModified uniquement (pas lastContact → n'affecte pas l'urgence)
 function setField(id,field,val){
     const inf=find(id); if(!inf) return;
     inf[field]=val;
-    // Ne pas re-render à chaque frappe (perte de focus) — juste sauvegarder
-    if(field==='status'){ inf.lastAction=new Date().toISOString(); render(); }
+    inf.lastModified=new Date().toISOString();
     scheduleSave();
 }
 
-function touchAction(id){
+// Changement de statut = action de contact → met à jour lastContact + re-render
+function setStatus(id,val){
     const inf=find(id); if(!inf) return;
-    inf.lastAction=new Date().toISOString();
-    scheduleSave();
+    if(isNaN(val)||val<0||val>7) return;
+    inf.status=val;
+    inf.lastContact=new Date().toISOString();
+    inf.lastModified=inf.lastContact;
+    render(); scheduleSave();
 }
 
 function advance(id){
     const inf=find(id); if(!inf) return;
-    if(inf.status<7){ inf.status++; inf.lastAction=new Date().toISOString(); }
+    if(inf.status<7){
+        inf.status++;
+        inf.lastContact=new Date().toISOString();
+        inf.lastModified=inf.lastContact;
+    }
     render(); scheduleSave();
 }
 
+// AMÉLIORATION #8 : relance datée + reset du compteur d'urgence
 function relancer(id){
     const inf=find(id); if(!inf) return;
     inf.relances=(inf.relances||0)+1;
-    inf.lastAction=new Date().toISOString();
+    const nowIso=new Date().toISOString();
+    inf.lastContact=nowIso;
+    inf.lastModified=nowIso;
+    if(!Array.isArray(inf.relanceHistory)) inf.relanceHistory=[];
+    inf.relanceHistory.push(nowIso);
     render(); scheduleSave();
 }
 
+// Vidéos : re-render mais on garde la carte ouverte (pas de perte de focus car
+// l'ajout/suppression est une action ponctuelle, pas une frappe continue)
 function addVideo(id){
     const inf=find(id); if(!inf) return;
+    if(!Array.isArray(inf.videos)) inf.videos=[];
     inf.videos.push('');
     render(); keepOpen(id); scheduleSave();
 }
 function setVideo(id,idx,val){
     const inf=find(id); if(!inf) return;
-    inf.videos[idx]=val; scheduleSave();
+    if(inf.videos[idx]!==undefined){ inf.videos[idx]=val; inf.lastModified=new Date().toISOString(); scheduleSave(); }
 }
 function removeVideo(id,idx){
     const inf=find(id); if(!inf) return;
@@ -529,9 +806,61 @@ function toggleSection(type){
     render();
 }
 
+// AMÉLIORATION #12 : export CSV (sauvegarde manuelle de secours)
+function exportCSV(){
+    const cols=['pseudo','platform','profil','whatsapp','status_label','deal','dealAmount','quota','deadline','tracking','trackingStatus','videos_count','relances','notes','addedAt'];
+    const lines=[cols.join(',')];
+    influenceurs.forEach(i=>{
+        const row=[
+            i.pseudo, i.platform, i.profil, i.whatsapp, STATUSES[i.status]||'',
+            i.deal, i.dealAmount, i.quota, i.deadline, i.tracking, i.trackingStatus,
+            i.videos.filter(v=>v&&v.trim()).length, i.relances,
+            (i.notes||'').replace(/\n/g,' '), i.addedAt
+        ].map(csvCell);
+        lines.push(row.join(','));
+    });
+    const blob=new Blob([lines.join('\n')],{type:'text/csv;charset=utf-8'});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    a.href=url; a.download='influenceurs_'+new Date().toISOString().slice(0,10)+'.csv';
+    a.click(); URL.revokeObjectURL(url);
+}
+function csvCell(v){
+    const s=String(v==null?'':v);
+    if(/[",\n]/.test(s)) return '"'+s.replace(/"/g,'""')+'"';
+    return s;
+}
+
+// ── Formatage dates ─────────────────────────────────────────────────────
+function fmtDate(iso){
+    const d=new Date(iso);
+    if(isNaN(d.getTime())) return '—';
+    return d.toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit',year:'2-digit'});
+}
+
 // ── Échappement ─────────────────────────────────────────────────────────
 function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
-function escAttr(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function escAttr(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
+// ── Bind toolbar / add ──────────────────────────────────────────────────
+document.getElementById('addBtn').addEventListener('click', addInfluenceur);
+document.getElementById('exportBtn').addEventListener('click', exportCSV);
+document.getElementById('searchInput').addEventListener('input', function(){ searchQuery=this.value; render(); });
+document.getElementById('filterStatus').addEventListener('change', function(){ filterStatus=this.value; render(); });
+document.getElementById('filterUrgency').addEventListener('change', function(){ filterUrgency=this.value; render(); });
+// Remplir le filtre statut
+(function(){
+    const sel=document.getElementById('filterStatus');
+    STATUSES.forEach((s,i)=>{ const o=document.createElement('option'); o.value=i; o.textContent=s; sel.appendChild(o); });
+})();
+// Entrée dans le formulaire d'ajout = ajouter
+['addPseudo','addProfil','addWhatsapp'].forEach(id=>{
+    document.getElementById(id).addEventListener('keydown',e=>{ if(e.key==='Enter') addInfluenceur(); });
+});
+
+// Conflit
+document.getElementById('conflictForce').addEventListener('click', ()=>{ hideConflict(); doSave(true); });
+document.getElementById('conflictReload').addEventListener('click', ()=>{ hideConflict(); pendingConflictSnapshot=null; load(); });
 
 // ── Menus déroulants ────────────────────────────────────────────────────
 (function(){
@@ -551,10 +880,10 @@ function escAttr(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/"
 })();
 
 // ── Thème ───────────────────────────────────────────────────────────────
-const html=document.documentElement;
+const htmlEl=document.documentElement;
 let theme=localStorage.getItem('theme')||'dark';
 const themeBtn=document.getElementById('themeBtn');
-function applyTheme(t){theme=t;html.setAttribute('data-theme',t);themeBtn.textContent=t==='dark'?'☀️':'🌙';localStorage.setItem('theme',t);}
+function applyTheme(t){theme=t;htmlEl.setAttribute('data-theme',t);themeBtn.textContent=t==='dark'?'☀️':'🌙';localStorage.setItem('theme',t);}
 applyTheme(theme);
 themeBtn.addEventListener('click',()=>applyTheme(theme==='dark'?'light':'dark'));
 
