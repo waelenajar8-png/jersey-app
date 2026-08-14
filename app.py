@@ -2855,34 +2855,137 @@ def categories_page(): return render_template("categories.html")
 
 # ── Module de suivi des influenceurs ──────────────────────────────────────
 INFLUENCEURS_R2_KEY = "meta/influenceurs.json"
+INFLUENCEURS_BACKUP_PREFIX = "meta/influenceurs_backups/"
+INFLUENCEURS_BACKUP_KEEP = 5  # nombre de sauvegardes de secours conservées
+_influenceurs_lock = threading.Lock()
 
 @app.route("/influenceurs")
 def influenceurs_page(): return render_template("influenceurs.html")
 
 @app.route("/api/influenceurs", methods=["GET"])
 def api_get_influenceurs():
-    """Retourne la liste complète des influenceurs depuis R2."""
+    """Retourne la liste complète des influenceurs depuis R2 + le numéro de version."""
     try:
-        data = r2_get_json(INFLUENCEURS_R2_KEY) or {"influenceurs": []}
-        if "influenceurs" not in data:
-            data = {"influenceurs": []}
-        return jsonify(data)
+        data = r2_get_json(INFLUENCEURS_R2_KEY) or {}
+        influenceurs = data.get("influenceurs", [])
+        if not isinstance(influenceurs, list):
+            influenceurs = []
+        return jsonify({
+            "influenceurs": influenceurs,
+            "version": data.get("version", 0),
+            "updated_at": data.get("updated_at", ""),
+        })
     except Exception as e:
         print(f"[INFLU] Erreur lecture: {e}")
-        return jsonify({"influenceurs": []})
+        return jsonify({"influenceurs": [], "version": 0, "updated_at": ""})
 
 @app.route("/api/influenceurs", methods=["POST"])
 def api_save_influenceurs():
-    """Sauvegarde la liste complète des influenceurs dans R2 (remplace tout)."""
+    """
+    Sauvegarde la liste complète des influenceurs dans R2.
+
+    Protection anti-perte de données :
+    - Contrôle de version optimiste : le client envoie la version qu'il a chargée
+      (base_version). Si la version serveur a changé entre-temps (autre onglet),
+      on refuse l'écrasement et on renvoie 409 avec les données serveur à jour.
+    - Le client peut forcer avec force=true (après avoir prévenu l'utilisateur).
+    - Une sauvegarde de secours horodatée est créée à chaque écriture réussie
+      (les INFLUENCEURS_BACKUP_KEEP dernières sont conservées).
+    """
     try:
         payload = request.json or {}
         influenceurs = payload.get("influenceurs", [])
         if not isinstance(influenceurs, list):
             return jsonify({"success": False, "error": "format invalide"}), 400
-        r2_put_json(INFLUENCEURS_R2_KEY, {"influenceurs": influenceurs})
-        return jsonify({"success": True, "count": len(influenceurs)})
+
+        base_version = payload.get("base_version")   # version que le client avait au chargement
+        force        = bool(payload.get("force", False))
+
+        with _influenceurs_lock:
+            current = r2_get_json(INFLUENCEURS_R2_KEY) or {}
+            server_version = current.get("version", 0)
+
+            # Contrôle de version optimiste (sauf si force=true ou premier enregistrement)
+            if (not force) and (base_version is not None) and (base_version != server_version):
+                # Un autre onglet/appareil a sauvegardé entre-temps → refuser l'écrasement
+                print(f"[INFLU] ⚠️ Conflit de version: client base={base_version}, serveur={server_version}")
+                return jsonify({
+                    "success": False,
+                    "conflict": True,
+                    "server_version": server_version,
+                    "server_influenceurs": current.get("influenceurs", []),
+                    "server_updated_at": current.get("updated_at", ""),
+                }), 409
+
+            new_version = server_version + 1
+            now_iso = datetime.now(timezone.utc).isoformat()
+            record = {
+                "influenceurs": influenceurs,
+                "version": new_version,
+                "updated_at": now_iso,
+            }
+
+            # Sauvegarde de secours de l'ANCIEN état avant écrasement (si non vide)
+            if current.get("influenceurs"):
+                try:
+                    ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+                    r2_put_json(f"{INFLUENCEURS_BACKUP_PREFIX}{ts}.json", current)
+                    # Ne garder que les N dernières sauvegardes
+                    backups = sorted(r2_list_keys(INFLUENCEURS_BACKUP_PREFIX, suffix=".json"))
+                    for old_key in backups[:-INFLUENCEURS_BACKUP_KEEP]:
+                        r2_delete(old_key)
+                except Exception as e:
+                    print(f"[INFLU] Backup non critique échoué: {e}")
+
+            ok = r2_put_json(INFLUENCEURS_R2_KEY, record)
+            if not ok:
+                return jsonify({"success": False, "error": "écriture R2 échouée"}), 500
+
+        return jsonify({"success": True, "count": len(influenceurs), "version": new_version, "updated_at": now_iso})
     except Exception as e:
         print(f"[INFLU] Erreur sauvegarde: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route("/api/influenceurs/backups", methods=["GET"])
+def api_influenceurs_backups():
+    """Liste les sauvegardes de secours disponibles (pour récupération manuelle)."""
+    try:
+        keys = sorted(r2_list_keys(INFLUENCEURS_BACKUP_PREFIX, suffix=".json"), reverse=True)
+        backups = []
+        for k in keys:
+            name = k.replace(INFLUENCEURS_BACKUP_PREFIX, "").replace(".json", "")
+            d = r2_get_json(k) or {}
+            backups.append({
+                "key": k,
+                "name": name,
+                "count": len(d.get("influenceurs", [])),
+                "updated_at": d.get("updated_at", ""),
+            })
+        return jsonify({"backups": backups})
+    except Exception as e:
+        return jsonify({"backups": [], "error": str(e)})
+
+@app.route("/api/influenceurs/restore", methods=["POST"])
+def api_influenceurs_restore():
+    """Restaure une sauvegarde de secours (devient la version courante)."""
+    try:
+        key = (request.json or {}).get("key")
+        if not key or not key.startswith(INFLUENCEURS_BACKUP_PREFIX):
+            return jsonify({"success": False, "error": "clé invalide"}), 400
+        backup = r2_get_json(key)
+        if not backup:
+            return jsonify({"success": False, "error": "sauvegarde introuvable"}), 404
+        with _influenceurs_lock:
+            current = r2_get_json(INFLUENCEURS_R2_KEY) or {}
+            new_version = current.get("version", 0) + 1
+            record = {
+                "influenceurs": backup.get("influenceurs", []),
+                "version": new_version,
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }
+            r2_put_json(INFLUENCEURS_R2_KEY, record)
+        return jsonify({"success": True, "count": len(record["influenceurs"]), "version": new_version})
+    except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
 
 @app.route("/queue_ig")
