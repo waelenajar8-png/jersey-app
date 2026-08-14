@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Suivi Influenceurs — Volakits</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root[data-theme="dark"]{
+    --bg:#0a0b0f; --bg-elevated:#0f1117;
+    --panel:#15171e; --panel-hover:#1a1d26;
+    --border:#242832; --border-strong:#323847;
+    --accent:#4ade80; --accent-grad:linear-gradient(135deg,#4ade80,#22d3ee); --accent-dim:rgba(74,222,128,.12);
+    --text:#f1f3f6; --text-dim:#8b93a3; --text-faint:#5b6373;
+    --danger:#f87171; --danger-dim:rgba(248,113,113,.12);
+    --warn:#fbbf24; --warn-dim:rgba(251,191,36,.13);
+    --ok:#4ade80; --ok-dim:rgba(74,222,128,.12);
+    --shadow-sm:0 1px 2px rgba(0,0,0,.3);
+    --shadow-md:0 4px 12px rgba(0,0,0,.35),0 1px 3px rgba(0,0,0,.3);
+    --shadow-glow:0 0 0 1px rgba(74,222,128,.15),0 4px 16px rgba(74,222,128,.08);
+}
+:root[data-theme="light"]{
+    --bg:#f7f8fa; --bg-elevated:#ffffff;
+    --panel:#ffffff; --panel-hover:#f9fafb;
+    --border:#e5e7eb; --border-strong:#d1d5db;
+    --accent:#16a34a; --accent-grad:linear-gradient(135deg,#16a34a,#0891b2); --accent-dim:rgba(22,163,74,.08);
+    --text:#0f172a; --text-dim:#64748b; --text-faint:#94a3b8;
+    --danger:#dc2626; --danger-dim:rgba(220,38,38,.08);
+    --warn:#d97706; --warn-dim:rgba(217,119,6,.1);
+    --ok:#16a34a; --ok-dim:rgba(22,163,74,.08);
+    --shadow-sm:0 1px 2px rgba(15,23,42,.06);
+    --shadow-md:0 4px 12px rgba(15,23,42,.08),0 1px 3px rgba(15,23,42,.06);
+    --shadow-glow:0 0 0 1px rgba(22,163,74,.12),0 4px 16px rgba(22,163,74,.06);
+}
+*{box-sizing:border-box}
+::selection{background:var(--accent);color:#0a0b0f}
+body{margin:0;font-family:'Inter',-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;padding:32px 24px;letter-spacing:-0.01em;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1280px;margin:0 auto}
+@keyframes fadeInUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+.topbar{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:24px;flex-wrap:wrap;gap:12px}
+h1{font-size:24px;margin:0;font-weight:800;letter-spacing:-0.02em}
+.nav{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+@media(max-width:640px){
+    .topbar{flex-direction:column;align-items:stretch}
+    .nav{flex-wrap:nowrap;overflow-x:auto;padding-bottom:4px;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+    .nav::-webkit-scrollbar{display:none}
+}
+.btn{padding:11px 20px;background:var(--accent-grad);color:#06170d;border:none;border-radius:11px;font-size:13.5px;font-weight:700;cursor:pointer;box-shadow:var(--shadow-glow);transition:all .18s cubic-bezier(.16,1,.3,1)}
+.btn:hover:not(:disabled){transform:translateY(-1.5px);box-shadow:0 6px 20px rgba(74,222,128,.25),var(--shadow-glow)}
+.btn:disabled{opacity:0.4;cursor:not-allowed;box-shadow:none}
+.btn-sec{padding:10px 18px;background:var(--panel);border:1px solid var(--border);color:var(--text);border-radius:10px;font-size:12.5px;font-weight:600;cursor:pointer;transition:all .15s ease}
+.btn-sec:hover{border-color:var(--border-strong);transform:translateY(-1px);box-shadow:var(--shadow-sm)}
+.theme-btn{background:var(--panel);border:1px solid var(--border);color:var(--text);padding:6px 12px;border-radius:100px;cursor:pointer;font-size:13px;font-weight:600;box-shadow:var(--shadow-sm);transition:all .15s ease}
+/* Menus déroulants de navigation */
+.navmenu{position:relative;display:inline-block}
+.navmenu-btn{color:var(--text-dim);background:none;border:none;font-family:inherit;font-size:13px;font-weight:600;padding:6px 10px;border-radius:8px;cursor:pointer;transition:all .15s ease;display:flex;align-items:center;gap:4px}
+.navmenu-btn:hover,.navmenu.open .navmenu-btn{color:var(--text);background:var(--panel-hover)}
+.navmenu-btn .chev{font-size:9px;opacity:.6;transition:transform .18s ease}
+.navmenu.open .navmenu-btn .chev{transform:rotate(180deg)}
+.navmenu-drop{position:absolute;top:calc(100% + 6px);left:0;min-width:190px;background:var(--panel);border:1px solid var(--border-strong);border-radius:12px;box-shadow:var(--shadow-md);padding:6px;z-index:200;opacity:0;visibility:hidden;transform:translateY(-6px);transition:all .16s cubic-bezier(.16,1,.3,1)}
+.navmenu.open .navmenu-drop{opacity:1;visibility:visible;transform:translateY(0)}
+.navmenu-drop a{display:flex;align-items:center;gap:8px;color:var(--text-dim);text-decoration:none;font-size:13px;font-weight:600;padding:9px 11px;border-radius:8px;transition:all .13s ease;white-space:nowrap}
+.navmenu-drop a:hover{color:var(--text);background:var(--panel-hover)}
+.navmenu-drop a.current{color:var(--accent);background:var(--accent-dim)}
+@media(max-width:640px){.navmenu-drop{position:fixed;left:12px;right:12px;min-width:0}}
+
+/* Stats bar */
+.stats-row{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:20px}
+.stat-pill{display:flex;align-items:center;gap:7px;background:var(--panel);border:1px solid var(--border);border-radius:100px;padding:7px 14px;font-size:13px;font-weight:600;color:var(--text-dim)}
+.stat-pill b{color:var(--text);font-weight:700}
+.dot{width:8px;height:8px;border-radius:50%}
+.dot-total{background:var(--accent)}
+.dot-urgent{background:var(--danger)}
+.dot-warn{background:var(--warn)}
+
+/* Add form */
+.add-card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:20px;display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.add-card input{background:var(--bg-elevated);border:1px solid var(--border);color:var(--text);border-radius:9px;padding:10px 13px;font-size:13.5px;font-family:inherit;flex:1;min-width:160px}
+.add-card input:focus{outline:none;border-color:var(--accent)}
+
+/* Section headers */
+.section-head{display:flex;align-items:center;gap:10px;margin:22px 0 12px;font-size:14px;font-weight:700;cursor:pointer;user-select:none}
+.section-head .count-badge{background:var(--panel);border:1px solid var(--border);border-radius:100px;padding:2px 10px;font-size:12px;font-weight:700}
+.section-head.urgent{color:var(--danger)}
+.section-head.warn{color:var(--warn)}
+.section-head.ok{color:var(--text-dim)}
+.section-head .chev-sec{margin-left:auto;font-size:11px;opacity:.5;transition:transform .2s}
+.section-head.collapsed .chev-sec{transform:rotate(-90deg)}
+
+/* Influencer card */
+.influ-card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:12px;animation:fadeInUp .3s ease;transition:border-color .15s}
+.influ-card:hover{border-color:var(--border-strong)}
+.influ-card.urgent{border-left:3px solid var(--danger)}
+.influ-card.warn{border-left:3px solid var(--warn)}
+.influ-top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.influ-name{font-size:16px;font-weight:700;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.influ-name a{color:var(--accent);text-decoration:none;font-size:13px;font-weight:600}
+.influ-name a:hover{text-decoration:underline}
+.influ-meta{font-size:12.5px;color:var(--text-dim);margin-top:3px;display:flex;gap:12px;flex-wrap:wrap}
+.influ-meta a{color:var(--text-dim);text-decoration:none}
+.influ-meta a:hover{color:var(--accent)}
+
+/* Status pipeline */
+.status-badge{padding:5px 12px;border-radius:100px;font-size:12px;font-weight:700;white-space:nowrap}
+.st-0{background:var(--panel-hover);color:var(--text-dim)}
+.st-1{background:rgba(96,165,250,.15);color:#60a5fa}
+.st-2{background:rgba(167,139,250,.15);color:#a78bfa}
+.st-3{background:var(--accent-dim);color:var(--accent)}
+.st-4{background:rgba(251,191,36,.15);color:var(--warn)}
+.st-5{background:rgba(34,211,238,.15);color:#22d3ee}
+.st-6{background:rgba(244,114,182,.15);color:#f472b6}
+.st-7{background:var(--ok-dim);color:var(--ok)}
+
+.days-badge{font-size:12px;font-weight:600;padding:3px 9px;border-radius:7px;background:var(--panel-hover);color:var(--text-dim)}
+.days-badge.late{background:var(--danger-dim);color:var(--danger)}
+
+/* Card body (expandable details) */
+.influ-body{margin-top:14px;padding-top:14px;border-top:1px solid var(--border);display:none;grid-template-columns:1fr 1fr;gap:14px}
+.influ-body.open{display:grid}
+@media(max-width:720px){.influ-body.open{grid-template-columns:1fr}}
+.field{display:flex;flex-direction:column;gap:5px}
+.field label{font-size:11.5px;font-weight:600;color:var(--text-faint);text-transform:uppercase;letter-spacing:.03em}
+.field input,.field textarea,.field select{background:var(--bg-elevated);border:1px solid var(--border);color:var(--text);border-radius:9px;padding:9px 12px;font-size:13px;font-family:inherit;width:100%}
+.field input:focus,.field textarea:focus,.field select:focus{outline:none;border-color:var(--accent)}
+.field textarea{resize:vertical;min-height:60px}
+.field-full{grid-column:1/-1}
+
+/* Action buttons row */
+.actions-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
+.act-btn{padding:8px 14px;border-radius:9px;font-size:12.5px;font-weight:600;cursor:pointer;border:1px solid var(--border);background:var(--panel);color:var(--text);transition:all .13s}
+.act-btn:hover{border-color:var(--border-strong);transform:translateY(-1px)}
+.act-btn.primary{background:var(--accent-dim);border-color:transparent;color:var(--accent)}
+.act-btn.danger{color:var(--danger)}
+.act-btn.danger:hover{background:var(--danger-dim)}
+
+/* Videos list */
+.video-item{display:flex;gap:8px;align-items:center;margin-bottom:6px}
+.video-item input{flex:1}
+.video-item .rm{cursor:pointer;color:var(--text-faint);font-size:16px;padding:0 6px}
+.video-item .rm:hover{color:var(--danger)}
+
+/* Tracking */
+.track-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.track-row a{font-size:12px;color:var(--accent);text-decoration:none;white-space:nowrap}
+.track-row a:hover{text-decoration:underline}
+
+.expand-toggle{cursor:pointer;color:var(--text-faint);font-size:13px;padding:4px 8px;border-radius:7px;transition:all .13s;user-select:none}
+.expand-toggle:hover{background:var(--panel-hover);color:var(--text)}
+
+.empty{text-align:center;padding:40px 20px;color:var(--text-faint);font-size:14px}
+
+/* Save indicator */
+.save-bar{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(100px);background:var(--panel);border:1px solid var(--border-strong);border-radius:100px;padding:12px 22px;box-shadow:var(--shadow-md);display:flex;align-items:center;gap:14px;z-index:300;transition:transform .25s cubic-bezier(.16,1,.3,1)}
+.save-bar.show{transform:translateX(-50%) translateY(0)}
+.save-bar span{font-size:13px;font-weight:600;color:var(--text-dim)}
+</style>
+</head>
+<body>
+<div class="wrap">
+    <div class="topbar">
+        <div>
+            <h1>👥 Suivi Influenceurs</h1>
+        </div>
+        <div class="nav">
+            <div class="navmenu" data-menu>
+                <button class="navmenu-btn" data-menu-btn>🎨 Génération <span class="chev">▼</span></button>
+                <div class="navmenu-drop">
+                    <a href="/">🎨 Générateur</a>
+                    <a href="/templates">🗂️ Templates</a>
+                    <a href="/categories">🏷️ Catégories S/A/B</a>
+                </div>
+            </div>
+            <div class="navmenu" data-menu>
+                <button class="navmenu-btn" data-menu-btn>♺ Génération V2 <span class="chev">▼</span></button>
+                <div class="navmenu-drop">
+                    <a href="/generator2">📦 Générateur V2</a>
+                    <a href="/templates2">📦 Templates V2</a>
+                </div>
+            </div>
+            <div class="navmenu" data-menu>
+                <button class="navmenu-btn" data-menu-btn>📋 Publication <span class="chev">▼</span></button>
+                <div class="navmenu-drop">
+                    <a href="/queue">📋 File TikTok</a>
+                    <a href="/queue_ig" style="color:#e1306c">📸 File Instagram</a>
+                    <a href="/scheduled">✅ Programmés</a>
+                </div>
+            </div>
+            <div class="navmenu" data-menu>
+                <button class="navmenu-btn" data-menu-btn>📊 Suivi <span class="chev">▼</span></button>
+                <div class="navmenu-drop">
+                    <a href="/dashboard">📊 Dashboard</a>
+                    <a href="/stats">📈 Stats</a>
+                    <a href="/monitor">👀 Monitor</a>
+                    <a href="/calendar">📅 Calendrier</a>
+                    <a href="/influenceurs" class="current">👥 Influenceurs</a>
+                </div>
+            </div>
+            <div class="navmenu" data-menu>
+                <button class="navmenu-btn" data-menu-btn>🔧 Outils <span class="chev">▼</span></button>
+                <div class="navmenu-drop">
+                    <a href="/remove_box">🗑️ Supprimer boîte</a>
+                </div>
+            </div>
+            <button class="theme-btn" id="themeBtn">☀️</button>
+        </div>
+    </div>
+
+    <!-- Compteurs -->
+    <div class="stats-row" id="statsRow"></div>
+
+    <!-- Ajout rapide -->
+    <div class="add-card">
+        <input type="text" id="addPseudo" placeholder="Pseudo / nom">
+        <input type="text" id="addProfil" placeholder="Lien du profil (TikTok/Insta/Snap)">
+        <input type="text" id="addWhatsapp" placeholder="WhatsApp / numéro">
+        <button class="btn" onclick="addInfluenceur()">+ Ajouter</button>
+    </div>
+
+    <!-- Liste -->
+    <div id="listContainer"></div>
+</div>
+
+<div class="save-bar" id="saveBar"><span id="saveText">💾 Sauvegarde…</span></div>
+
+<script>
+// ── Constantes ──────────────────────────────────────────────────────────
+const STATUSES = [
+    "À contacter", "Contacté", "En négociation", "Accord",
+    "Colis envoyé", "Livré", "Contenu en cours", "Terminé"
+];
+// Seuil (en jours) au-delà duquel un influenceur passe en "urgent" selon son statut
+const RELANCE_THRESHOLD = {
+    1: 4,   // Contacté → relancer après 4j sans réponse
+    2: 5,   // En négociation → 5j
+    5: 7,   // Livré → si pas de contenu après 7j
+    6: 10,  // Contenu en cours → 10j
+};
+
+let influenceurs = [];
+let saveTimer = null;
+let expanded = new Set();       // ids dépliés
+let collapsedSections = new Set(); // sections repliées
+
+// ── Chargement ──────────────────────────────────────────────────────────
+async function load(){
+    try{
+        const r = await fetch('/api/influenceurs');
+        const d = await r.json();
+        influenceurs = (d.influenceurs||[]).map(normalize);
+    }catch(e){ influenceurs = []; }
+    render();
+}
+
+function normalize(i){
+    return {
+        id: i.id || ('inf_'+Date.now()+'_'+Math.random().toString(36).slice(2,7)),
+        pseudo: i.pseudo||'',
+        profil: i.profil||'',
+        whatsapp: i.whatsapp||'',
+        status: typeof i.status==='number'?i.status:0,
+        lastAction: i.lastAction || new Date().toISOString(),
+        relances: i.relances||0,
+        tracking: i.tracking||'',
+        trackingStatus: i.trackingStatus||'',
+        quota: i.quota||'',
+        videos: Array.isArray(i.videos)?i.videos:[],
+        notes: i.notes||''
+    };
+}
+
+// ── Sauvegarde (debounced) ──────────────────────────────────────────────
+function scheduleSave(){
+    showSave('💾 Sauvegarde…');
+    if(saveTimer) clearTimeout(saveTimer);
+    saveTimer = setTimeout(doSave, 700);
+}
+async function doSave(){
+    try{
+        const r = await fetch('/api/influenceurs',{
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({influenceurs})
+        });
+        const d = await r.json();
+        showSave(d.success?'✅ Enregistré':'❌ Erreur', true);
+    }catch(e){ showSave('❌ Erreur réseau', true); }
+}
+let saveHideTimer=null;
+function showSave(txt, autohide){
+    const bar=document.getElementById('saveBar');
+    document.getElementById('saveText').textContent=txt;
+    bar.classList.add('show');
+    if(saveHideTimer) clearTimeout(saveHideTimer);
+    if(autohide) saveHideTimer=setTimeout(()=>bar.classList.remove('show'),1600);
+}
+
+// ── Calcul urgence ──────────────────────────────────────────────────────
+function daysSince(iso){
+    const d = new Date(iso);
+    return Math.floor((Date.now()-d.getTime())/86400000);
+}
+function urgencyLevel(inf){
+    // Retourne 'urgent' | 'warn' | 'ok'
+    if(inf.status===7) return 'ok'; // terminé
+    const threshold = RELANCE_THRESHOLD[inf.status];
+    if(threshold===undefined) return 'ok';
+    const days = daysSince(inf.lastAction);
+    if(days >= threshold) return 'urgent';
+    if(days >= threshold-2) return 'warn';
+    return 'ok';
+}
+function urgencyReason(inf){
+    const days = daysSince(inf.lastAction);
+    switch(inf.status){
+        case 1: return `Contacté il y a ${days}j, pas de réponse`;
+        case 2: return `En négo depuis ${days}j`;
+        case 5: return `Livré il y a ${days}j, contenu à suivre`;
+        case 6: return `Contenu en cours depuis ${days}j`;
+        default: return `${days}j sans action`;
+    }
+}
+
+// ── Rendu ───────────────────────────────────────────────────────────────
+function render(){
+    renderStats();
+    const urgent=[], warn=[], ok=[];
+    influenceurs.forEach(inf=>{
+        const lvl=urgencyLevel(inf);
+        if(lvl==='urgent') urgent.push(inf);
+        else if(lvl==='warn') warn.push(inf);
+        else ok.push(inf);
+    });
+
+    const c=document.getElementById('listContainer');
+    if(influenceurs.length===0){
+        c.innerHTML='<div class="empty">Aucun influenceur pour l\'instant.<br>Ajoute-en un avec le formulaire ci-dessus.</div>';
+        return;
+    }
+    let html='';
+    if(urgent.length) html+=section('urgent','🔴 Agir maintenant',urgent);
+    if(warn.length)   html+=section('warn','🟡 À surveiller',warn);
+    if(ok.length)     html+=section('ok','🟢 En cours',ok);
+    c.innerHTML=html;
+}
+
+function section(type,title,list){
+    const collapsed=collapsedSections.has(type);
+    let h=`<div class="section-head ${type} ${collapsed?'collapsed':''}" onclick="toggleSection('${type}')">
+        ${title} <span class="count-badge">${list.length}</span>
+        <span class="chev-sec">▼</span></div>`;
+    if(!collapsed){
+        h+=list.map(cardHtml).join('');
+    }
+    return h;
+}
+
+function cardHtml(inf){
+    const lvl=urgencyLevel(inf);
+    const isOpen=expanded.has(inf.id);
+    const days=daysSince(inf.lastAction);
+    const threshold=RELANCE_THRESHOLD[inf.status];
+    const late = threshold!==undefined && days>=threshold;
+    const postedCount=inf.videos.filter(v=>v&&v.trim()).length;
+
+    let reasonLine='';
+    if(lvl==='urgent'||lvl==='warn'){
+        reasonLine=`<div class="influ-meta"><span style="color:var(--${lvl==='urgent'?'danger':'warn'})">⚠ ${esc(urgencyReason(inf))}</span></div>`;
+    }
+
+    return `<div class="influ-card ${lvl!=='ok'?lvl:''}">
+        <div class="influ-top">
+            <div style="flex:1;min-width:180px">
+                <div class="influ-name">
+                    ${esc(inf.pseudo||'(sans nom)')}
+                    ${inf.profil?`<a href="${escAttr(inf.profil)}" target="_blank">↗ profil</a>`:''}
+                </div>
+                <div class="influ-meta">
+                    ${inf.whatsapp?`<a href="https://wa.me/${inf.whatsapp.replace(/[^0-9]/g,'')}" target="_blank">📱 ${esc(inf.whatsapp)}</a>`:''}
+                    ${postedCount>0||inf.quota?`<span>🎬 ${postedCount}${inf.quota?' / '+esc(inf.quota):' vidéo(s)'}</span>`:''}
+                </div>
+                ${reasonLine}
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                <span class="status-badge st-${inf.status}">${STATUSES[inf.status]}</span>
+                ${threshold!==undefined?`<span class="days-badge ${late?'late':''}">${days}j</span>`:''}
+                <span class="expand-toggle" onclick="toggleExpand('${inf.id}')">${isOpen?'▲ fermer':'▼ détails'}</span>
+            </div>
+        </div>
+        <div class="influ-body ${isOpen?'open':''}">
+            <div class="field">
+                <label>Statut</label>
+                <select onchange="setField('${inf.id}','status',parseInt(this.value));touchAction('${inf.id}')">
+                    ${STATUSES.map((s,i)=>`<option value="${i}" ${i===inf.status?'selected':''}>${s}</option>`).join('')}
+                </select>
+                <div class="actions-row">
+                    ${inf.status<7?`<button class="act-btn primary" onclick="advance('${inf.id}')">→ ${STATUSES[inf.status+1]}</button>`:''}
+                    <button class="act-btn" onclick="relancer('${inf.id}')">🔄 Relancer (${inf.relances})</button>
+                </div>
+            </div>
+            <div class="field">
+                <label>Quota de contenu (flexible)</label>
+                <input type="text" value="${escAttr(inf.quota)}" placeholder="ex: 1 unboxing + 2 playback"
+                    oninput="setField('${inf.id}','quota',this.value)">
+            </div>
+            <div class="field field-full">
+                <label>Numéro de suivi colis</label>
+                <div class="track-row">
+                    <input type="text" value="${escAttr(inf.tracking)}" placeholder="Numéro de suivi"
+                        oninput="setField('${inf.id}','tracking',this.value)" style="flex:1">
+                    <select onchange="setField('${inf.id}','trackingStatus',this.value)" style="max-width:150px">
+                        <option value="" ${!inf.trackingStatus?'selected':''}>—</option>
+                        <option value="transit" ${inf.trackingStatus==='transit'?'selected':''}>🚚 En transit</option>
+                        <option value="livre" ${inf.trackingStatus==='livre'?'selected':''}>✅ Livré</option>
+                        <option value="probleme" ${inf.trackingStatus==='probleme'?'selected':''}>⚠️ Problème</option>
+                    </select>
+                    ${inf.tracking?`<a href="https://t.17track.net/en#nums=${encodeURIComponent(inf.tracking)}" target="_blank">↗ 17TRACK</a>`:''}
+                </div>
+            </div>
+            <div class="field field-full">
+                <label>Vidéos postées (liens)</label>
+                <div id="videos-${inf.id}">
+                    ${inf.videos.map((v,idx)=>videoRow(inf.id,idx,v)).join('')}
+                </div>
+                <button class="act-btn" onclick="addVideo('${inf.id}')" style="margin-top:6px">+ Ajouter une vidéo</button>
+            </div>
+            <div class="field field-full">
+                <label>Notes</label>
+                <textarea placeholder="Notes libres (conditions, historique de conv, remarques…)"
+                    oninput="setField('${inf.id}','notes',this.value)">${esc(inf.notes)}</textarea>
+            </div>
+            <div class="field field-full">
+                <div class="actions-row">
+                    <button class="act-btn danger" onclick="removeInfluenceur('${inf.id}')">🗑 Supprimer cet influenceur</button>
+                </div>
+            </div>
+        </div>
+    </div>`;
+}
+
+function videoRow(id,idx,val){
+    return `<div class="video-item">
+        <input type="text" value="${escAttr(val)}" placeholder="Lien de la vidéo"
+            oninput="setVideo('${id}',${idx},this.value)">
+        <span class="rm" onclick="removeVideo('${id}',${idx})">✕</span>
+    </div>`;
+}
+
+function renderStats(){
+    const total=influenceurs.length;
+    let urgent=0,warn=0;
+    influenceurs.forEach(i=>{const l=urgencyLevel(i);if(l==='urgent')urgent++;else if(l==='warn')warn++;});
+    document.getElementById('statsRow').innerHTML=`
+        <div class="stat-pill"><span class="dot dot-total"></span>Total : <b>${total}</b></div>
+        <div class="stat-pill"><span class="dot dot-urgent"></span>À traiter : <b>${urgent}</b></div>
+        <div class="stat-pill"><span class="dot dot-warn"></span>À surveiller : <b>${warn}</b></div>`;
+}
+
+// ── Actions ─────────────────────────────────────────────────────────────
+function find(id){ return influenceurs.find(i=>i.id===id); }
+
+function addInfluenceur(){
+    const p=document.getElementById('addPseudo').value.trim();
+    const prof=document.getElementById('addProfil').value.trim();
+    const wa=document.getElementById('addWhatsapp').value.trim();
+    if(!p && !prof && !wa){ return; }
+    influenceurs.unshift(normalize({pseudo:p,profil:prof,whatsapp:wa,status:0,lastAction:new Date().toISOString()}));
+    document.getElementById('addPseudo').value='';
+    document.getElementById('addProfil').value='';
+    document.getElementById('addWhatsapp').value='';
+    render(); scheduleSave();
+}
+
+function removeInfluenceur(id){
+    if(!confirm('Supprimer cet influenceur ?')) return;
+    influenceurs=influenceurs.filter(i=>i.id!==id);
+    expanded.delete(id);
+    render(); scheduleSave();
+}
+
+function setField(id,field,val){
+    const inf=find(id); if(!inf) return;
+    inf[field]=val;
+    // Ne pas re-render à chaque frappe (perte de focus) — juste sauvegarder
+    if(field==='status'){ inf.lastAction=new Date().toISOString(); render(); }
+    scheduleSave();
+}
+
+function touchAction(id){
+    const inf=find(id); if(!inf) return;
+    inf.lastAction=new Date().toISOString();
+    scheduleSave();
+}
+
+function advance(id){
+    const inf=find(id); if(!inf) return;
+    if(inf.status<7){ inf.status++; inf.lastAction=new Date().toISOString(); }
+    render(); scheduleSave();
+}
+
+function relancer(id){
+    const inf=find(id); if(!inf) return;
+    inf.relances=(inf.relances||0)+1;
+    inf.lastAction=new Date().toISOString();
+    render(); scheduleSave();
+}
+
+function addVideo(id){
+    const inf=find(id); if(!inf) return;
+    inf.videos.push('');
+    render(); keepOpen(id); scheduleSave();
+}
+function setVideo(id,idx,val){
+    const inf=find(id); if(!inf) return;
+    inf.videos[idx]=val; scheduleSave();
+}
+function removeVideo(id,idx){
+    const inf=find(id); if(!inf) return;
+    inf.videos.splice(idx,1);
+    render(); keepOpen(id); scheduleSave();
+}
+
+function toggleExpand(id){
+    if(expanded.has(id)) expanded.delete(id); else expanded.add(id);
+    render();
+}
+function keepOpen(id){ expanded.add(id); render(); }
+function toggleSection(type){
+    if(collapsedSections.has(type)) collapsedSections.delete(type); else collapsedSections.add(type);
+    render();
+}
+
+// ── Échappement ─────────────────────────────────────────────────────────
+function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function escAttr(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
+// ── Menus déroulants ────────────────────────────────────────────────────
+(function(){
+    const menus=document.querySelectorAll('[data-menu]');
+    menus.forEach(m=>{
+        const btn=m.querySelector('[data-menu-btn]');
+        if(!btn)return;
+        btn.addEventListener('click',e=>{
+            e.stopPropagation();
+            const wasOpen=m.classList.contains('open');
+            menus.forEach(x=>x.classList.remove('open'));
+            if(!wasOpen)m.classList.add('open');
+        });
+    });
+    document.addEventListener('click',()=>menus.forEach(m=>m.classList.remove('open')));
+    document.addEventListener('keydown',e=>{if(e.key==='Escape')menus.forEach(m=>m.classList.remove('open'))});
+})();
+
+// ── Thème ───────────────────────────────────────────────────────────────
+const html=document.documentElement;
+let theme=localStorage.getItem('theme')||'dark';
+const themeBtn=document.getElementById('themeBtn');
+function applyTheme(t){theme=t;html.setAttribute('data-theme',t);themeBtn.textContent=t==='dark'?'☀️':'🌙';localStorage.setItem('theme',t);}
+applyTheme(theme);
+themeBtn.addEventListener('click',()=>applyTheme(theme==='dark'?'light':'dark'));
+
+// ── Init ────────────────────────────────────────────────────────────────
+load();
+</script>
+</body>
+</html>
