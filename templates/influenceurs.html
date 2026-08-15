@@ -191,6 +191,54 @@ h1{font-size:24px;margin:0;font-weight:800;letter-spacing:-0.02em}
 .toast-conflict h4{margin:0 0 6px;font-size:14px;color:var(--danger)}
 .toast-conflict p{margin:0 0 12px;font-size:12.5px;color:var(--text-dim);line-height:1.5}
 .toast-conflict .tc-actions{display:flex;gap:8px;flex-wrap:wrap}
+
+/* ── Bibliothèque vidéos ─────────────────────────────────────────────── */
+.library{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:18px;margin-bottom:20px}
+.library-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;cursor:pointer;user-select:none}
+.library-head h3{margin:0;font-size:15px;font-weight:800;display:flex;align-items:center;gap:8px}
+.library-head .chev-sec{font-size:12px;opacity:.5;transition:transform .2s}
+.library.collapsed .chev-sec{transform:rotate(-90deg)}
+.library.collapsed .library-body{display:none}
+.library-body{margin-top:16px}
+.lib-filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
+.lib-filters select{background:var(--bg-elevated);border:1px solid var(--border);color:var(--text);border-radius:9px;padding:8px 12px;font-size:12.5px;font-family:inherit;cursor:pointer}
+.lib-filters select:focus{outline:none;border-color:var(--accent)}
+.video-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px}
+.video-card{background:var(--bg-elevated);border:1px solid var(--border);border-radius:12px;overflow:hidden;transition:border-color .15s;display:flex;flex-direction:column}
+.video-card:hover{border-color:var(--border-strong)}
+.video-card video{width:100%;aspect-ratio:9/16;object-fit:cover;background:#000;display:block;max-height:320px}
+.video-card-body{padding:10px 12px;display:flex;flex-direction:column;gap:7px}
+.vc-influ{font-size:12.5px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.vc-row{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.vc-badge{font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:6px;text-transform:uppercase;letter-spacing:.02em}
+.vc-badge.unboxing{background:rgba(96,165,250,.15);color:#60a5fa}
+.vc-badge.playback{background:rgba(167,139,250,.15);color:#a78bfa}
+.vc-ads{font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:6px}
+.vc-ads.a_utiliser{background:var(--warn-dim);color:var(--warn)}
+.vc-ads.utilise{background:var(--ok-dim);color:var(--ok)}
+.vc-select{background:var(--panel);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:5px 8px;font-size:11.5px;font-family:inherit;width:100%;cursor:pointer}
+.vc-select:focus{outline:none;border-color:var(--accent)}
+.vc-actions{display:flex;gap:6px;margin-top:2px}
+.vc-btn{flex:1;padding:6px 0;border-radius:7px;font-size:11px;font-weight:600;cursor:pointer;border:1px solid var(--border);background:var(--panel);color:var(--text-dim);text-align:center;text-decoration:none;transition:all .12s}
+.vc-btn:hover{border-color:var(--border-strong);color:var(--text)}
+.vc-btn.danger:hover{color:var(--danger);border-color:var(--danger)}
+.vc-date{font-size:10.5px;color:var(--text-faint)}
+.lib-empty{text-align:center;padding:30px 20px;color:var(--text-faint);font-size:13px}
+
+/* Zone upload sur la fiche */
+.vid-upload{border:1px dashed var(--border-strong);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:8px}
+.vid-upload-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.vid-upload-row select,.vid-upload-row input[type=text]{background:var(--bg-elevated);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:8px 10px;font-size:12.5px;font-family:inherit}
+.vid-upload-row select{cursor:pointer}
+.up-progress{font-size:12px;color:var(--accent);font-weight:600}
+.mini-video{display:flex;gap:8px;align-items:center;padding:7px 10px;background:var(--bg-elevated);border:1px solid var(--border);border-radius:8px;margin-bottom:6px}
+.mini-video .mv-badge{font-size:10px;font-weight:700;padding:2px 7px;border-radius:5px;text-transform:uppercase}
+.mini-video .mv-badge.unboxing{background:rgba(96,165,250,.15);color:#60a5fa}
+.mini-video .mv-badge.playback{background:rgba(167,139,250,.15);color:#a78bfa}
+.mini-video .mv-name{flex:1;font-size:12px;color:var(--text-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mini-video a,.mini-video .mv-rm{font-size:12px;color:var(--text-faint);text-decoration:none;cursor:pointer;padding:0 4px}
+.mini-video a:hover{color:var(--accent)}
+.mini-video .mv-rm:hover{color:var(--danger)}
 </style>
 </head>
 <body>
@@ -248,6 +296,33 @@ h1{font-size:24px;margin:0;font-weight:800;letter-spacing:-0.02em}
 
     <!-- Pipeline par statut (cliquable = filtre) -->
     <div class="pipeline-row" id="pipelineRow"></div>
+
+    <!-- Bibliothèque vidéos globale -->
+    <div class="library collapsed" id="library">
+        <div class="library-head" id="libraryHead">
+            <h3>🎬 Bibliothèque vidéos <span class="count-badge" id="libCount" style="background:var(--panel-hover);border:1px solid var(--border);border-radius:100px;padding:2px 10px;font-size:12px">0</span></h3>
+            <span class="chev-sec">▼</span>
+        </div>
+        <div class="library-body">
+            <div class="lib-filters">
+                <select id="libFilterType">
+                    <option value="">Tous les types</option>
+                    <option value="unboxing">📦 Unboxing</option>
+                    <option value="playback">🎬 Playback</option>
+                </select>
+                <select id="libFilterInflu">
+                    <option value="">Tous les influenceurs</option>
+                </select>
+                <select id="libFilterAds">
+                    <option value="">Tous statuts ads</option>
+                    <option value="a_utiliser">⭐ À utiliser en ads</option>
+                    <option value="utilise">✅ Utilisée en ads</option>
+                    <option value="none">— Aucun statut</option>
+                </select>
+            </div>
+            <div class="video-grid" id="videoGrid"></div>
+        </div>
+    </div>
 
     <!-- Ajout rapide -->
     <div class="add-card">
@@ -451,7 +526,7 @@ function urgencyLevel(inf){
     if(inf.deadline){
         const dl = new Date(inf.deadline).getTime();
         if(!isNaN(dl) && Date.now() > dl){
-            const posted = inf.videos.filter(v=>v&&v.trim()).length;
+            const posted = (typeof allVideos!=='undefined')?allVideos.filter(v=>v.influ_id===inf.id).length:0;
             // s'il reste du contenu à poster et deadline passée
             if(inf.status>=4 && inf.status<7 && posted===0) return 'urgent';
         }
@@ -537,7 +612,7 @@ function cardHtml(inf){
     const days=daysSince(inf.lastContact);
     const threshold=RELANCE_THRESHOLD[inf.status];
     const late = threshold!==undefined && days>=threshold;
-    const postedCount=inf.videos.filter(v=>v&&v.trim()).length;
+    const postedCount=(typeof allVideos!=='undefined')?allVideos.filter(v=>v.influ_id===inf.id).length:0;
     const eid = escAttr(inf.id);
 
     let reasonLine='';
@@ -628,11 +703,25 @@ function cardHtml(inf){
                 <input type="text" value="${escAttr(inf.address)}" placeholder="Adresse complète (pour réenvoi éventuel)" data-act="field" data-field="address" data-id="${eid}">
             </div>
             <div class="field field-full">
-                <label>Vidéos postées (liens)</label>
-                <div id="videos-${eid}">
-                    ${inf.videos.map((v,idx)=>videoRow(inf.id,idx,v)).join('')}
+                <label>🎬 Vidéos (fichiers sauvegardés dans la bibliothèque)</label>
+                <div class="vid-upload">
+                    <div id="miniVideos-${eid}"></div>
+                    <div class="vid-upload-row">
+                        <select id="upType-${eid}">
+                            <option value="unboxing">📦 Unboxing</option>
+                            <option value="playback">🎬 Playback</option>
+                        </select>
+                        <select id="upAds-${eid}">
+                            <option value="">Statut ads —</option>
+                            <option value="a_utiliser">⭐ À utiliser en ads</option>
+                            <option value="utilise">✅ Utilisée en ads</option>
+                        </select>
+                        <input type="text" id="upLink-${eid}" placeholder="Lien original (optionnel)" style="flex:1;min-width:140px">
+                        <button class="act-btn primary" data-act="pickvideo" data-id="${eid}">⬆ Uploader une vidéo</button>
+                        <input type="file" accept="video/*" id="fileInput-${eid}" style="display:none">
+                        <span class="up-progress" id="upProgress-${eid}"></span>
+                    </div>
                 </div>
-                <button class="act-btn" data-act="addvideo" data-id="${eid}" style="margin-top:6px">+ Ajouter une vidéo</button>
             </div>
             <div class="field field-full">
                 <label>Notes</label>
@@ -648,13 +737,6 @@ function cardHtml(inf){
     </div>`;
 }
 
-function videoRow(id,idx,val){
-    const eid=escAttr(id);
-    return `<div class="video-item">
-        <input type="text" value="${escAttr(val)}" placeholder="Lien de la vidéo" data-act="setvideo" data-id="${eid}" data-idx="${idx}">
-        <span class="rm" data-act="rmvideo" data-id="${eid}" data-idx="${idx}">✕</span>
-    </div>`;
-}
 
 function renderStats(){
     const total=influenceurs.length;
@@ -697,16 +779,23 @@ function bindCards(){
         else if(act==='relancer')el.addEventListener('click',()=>relancer(id));
         else if(act==='expand')  el.addEventListener('click',()=>toggleExpand(id));
         else if(act==='remove')  el.addEventListener('click',()=>removeInfluenceur(id));
-        else if(act==='addvideo')el.addEventListener('click',()=>addVideo(id));
-        else if(act==='rmvideo') el.addEventListener('click',()=>removeVideo(id,parseInt(el.getAttribute('data-idx'))));
+        else if(act==='pickvideo')el.addEventListener('click',()=>pickVideo(id));
         else if(act==='status')  el.addEventListener('change',()=>setStatus(id,parseInt(el.value)));
-        else if(act==='setvideo')el.addEventListener('input',()=>setVideo(id,parseInt(el.getAttribute('data-idx')),el.value));
         else if(act==='field'){
             const field=el.getAttribute('data-field');
             const evt=(el.tagName==='SELECT')?'change':'input';
             el.addEventListener(evt,()=>setField(id,field,el.value));
         }
     });
+    // Brancher les file inputs vidéo des fiches ouvertes
+    c.querySelectorAll('input[type=file][id^="fileInput-"]').forEach(inp=>{
+        const influId=inp.id.replace('fileInput-','');
+        inp.addEventListener('change',()=>{
+            if(inp.files && inp.files[0]){ uploadVideo(influId, inp.files[0]); inp.value=''; }
+        });
+    });
+    // Afficher les mini-vidéos dans les fiches ouvertes
+    renderMiniVideosAll();
 }
 
 // ── Actions ─────────────────────────────────────────────────────────────
@@ -778,23 +867,6 @@ function relancer(id){
     render(); scheduleSave();
 }
 
-// Vidéos : re-render mais on garde la carte ouverte (pas de perte de focus car
-// l'ajout/suppression est une action ponctuelle, pas une frappe continue)
-function addVideo(id){
-    const inf=find(id); if(!inf) return;
-    if(!Array.isArray(inf.videos)) inf.videos=[];
-    inf.videos.push('');
-    render(); keepOpen(id); scheduleSave();
-}
-function setVideo(id,idx,val){
-    const inf=find(id); if(!inf) return;
-    if(inf.videos[idx]!==undefined){ inf.videos[idx]=val; inf.lastModified=new Date().toISOString(); scheduleSave(); }
-}
-function removeVideo(id,idx){
-    const inf=find(id); if(!inf) return;
-    inf.videos.splice(idx,1);
-    render(); keepOpen(id); scheduleSave();
-}
 
 function toggleExpand(id){
     if(expanded.has(id)) expanded.delete(id); else expanded.add(id);
@@ -837,6 +909,158 @@ function fmtDate(iso){
     if(isNaN(d.getTime())) return '—';
     return d.toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit',year:'2-digit'});
 }
+
+// ── Bibliothèque vidéos ─────────────────────────────────────────────────
+let allVideos = [];
+let libFilterType='', libFilterInflu='', libFilterAds='';
+
+async function loadVideos(){
+    try{
+        const r=await fetch('/api/influenceurs/videos');
+        const d=await r.json();
+        allVideos=d.videos||[];
+    }catch(e){ allVideos=[]; }
+    renderLibrary();
+    renderMiniVideosAll();
+}
+
+function videosOf(influId){ return allVideos.filter(v=>v.influ_id===influId); }
+
+function renderLibrary(){
+    document.getElementById('libCount').textContent=allVideos.length;
+    const sel=document.getElementById('libFilterInflu');
+    const cur=sel.value;
+    const names=[...new Set(allVideos.map(v=>v.influ_name||v.influ_id))].sort();
+    sel.innerHTML='<option value="">Tous les influenceurs</option>'+names.map(n=>`<option value="${escAttr(n)}">${esc(n)}</option>`).join('');
+    sel.value=cur;
+
+    let vids=allVideos.slice();
+    if(libFilterType) vids=vids.filter(v=>v.type===libFilterType);
+    if(libFilterInflu) vids=vids.filter(v=>(v.influ_name||v.influ_id)===libFilterInflu);
+    if(libFilterAds==='none') vids=vids.filter(v=>!v.ads_status);
+    else if(libFilterAds) vids=vids.filter(v=>v.ads_status===libFilterAds);
+
+    const grid=document.getElementById('videoGrid');
+    if(allVideos.length===0){ grid.innerHTML='<div class="lib-empty">Aucune vidéo pour l\'instant.<br>Uploade des vidéos depuis les fiches influenceurs.</div>'; return; }
+    if(vids.length===0){ grid.innerHTML='<div class="lib-empty">Aucune vidéo pour ces filtres.</div>'; return; }
+    grid.innerHTML=vids.map(videoCardHtml).join('');
+    bindVideoCards();
+}
+
+function videoCardHtml(v){
+    const adsLabel={a_utiliser:'⭐ À utiliser',utilise:'✅ Utilisée'}[v.ads_status]||'';
+    return `<div class="video-card">
+        <video src="${escAttr(v.url||'')}" controls preload="metadata"></video>
+        <div class="video-card-body">
+            <div class="vc-influ">${esc(v.influ_name||v.influ_id)}</div>
+            <div class="vc-row">
+                <span class="vc-badge ${v.type}">${v.type==='unboxing'?'📦 Unboxing':'🎬 Playback'}</span>
+                ${adsLabel?`<span class="vc-ads ${v.ads_status}">${adsLabel}</span>`:''}
+            </div>
+            <select class="vc-select" data-vact="ads" data-vid="${escAttr(v.id)}">
+                <option value="" ${!v.ads_status?'selected':''}>Statut ads —</option>
+                <option value="a_utiliser" ${v.ads_status==='a_utiliser'?'selected':''}>⭐ À utiliser en ads</option>
+                <option value="utilise" ${v.ads_status==='utilise'?'selected':''}>✅ Utilisée en ads</option>
+            </select>
+            <div class="vc-date">${fmtDate(v.uploaded_at)}${v.size?' · '+(v.size/(1024*1024)).toFixed(1)+' Mo':''}</div>
+            <div class="vc-actions">
+                <a class="vc-btn" href="${escAttr(v.url||'')}" download target="_blank" rel="noopener">⬇ Télécharger</a>
+                ${v.orig_link?`<a class="vc-btn" href="${escAttr(v.orig_link)}" target="_blank" rel="noopener">↗ Original</a>`:''}
+                <span class="vc-btn danger" data-vact="del" data-vid="${escAttr(v.id)}">🗑</span>
+            </div>
+        </div>
+    </div>`;
+}
+
+function bindVideoCards(){
+    document.querySelectorAll('[data-vact]').forEach(el=>{
+        const act=el.getAttribute('data-vact');
+        const vid=el.getAttribute('data-vid');
+        if(act==='ads') el.addEventListener('change',()=>updateVideoAds(vid,el.value));
+        else if(act==='del') el.addEventListener('click',()=>deleteVideo(vid));
+    });
+}
+
+async function updateVideoAds(vid,val){
+    try{
+        await fetch('/api/influenceurs/videos/update',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:vid,ads_status:val})});
+        const v=allVideos.find(x=>x.id===vid); if(v) v.ads_status=val;
+        renderLibrary();
+    }catch(e){ alert('Erreur mise à jour'); }
+}
+
+async function deleteVideo(vid){
+    if(!confirm('Supprimer définitivement cette vidéo de la bibliothèque ?')) return;
+    try{
+        await fetch('/api/influenceurs/videos/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:vid})});
+        allVideos=allVideos.filter(x=>x.id!==vid);
+        renderLibrary(); renderMiniVideosAll();
+    }catch(e){ alert('Erreur suppression'); }
+}
+
+function renderMiniVideosAll(){
+    influenceurs.forEach(inf=>{
+        const box=document.getElementById('miniVideos-'+inf.id);
+        if(!box) return;
+        const vids=videosOf(inf.id);
+        box.innerHTML=vids.map(v=>`<div class="mini-video">
+            <span class="mv-badge ${v.type}">${v.type==='unboxing'?'Unbox':'Play'}</span>
+            <span class="mv-name">${esc(v.filename||v.id)}${v.ads_status?(v.ads_status==='utilise'?' ✅':' ⭐'):''}</span>
+            <a href="${escAttr(v.url||'')}" download target="_blank" rel="noopener">⬇</a>
+            <span class="mv-rm" data-mvdel="${escAttr(v.id)}">✕</span>
+        </div>`).join('');
+        box.querySelectorAll('[data-mvdel]').forEach(el=>{
+            el.addEventListener('click',()=>deleteVideo(el.getAttribute('data-mvdel')));
+        });
+    });
+}
+
+function pickVideo(influId){
+    const input=document.getElementById('fileInput-'+influId);
+    if(input) input.click();
+}
+
+async function uploadVideo(influId, file){
+    const inf=find(influId); if(!inf||!file) return;
+    const prog=document.getElementById('upProgress-'+influId);
+    const type=document.getElementById('upType-'+influId).value;
+    const ads=document.getElementById('upAds-'+influId).value;
+    const link=document.getElementById('upLink-'+influId).value.trim();
+
+    if(file.size > 100*1024*1024){ if(prog) prog.textContent='❌ Trop lourd (max 100 Mo)'; return; }
+
+    const fd=new FormData();
+    fd.append('video',file);
+    fd.append('influ_id',influId);
+    fd.append('influ_name',inf.pseudo||influId);
+    fd.append('type',type);
+    fd.append('ads_status',ads);
+    fd.append('orig_link',link);
+
+    if(prog) prog.textContent='⏳ Upload en cours…';
+    try{
+        const r=await fetch('/api/influenceurs/videos/upload',{method:'POST',body:fd});
+        const d=await r.json();
+        if(d.success){
+            allVideos.push(d.video);
+            if(prog) prog.textContent='✅ Ajoutée';
+            document.getElementById('upLink-'+influId).value='';
+            renderLibrary(); renderMiniVideosAll();
+            setTimeout(()=>{ if(prog) prog.textContent=''; },2000);
+        }else{
+            if(prog) prog.textContent='❌ '+(d.error||'échec');
+        }
+    }catch(e){
+        if(prog) prog.textContent='❌ Erreur réseau';
+    }
+}
+
+document.getElementById('libraryHead').addEventListener('click',()=>{
+    document.getElementById('library').classList.toggle('collapsed');
+});
+document.getElementById('libFilterType').addEventListener('change',function(){libFilterType=this.value;renderLibrary();});
+document.getElementById('libFilterInflu').addEventListener('change',function(){libFilterInflu=this.value;renderLibrary();});
+document.getElementById('libFilterAds').addEventListener('change',function(){libFilterAds=this.value;renderLibrary();});
 
 // ── Échappement ─────────────────────────────────────────────────────────
 function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
@@ -889,6 +1113,7 @@ themeBtn.addEventListener('click',()=>applyTheme(theme==='dark'?'light':'dark'))
 
 // ── Init ────────────────────────────────────────────────────────────────
 load();
+loadVideos();
 </script>
 </body>
 </html>
