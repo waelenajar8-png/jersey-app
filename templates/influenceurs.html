@@ -231,14 +231,25 @@ h1{font-size:24px;margin:0;font-weight:800;letter-spacing:-0.02em}
 .vid-upload-row select,.vid-upload-row input[type=text]{background:var(--bg-elevated);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:8px 10px;font-size:12.5px;font-family:inherit}
 .vid-upload-row select{cursor:pointer}
 .up-progress{font-size:12px;color:var(--accent);font-weight:600}
-.mini-video{display:flex;gap:8px;align-items:center;padding:7px 10px;background:var(--bg-elevated);border:1px solid var(--border);border-radius:8px;margin-bottom:6px}
-.mini-video .mv-badge{font-size:10px;font-weight:700;padding:2px 7px;border-radius:5px;text-transform:uppercase}
+.mini-video{display:flex;flex-direction:column;gap:8px;padding:12px;background:var(--bg-elevated);border:1px solid var(--border-strong);border-radius:10px;margin-bottom:10px}
+.mini-video .mv-head{display:flex;gap:8px;align-items:center}
+.mini-video .mv-badge{font-size:10px;font-weight:700;padding:3px 8px;border-radius:5px;text-transform:uppercase;white-space:nowrap}
 .mini-video .mv-badge.unboxing{background:rgba(96,165,250,.15);color:#60a5fa}
 .mini-video .mv-badge.playback{background:rgba(167,139,250,.15);color:#a78bfa}
-.mini-video .mv-name{flex:1;font-size:12px;color:var(--text-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.mini-video a,.mini-video .mv-rm{font-size:12px;color:var(--text-faint);text-decoration:none;cursor:pointer;padding:0 4px}
-.mini-video a:hover{color:var(--accent)}
+.mini-video .mv-name{flex:1;font-size:12px;color:var(--text);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mini-video .mv-controls{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.mini-video .mv-controls select,.mini-video .mv-controls input{background:var(--panel);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:6px 9px;font-size:11.5px;font-family:inherit}
+.mini-video .mv-controls select{cursor:pointer}
+.mini-video .mv-controls input{flex:1;min-width:120px}
+.mini-video .mv-dl{font-size:12px;color:var(--accent);text-decoration:none;padding:0 4px;white-space:nowrap;font-weight:600}
+.mini-video .mv-dl:hover{text-decoration:underline}
+.mini-video .mv-rm{font-size:15px;color:var(--text-faint);cursor:pointer;padding:0 4px}
 .mini-video .mv-rm:hover{color:var(--danger)}
+.mv-ads-tag{font-size:10px;font-weight:700;padding:2px 7px;border-radius:5px}
+.mv-ads-tag.a_utiliser{background:var(--warn-dim);color:var(--warn)}
+.mv-ads-tag.utilise{background:var(--ok-dim);color:var(--ok)}
+.vid-add-zone{border-top:1px dashed var(--border-strong);margin-top:4px;padding-top:12px}
+.vid-add-label{font-size:11px;font-weight:700;color:var(--text-faint);text-transform:uppercase;letter-spacing:.03em;margin-bottom:8px}
 </style>
 </head>
 <body>
@@ -338,6 +349,7 @@ h1{font-size:24px;margin:0;font-weight:800;letter-spacing:-0.02em}
         </select>
         <button class="btn" id="addBtn">+ Ajouter</button>
     </div>
+    <div id="addError" style="display:none;color:var(--danger);font-size:13px;font-weight:600;margin:-8px 0 16px;padding:10px 14px;background:var(--danger-dim);border-radius:9px"></div>
 
     <!-- Recherche + filtres -->
     <div class="toolbar">
@@ -706,20 +718,23 @@ function cardHtml(inf){
                 <label>🎬 Vidéos (fichiers sauvegardés dans la bibliothèque)</label>
                 <div class="vid-upload">
                     <div id="miniVideos-${eid}"></div>
-                    <div class="vid-upload-row">
-                        <select id="upType-${eid}">
-                            <option value="unboxing">📦 Unboxing</option>
-                            <option value="playback">🎬 Playback</option>
-                        </select>
-                        <select id="upAds-${eid}">
-                            <option value="">Statut ads —</option>
-                            <option value="a_utiliser">⭐ À utiliser en ads</option>
-                            <option value="utilise">✅ Utilisée en ads</option>
-                        </select>
-                        <input type="text" id="upLink-${eid}" placeholder="Lien original (optionnel)" style="flex:1;min-width:140px">
-                        <button class="act-btn primary" data-act="pickvideo" data-id="${eid}">⬆ Uploader une vidéo</button>
-                        <input type="file" accept="video/*" id="fileInput-${eid}" style="display:none">
-                        <span class="up-progress" id="upProgress-${eid}"></span>
+                    <div class="vid-add-zone">
+                        <div class="vid-add-label">➕ Ajouter une nouvelle vidéo</div>
+                        <div class="vid-upload-row">
+                            <select id="upType-${eid}">
+                                <option value="unboxing">📦 Unboxing</option>
+                                <option value="playback">🎬 Playback</option>
+                            </select>
+                            <select id="upAds-${eid}">
+                                <option value="">Statut ads —</option>
+                                <option value="a_utiliser">⭐ À utiliser en ads</option>
+                                <option value="utilise">✅ Utilisée en ads</option>
+                            </select>
+                            <input type="text" id="upLink-${eid}" placeholder="Lien original (optionnel)" style="flex:1;min-width:140px">
+                            <button class="act-btn primary" data-act="pickvideo" data-id="${eid}">⬆ Choisir un fichier</button>
+                            <input type="file" accept="video/*" id="fileInput-${eid}" style="display:none">
+                            <span class="up-progress" id="upProgress-${eid}"></span>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -801,12 +816,27 @@ function bindCards(){
 // ── Actions ─────────────────────────────────────────────────────────────
 function find(id){ return influenceurs.find(i=>i.id===id); }
 
+function showAddError(msg){
+    const el=document.getElementById('addError');
+    if(!el) return;
+    el.textContent='⚠ '+msg;
+    el.style.display='block';
+}
+function clearAddError(){
+    const el=document.getElementById('addError');
+    if(el) el.style.display='none';
+}
+
 function addInfluenceur(){
     const p=document.getElementById('addPseudo').value.trim();
     const prof=document.getElementById('addProfil').value.trim();
     const wa=document.getElementById('addWhatsapp').value.trim();
     const plat=document.getElementById('addPlatform').value;
-    if(!p && !prof && !wa){ return; }
+    if(!p && !prof && !wa){
+        showAddError("Remplis au moins un champ (pseudo, profil ou WhatsApp) avant d'ajouter.");
+        return;
+    }
+    clearAddError();
     const nowIso=new Date().toISOString();
     influenceurs.unshift(normalize({
         pseudo:p, profil:prof, whatsapp:wa, platform:plat,
@@ -1003,16 +1033,53 @@ function renderMiniVideosAll(){
         const box=document.getElementById('miniVideos-'+inf.id);
         if(!box) return;
         const vids=videosOf(inf.id);
-        box.innerHTML=vids.map(v=>`<div class="mini-video">
-            <span class="mv-badge ${v.type}">${v.type==='unboxing'?'Unbox':'Play'}</span>
-            <span class="mv-name">${esc(v.filename||v.id)}${v.ads_status?(v.ads_status==='utilise'?' ✅':' ⭐'):''}</span>
-            <a href="${escAttr(v.url||'')}" download target="_blank" rel="noopener">⬇</a>
-            <span class="mv-rm" data-mvdel="${escAttr(v.id)}">✕</span>
-        </div>`).join('');
-        box.querySelectorAll('[data-mvdel]').forEach(el=>{
-            el.addEventListener('click',()=>deleteVideo(el.getAttribute('data-mvdel')));
+        if(vids.length===0){ box.innerHTML=''; return; }
+        box.innerHTML=vids.map(v=>{
+            const vid=escAttr(v.id);
+            const adsTag = v.ads_status==='utilise' ? '<span class="mv-ads-tag utilise">✅ Utilisée</span>'
+                         : v.ads_status==='a_utiliser' ? '<span class="mv-ads-tag a_utiliser">⭐ À utiliser</span>' : '';
+            return `<div class="mini-video">
+                <div class="mv-head">
+                    <span class="mv-badge ${v.type}">${v.type==='unboxing'?'📦 Unboxing':'🎬 Playback'}</span>
+                    ${adsTag}
+                    <span class="mv-name">${esc(v.filename||v.id)}</span>
+                    <a class="mv-dl" href="${escAttr(v.url||'')}" download target="_blank" rel="noopener">⬇ Télécharger</a>
+                    <span class="mv-rm" data-mvdel="${vid}" title="Supprimer">🗑</span>
+                </div>
+                <div class="mv-controls">
+                    <select data-mvtype="${vid}">
+                        <option value="unboxing" ${v.type==='unboxing'?'selected':''}>📦 Unboxing</option>
+                        <option value="playback" ${v.type==='playback'?'selected':''}>🎬 Playback</option>
+                    </select>
+                    <select data-mvads="${vid}">
+                        <option value="" ${!v.ads_status?'selected':''}>Statut ads —</option>
+                        <option value="a_utiliser" ${v.ads_status==='a_utiliser'?'selected':''}>⭐ À utiliser en ads</option>
+                        <option value="utilise" ${v.ads_status==='utilise'?'selected':''}>✅ Utilisée en ads</option>
+                    </select>
+                    <input type="text" data-mvlink="${vid}" value="${escAttr(v.orig_link||'')}" placeholder="Lien original (optionnel)">
+                </div>
+            </div>`;
+        }).join('');
+        // Brancher les contrôles de chaque vidéo
+        box.querySelectorAll('[data-mvdel]').forEach(el=>el.addEventListener('click',()=>deleteVideo(el.getAttribute('data-mvdel'))));
+        box.querySelectorAll('[data-mvtype]').forEach(el=>el.addEventListener('change',()=>updateVideoField(el.getAttribute('data-mvtype'),'type',el.value)));
+        box.querySelectorAll('[data-mvads]').forEach(el=>el.addEventListener('change',()=>updateVideoField(el.getAttribute('data-mvads'),'ads_status',el.value)));
+        box.querySelectorAll('[data-mvlink]').forEach(el=>{
+            let t=null;
+            el.addEventListener('input',()=>{ clearTimeout(t); t=setTimeout(()=>updateVideoField(el.getAttribute('data-mvlink'),'orig_link',el.value,true),600); });
         });
     });
+}
+
+// Mise à jour d'un champ vidéo (type / ads_status / orig_link)
+async function updateVideoField(vid, field, val, silent){
+    try{
+        const body={id:vid}; body[field]=val;
+        await fetch('/api/influenceurs/videos/update',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+        const v=allVideos.find(x=>x.id===vid); if(v) v[field]=val;
+        renderLibrary();
+        if(!silent) renderMiniVideosAll();
+    }catch(e){ if(!silent) alert('Erreur mise à jour'); }
 }
 
 function pickVideo(influId){
