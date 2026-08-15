@@ -2988,6 +2988,158 @@ def api_influenceurs_restore():
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
 
+# ── Bibliothèque vidéos des influenceurs ───────────────────────────────────
+# Les fichiers vidéo sont stockés dans R2 sous influenceurs_videos/ et gardés
+# de façon permanente (même si l'influenceur supprime sa vidéo sur la plateforme).
+# Les métadonnées (type unboxing/playback, lien original, statut ads, influenceur)
+# sont dans meta/influenceurs_videos.json.
+INFLUENCEURS_VIDEOS_PFX = "influenceurs_videos/"
+INFLUENCEURS_VIDEOS_META = "meta/influenceurs_videos.json"
+INFLUENCEURS_VIDEO_MAX_BYTES = 100 * 1024 * 1024  # 100 MB
+_influ_videos_lock = threading.Lock()
+
+def _load_influ_videos():
+    """Retourne la liste des métadonnées vidéos (jamais None)."""
+    try:
+        data = r2_get_json(INFLUENCEURS_VIDEOS_META) or {}
+        vids = data.get("videos", [])
+        return vids if isinstance(vids, list) else []
+    except Exception:
+        return []
+
+def _save_influ_videos(videos):
+    try:
+        return r2_put_json(INFLUENCEURS_VIDEOS_META, {"videos": videos})
+    except Exception as e:
+        print(f"[INFLU_VID] Erreur écriture méta: {e}")
+        return False
+
+@app.route("/api/influenceurs/videos", methods=["GET"])
+def api_influ_videos_list():
+    """Liste toutes les vidéos (pour la bibliothèque globale) ou celles d'un influenceur."""
+    influ_id = request.args.get("influ_id")
+    videos = _load_influ_videos()
+    if influ_id:
+        videos = [v for v in videos if v.get("influ_id") == influ_id]
+    # Générer une URL présignée fraîche pour chaque vidéo (lecture/téléchargement)
+    for v in videos:
+        if v.get("r2_key"):
+            v["url"] = r2_presigned(v["r2_key"], expires=604800)  # 7 jours
+    # Trier par date décroissante
+    videos.sort(key=lambda x: x.get("uploaded_at", ""), reverse=True)
+    return jsonify({"videos": videos})
+
+@app.route("/api/influenceurs/videos/upload", methods=["POST"])
+def api_influ_videos_upload():
+    """Upload un fichier vidéo vers R2 + enregistre les métadonnées."""
+    f = request.files.get("video")
+    if not f:
+        return jsonify({"success": False, "error": "aucun fichier"}), 400
+
+    influ_id    = request.form.get("influ_id", "").strip()
+    influ_name  = request.form.get("influ_name", "").strip()
+    vtype       = request.form.get("type", "").strip()        # unboxing / playback
+    orig_link   = request.form.get("orig_link", "").strip()
+    ads_status  = request.form.get("ads_status", "").strip()  # "" / a_utiliser / utilise
+    if not influ_id:
+        return jsonify({"success": False, "error": "influ_id requis"}), 400
+    if vtype not in ("unboxing", "playback"):
+        return jsonify({"success": False, "error": "type invalide"}), 400
+
+    # Lire le fichier en mémoire avec contrôle de taille
+    data = f.read()
+    if len(data) == 0:
+        return jsonify({"success": False, "error": "fichier vide"}), 400
+    if len(data) > INFLUENCEURS_VIDEO_MAX_BYTES:
+        return jsonify({"success": False, "error": f"fichier trop lourd (max 100 Mo, reçu {len(data)//(1024*1024)} Mo)"}), 400
+
+    # Déterminer l'extension à partir du nom / mimetype
+    fname = (f.filename or "video.mp4")
+    ext = fname.rsplit(".", 1)[-1].lower() if "." in fname else "mp4"
+    if ext not in ("mp4", "mov", "webm", "avi", "mkv", "m4v"):
+        ext = "mp4"
+
+    vid_id = f"vid_{int(time.time())}_{uuid.uuid4().hex[:8]}"
+    r2_key = f"{INFLUENCEURS_VIDEOS_PFX}{influ_id}/{vid_id}.{ext}"
+    mime = f.mimetype or "video/mp4"
+
+    # Écrire dans R2
+    r2 = get_r2()
+    if not r2:
+        return jsonify({"success": False, "error": "R2 non configuré"}), 500
+    try:
+        r2.put_object(Bucket=R2_BUCKET, Key=r2_key, Body=data, ContentType=mime)
+    except Exception as e:
+        print(f"[INFLU_VID] Erreur upload R2: {e}")
+        return jsonify({"success": False, "error": "échec upload R2"}), 500
+
+    meta = {
+        "id": vid_id,
+        "influ_id": influ_id,
+        "influ_name": influ_name,
+        "type": vtype,
+        "orig_link": orig_link,
+        "ads_status": ads_status,
+        "r2_key": r2_key,
+        "filename": fname,
+        "size": len(data),
+        "uploaded_at": datetime.now(timezone.utc).isoformat(),
+    }
+    with _influ_videos_lock:
+        videos = _load_influ_videos()
+        videos.append(meta)
+        _save_influ_videos(videos)
+
+    out = dict(meta)
+    out["url"] = r2_presigned(r2_key, expires=604800)
+    return jsonify({"success": True, "video": out})
+
+@app.route("/api/influenceurs/videos/update", methods=["POST"])
+def api_influ_videos_update():
+    """Met à jour les métadonnées d'une vidéo (type, lien, statut ads)."""
+    payload = request.json or {}
+    vid_id = payload.get("id")
+    if not vid_id:
+        return jsonify({"success": False, "error": "id requis"}), 400
+    with _influ_videos_lock:
+        videos = _load_influ_videos()
+        found = False
+        for v in videos:
+            if v.get("id") == vid_id:
+                if "type" in payload and payload["type"] in ("unboxing", "playback"):
+                    v["type"] = payload["type"]
+                if "orig_link" in payload:
+                    v["orig_link"] = payload["orig_link"]
+                if "ads_status" in payload and payload["ads_status"] in ("", "a_utiliser", "utilise"):
+                    v["ads_status"] = payload["ads_status"]
+                found = True
+                break
+        if not found:
+            return jsonify({"success": False, "error": "vidéo introuvable"}), 404
+        _save_influ_videos(videos)
+    return jsonify({"success": True})
+
+@app.route("/api/influenceurs/videos/delete", methods=["POST"])
+def api_influ_videos_delete():
+    """Supprime une vidéo (fichier R2 + métadonnées)."""
+    vid_id = (request.json or {}).get("id")
+    if not vid_id:
+        return jsonify({"success": False, "error": "id requis"}), 400
+    with _influ_videos_lock:
+        videos = _load_influ_videos()
+        target = next((v for v in videos if v.get("id") == vid_id), None)
+        if not target:
+            return jsonify({"success": False, "error": "vidéo introuvable"}), 404
+        # Supprimer le fichier R2
+        if target.get("r2_key"):
+            try:
+                r2_delete(target["r2_key"])
+            except Exception as e:
+                print(f"[INFLU_VID] Erreur suppression R2: {e}")
+        videos = [v for v in videos if v.get("id") != vid_id]
+        _save_influ_videos(videos)
+    return jsonify({"success": True})
+
 @app.route("/queue_ig")
 def page_queue_ig(): return render_template("queue_ig.html")
 
