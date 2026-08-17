@@ -342,6 +342,64 @@ input,select{font-family:inherit}
 
 .mob-nav{display:none}
 
+/* ── Formulaire profil ──────────────────────────────────────────────────── */
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.field{display:flex;flex-direction:column;gap:6px}
+.field.full{grid-column:1/-1}
+.field label{font-size:11.5px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.field input,.field select{
+    background:var(--surface-2);border:1px solid var(--line-2);border-radius:11px;
+    padding:11px 13px;font-size:13.5px;font-weight:500;color:var(--ink);width:100%;
+    transition:border-color .15s,background .15s;
+}
+.field input:focus,.field select:focus{outline:none;border-color:var(--accent);background:#fff;
+    box-shadow:0 0 0 3px rgba(79,70,229,.08)}
+.field input::placeholder{color:var(--faint)}
+.field-hint{font-size:11px;color:var(--faint);font-weight:500}
+
+.plat-block{border:1px solid var(--line);border-radius:var(--r);padding:14px;background:var(--surface-2);margin-bottom:11px}
+.plat-head{display:flex;align-items:center;gap:9px;margin-bottom:11px}
+.plat-ico{width:28px;height:28px;border-radius:8px;display:grid;place-items:center;font-size:14px;flex-shrink:0}
+.plat-name{font-size:13.5px;font-weight:800}
+.plat-fields{display:grid;grid-template-columns:1fr 1fr 1fr;gap:9px}
+@media(max-width:640px){.plat-fields{grid-template-columns:1fr}.form-grid{grid-template-columns:1fr}}
+
+/* ── Sélecteur de maillots ──────────────────────────────────────────────── */
+.pick-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px;flex-wrap:wrap}
+.pick-count{font-size:12.5px;font-weight:700;padding:6px 13px;border-radius:100px;background:var(--accent-soft);color:var(--accent)}
+.pick-count.full{background:var(--ok-soft);color:#0A7C58}
+.jgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:13px}
+.jcard{border:2px solid var(--line);border-radius:var(--r);overflow:hidden;background:var(--surface);
+       cursor:pointer;transition:all .16s;position:relative}
+.jcard:hover{border-color:var(--line-2);transform:translateY(-2px);box-shadow:var(--sh-md)}
+.jcard.sel{border-color:var(--accent);box-shadow:0 0 0 3px rgba(79,70,229,.1),var(--sh-md)}
+.jcard-img{width:100%;aspect-ratio:1;object-fit:contain;background:#fff;display:block}
+.jcard-body{padding:10px 11px;border-top:1px solid var(--line)}
+.jcard-name{font-size:12.5px;font-weight:800;letter-spacing:-.015em;line-height:1.3}
+.jcard-sub{font-size:10.5px;color:var(--muted);font-weight:600;margin-top:2px}
+.jcard-tick{position:absolute;top:9px;right:9px;width:24px;height:24px;border-radius:50%;
+            background:var(--accent);display:none;place-items:center;box-shadow:var(--sh-md)}
+.jcard.sel .jcard-tick{display:grid}
+.jsizes{display:flex;gap:5px;margin-top:9px;flex-wrap:wrap}
+.jsize{flex:1;min-width:30px;text-align:center;padding:5px 2px;border-radius:7px;border:1px solid var(--line-2);
+       font-size:11.5px;font-weight:800;background:var(--surface-2);color:var(--ink-2);transition:all .13s}
+.jsize:hover{border-color:var(--accent)}
+.jsize.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.jsize.out{opacity:.3;cursor:not-allowed;text-decoration:line-through}
+
+.picked{display:flex;gap:11px;flex-wrap:wrap;margin-bottom:14px}
+.picked-item{display:flex;align-items:center;gap:10px;background:var(--accent-soft);border:1px solid #DDD9FE;
+             border-radius:var(--r);padding:8px 13px 8px 8px}
+.picked-img{width:38px;height:38px;border-radius:8px;object-fit:contain;background:#fff;flex-shrink:0}
+.picked-name{font-size:12.5px;font-weight:800;line-height:1.25}
+.picked-size{font-size:11px;color:var(--accent);font-weight:700}
+.picked-rm{color:var(--muted);font-size:15px;cursor:pointer;padding:0 3px}
+.picked-rm:hover{color:var(--danger)}
+
+.sticky-save{position:sticky;bottom:14px;margin-top:18px;display:flex;justify-content:center;z-index:20}
+.sticky-save .btn{box-shadow:var(--sh-lg)}
+@media(max-width:860px){.sticky-save{bottom:78px}}
+
 /* ── Responsive (mobile-first pour l'espace influenceur) ────────────────── */
 @media(max-width:1060px){
     .g-main{grid-template-columns:1fr}
@@ -431,6 +489,14 @@ input,select{font-family:inherit}
             </button>
         </nav>
 
+        <nav class="nav-group">
+            <div class="nav-label">Mon profil</div>
+            <button class="nav-item" data-tab="profil">
+                <svg class="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2M12 11a4 4 0 100-8 4 4 0 000 8z" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                Mes informations
+            </button>
+        </nav>
+
         <div class="side-foot">
             <p class="side-help">Une question ?<br><a href="#" id="helpLink">Contacte l'équipe Volakits</a></p>
         </div>
@@ -478,9 +544,9 @@ input,select{font-family:inherit}
         <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 2H6v7a6 6 0 0012 0V2zM4 22h16" stroke-linecap="round" stroke-linejoin="round"/></svg>
         Paliers
     </button>
-    <button class="mob-item" data-tab="contenus">
-        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 7l-7 5 7 5V7zM14 5H3a2 2 0 00-2 2v10a2 2 0 002 2h11a2 2 0 002-2V7a2 2 0 00-2-2z" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        Contenus
+    <button class="mob-item" data-tab="profil">
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2M12 11a4 4 0 100-8 4 4 0 000 8z" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Profil
     </button>
 </div>
 
@@ -556,6 +622,12 @@ function render(){
     else if(TAB==='colis')    v.innerHTML = viewColis();
     else if(TAB==='paliers')  v.innerHTML = viewPaliers();
     else if(TAB==='contenus') v.innerHTML = viewContenus();
+    else if(TAB==='profil'){
+        v.innerHTML = viewProfil();
+        ensureCatalog().then(renderJerseyGrid);
+        const sb = document.getElementById('profilSave');
+        if(sb) sb.onclick = saveProfil;
+    }
     requestAnimationFrame(animate);
     bindDynamic();
 }
@@ -869,6 +941,205 @@ function toast(msg){
     const el=document.getElementById('toast');
     el.textContent=msg; el.classList.add('show');
     clearTimeout(toastT); toastT=setTimeout(()=>el.classList.remove('show'),2200);
+}
+
+// ── Vue : Mon profil ────────────────────────────────────────────────────
+let CATALOG = null;      // {mode, jerseys:[]}
+let PICKS = [];          // [{id,name,sub,size,image}]
+
+async function ensureCatalog(){
+    if(CATALOG) return;
+    try{
+        const r = await fetch(`/api/espace/${SLUG}/jerseys`);
+        CATALOG = await r.json();
+    }catch(e){ CATALOG = {mode:'stock', jerseys:[]}; }
+}
+
+const PLATFORMS = [
+    {key:'tiktok',    name:'TikTok',    ico:'🎵', bg:'#F1F1F3'},
+    {key:'instagram', name:'Instagram', ico:'📸', bg:'#FCEEF5'},
+    {key:'snapchat',  name:'Snapchat',  ico:'👻', bg:'#FEF9E0'},
+];
+
+function viewProfil(){
+    const inf = D.influencer;
+    const p = inf.platforms || {};
+    const sh = inf.shipping || {};
+    PICKS = (inf.jerseys || []).map(j=>({...j}));
+
+    return `
+    <div class="card">
+        <div class="card-head">
+            <div>
+                <div class="card-title"><span class="ico-box">${ICO.eye}</span>Tes réseaux</div>
+                <div class="card-sub" style="margin-top:5px">Ces informations nous aident à adapter la collaboration</div>
+            </div>
+        </div>
+        ${PLATFORMS.map(pl=>{
+            const v = p[pl.key] || {};
+            return `<div class="plat-block">
+                <div class="plat-head">
+                    <div class="plat-ico" style="background:${pl.bg}">${pl.ico}</div>
+                    <div class="plat-name">${pl.name}</div>
+                </div>
+                <div class="plat-fields">
+                    <div class="field">
+                        <label>Pseudo</label>
+                        <input data-p="${pl.key}" data-k="username" value="${escAttr(v.username||'')}" placeholder="@ton_pseudo">
+                    </div>
+                    <div class="field">
+                        <label>Abonnés</label>
+                        <input type="number" min="0" data-p="${pl.key}" data-k="followers" value="${v.followers||''}" placeholder="12000">
+                    </div>
+                    <div class="field">
+                        <label>Vues moyennes</label>
+                        <input type="number" min="0" data-p="${pl.key}" data-k="avg_views" value="${v.avg_views||''}" placeholder="8000">
+                    </div>
+                </div>
+            </div>`;
+        }).join('')}
+    </div>
+
+    <div class="card">
+        <div class="card-head">
+            <div>
+                <div class="card-title"><span class="ico-box">${ICO.tag}</span>Choisis tes 2 maillots</div>
+                <div class="card-sub" style="margin-top:5px">Sélectionne un modèle, puis sa taille</div>
+            </div>
+            <span class="pick-count ${PICKS.length>=2?'full':''}" id="pickCount">${PICKS.length} / 2</span>
+        </div>
+        <div id="pickedZone"></div>
+        <div id="jerseyGrid"><div class="empty" style="padding:20px"><div class="empty-text">Chargement du catalogue…</div></div></div>
+    </div>
+
+    <div class="card">
+        <div class="card-head">
+            <div>
+                <div class="card-title"><span class="ico-box">${ICO.box}</span>Adresse de livraison</div>
+                <div class="card-sub" style="margin-top:5px">Pour t'envoyer ton colis</div>
+            </div>
+        </div>
+        <div class="form-grid">
+            <div class="field"><label>Prénom</label><input data-s="firstname" value="${escAttr(sh.firstname||'')}" placeholder="Lucas"></div>
+            <div class="field"><label>Nom</label><input data-s="lastname" value="${escAttr(sh.lastname||'')}" placeholder="Martin"></div>
+            <div class="field full"><label>Adresse</label><input data-s="address" value="${escAttr(sh.address||'')}" placeholder="18 rue du Puchot"></div>
+            <div class="field"><label>Code postal</label><input data-s="postal" value="${escAttr(sh.postal||'')}" placeholder="76500"></div>
+            <div class="field"><label>Ville</label><input data-s="city" value="${escAttr(sh.city||'')}" placeholder="Elbeuf"></div>
+            <div class="field"><label>Pays</label><input data-s="country" value="${escAttr(sh.country||'France')}" placeholder="France"></div>
+            <div class="field"><label>Téléphone</label><input data-s="phone" value="${escAttr(sh.phone||'')}" placeholder="06 12 34 56 78"></div>
+            <div class="field full"><label>Email</label><input type="email" data-s="email" value="${escAttr(sh.email||'')}" placeholder="lucas@email.com"></div>
+        </div>
+    </div>
+
+    <div class="sticky-save">
+        <button class="btn" id="profilSave">Enregistrer mes informations</button>
+    </div>`;
+}
+
+function renderJerseyGrid(){
+    const el = document.getElementById('jerseyGrid');
+    if(!el) return;
+    const list = (CATALOG && CATALOG.jerseys) || [];
+    if(!list.length){
+        el.innerHTML = `<div class="empty" style="padding:24px 10px">
+            <div class="empty-ico">${ICO.tag}</div>
+            <div class="empty-title">Catalogue en cours de mise à jour</div>
+            <div class="empty-text">Les maillots disponibles arrivent très vite. Reviens dans un moment.</div>
+        </div>`;
+        return;
+    }
+    el.innerHTML = `<div class="jgrid">${list.map(j=>{
+        const pick = PICKS.find(p=>p.id===j.id);
+        return `<div class="jcard ${pick?'sel':''}">
+            <div class="jcard-tick">${ICO.check}</div>
+            <img class="jcard-img" src="${escAttr(j.image)}" alt="${escAttr(j.name)}" loading="lazy">
+            <div class="jcard-body">
+                <div class="jcard-name">${esc(j.name)}</div>
+                ${j.sub?`<div class="jcard-sub">${esc(j.sub)}</div>`:''}
+                <div class="jsizes">
+                    ${Object.entries(j.sizes).map(([s,q])=>
+                        `<div class="jsize ${pick&&pick.size===s?'on':''} ${q>0?'':'out'}" data-size="${s}" data-jid="${escAttr(j.id)}">${s}</div>`
+                    ).join('')}
+                </div>
+            </div>
+        </div>`;
+    }).join('')}</div>`;
+
+    el.querySelectorAll('[data-size]').forEach(b=>{
+        b.onclick = (e)=>{
+            e.stopPropagation();
+            if(b.classList.contains('out')) return;
+            selectJersey(b.getAttribute('data-jid'), b.getAttribute('data-size'));
+        };
+    });
+    renderPicked();
+}
+
+function selectJersey(jid, size){
+    const j = CATALOG.jerseys.find(x=>x.id===jid);
+    if(!j) return;
+    const existing = PICKS.findIndex(p=>p.id===jid);
+    if(existing >= 0){
+        if(PICKS[existing].size === size) PICKS.splice(existing,1);
+        else PICKS[existing].size = size;
+    }else{
+        if(PICKS.length >= 2){ toast('Tu as déjà choisi 2 maillots'); return; }
+        PICKS.push({id:j.id, name:j.name, sub:j.sub, size, image:j.image});
+    }
+    const c = document.getElementById('pickCount');
+    if(c){ c.textContent = `${PICKS.length} / 2`; c.classList.toggle('full', PICKS.length>=2); }
+    renderJerseyGrid();
+}
+
+function renderPicked(){
+    const z = document.getElementById('pickedZone');
+    if(!z) return;
+    if(!PICKS.length){ z.innerHTML=''; return; }
+    z.innerHTML = `<div class="picked">${PICKS.map((p,i)=>`
+        <div class="picked-item">
+            <img class="picked-img" src="${escAttr(p.image||'')}" alt="">
+            <div><div class="picked-name">${esc(p.name)}</div><div class="picked-size">Taille ${esc(p.size)}</div></div>
+            <span class="picked-rm" data-rm="${i}">✕</span>
+        </div>`).join('')}</div>`;
+    z.querySelectorAll('[data-rm]').forEach(b=>{
+        b.onclick = ()=>{
+            PICKS.splice(+b.getAttribute('data-rm'),1);
+            renderJerseyGrid();
+            const c=document.getElementById('pickCount');
+            if(c){c.textContent=`${PICKS.length} / 2`;c.classList.toggle('full',PICKS.length>=2);}
+        };
+    });
+}
+
+async function saveProfil(){
+    const btn = document.getElementById('profilSave');
+    btn.disabled = true; btn.textContent = 'Enregistrement…';
+
+    const platforms = {};
+    document.querySelectorAll('[data-p]').forEach(inp=>{
+        const p = inp.getAttribute('data-p'), k = inp.getAttribute('data-k');
+        platforms[p] = platforms[p] || {};
+        const v = inp.value.trim();
+        if(v) platforms[p][k] = (k==='username') ? v : (parseInt(v)||0);
+    });
+    Object.keys(platforms).forEach(k=>{ if(!Object.keys(platforms[k]).length) delete platforms[k]; });
+
+    const shipping = {};
+    document.querySelectorAll('[data-s]').forEach(inp=>{
+        const v = inp.value.trim();
+        if(v) shipping[inp.getAttribute('data-s')] = v;
+    });
+
+    try{
+        const r = await fetch(`/api/espace/${SLUG}/update`,{
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({platforms, shipping, jerseys:PICKS})
+        });
+        const d = await r.json();
+        if(d.success){ toast('Informations enregistrées ✓'); await load(); setTab('profil'); }
+        else toast('Erreur : ' + (d.error||''));
+    }catch(e){ toast('Erreur réseau'); }
+    finally{ btn.disabled=false; btn.textContent='Enregistrer mes informations'; }
 }
 
 // ── Utils ───────────────────────────────────────────────────────────────
