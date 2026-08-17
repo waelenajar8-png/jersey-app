@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Catalogue gifting — Volakits</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+    --bg:#F7F8FC; --surface:#FFFFFF; --surface-2:#FBFCFE;
+    --sidebar:#0E1330; --sidebar-2:#161C3F;
+    --ink:#0B1020; --ink-2:#3A4157; --muted:#7C859B; --faint:#A8B0C3;
+    --on-dark:#EEF1FA; --on-dark-dim:#98A2C0;
+    --accent:#4F46E5; --accent-2:#7C3AED; --accent-soft:#EEF0FE;
+    --accent-grad:linear-gradient(135deg,#4F46E5 0%,#7C3AED 100%);
+    --ok:#10B981; --ok-soft:#E7F8F1;
+    --warn:#F59E0B; --warn-soft:#FEF4E4;
+    --danger:#EF4444; --danger-soft:#FEECEC;
+    --line:#EAECF3; --line-2:#DFE3EE;
+    --sh-xs:0 1px 2px rgba(11,16,32,.04);
+    --sh-sm:0 1px 3px rgba(11,16,32,.05),0 1px 2px rgba(11,16,32,.03);
+    --sh-md:0 4px 16px rgba(11,16,32,.06),0 1px 4px rgba(11,16,32,.04);
+    --sh-lg:0 12px 32px rgba(11,16,32,.09);
+    --sh-accent:0 8px 24px rgba(79,70,229,.22);
+    --r-sm:10px; --r:14px; --r-lg:20px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+::selection{background:var(--accent);color:#fff}
+body{font-family:'Plus Jakarta Sans',-apple-system,BlinkMacSystemFont,sans-serif;
+     background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased;
+     letter-spacing:-.011em;line-height:1.5}
+a{color:inherit;text-decoration:none}
+button{font-family:inherit;cursor:pointer;border:none;background:none}
+input,select{font-family:inherit}
+
+.shell{display:flex;min-height:100vh}
+.side{width:250px;flex-shrink:0;background:var(--sidebar);color:var(--on-dark);
+      display:flex;flex-direction:column;position:sticky;top:0;height:100vh;padding:22px 14px}
+.side-brand{display:flex;align-items:center;gap:10px;padding:0 8px 20px}
+.brand-mark{width:34px;height:34px;border-radius:9px;background:var(--accent-grad);
+            display:grid;place-items:center;font-weight:800;font-size:15px;color:#fff;
+            box-shadow:0 4px 14px rgba(79,70,229,.4);flex-shrink:0}
+.brand-name{font-size:15.5px;font-weight:800;letter-spacing:-.02em}
+.brand-sub{font-size:10.5px;color:var(--on-dark-dim);font-weight:600;letter-spacing:.08em;text-transform:uppercase}
+.nav-group{margin-bottom:16px}
+.nav-label{font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:#5A648C;padding:0 10px 7px}
+.nav-item{display:flex;align-items:center;gap:11px;padding:10px 11px;border-radius:10px;
+          font-size:13.5px;font-weight:600;color:var(--on-dark-dim);transition:all .16s;width:100%;text-align:left}
+.nav-item:hover{background:rgba(255,255,255,.05);color:var(--on-dark)}
+.nav-item.active{background:var(--accent);color:#fff;box-shadow:0 4px 14px rgba(79,70,229,.35)}
+.side-foot{margin-top:auto;padding:14px 10px 0;border-top:1px solid rgba(255,255,255,.07);
+           font-size:11.5px;color:var(--on-dark-dim);line-height:1.6}
+
+.main{flex:1;min-width:0;padding:26px 30px 60px}
+.topline{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;margin-bottom:22px;flex-wrap:wrap}
+h1{font-size:26px;font-weight:800;letter-spacing:-.03em}
+.sub{color:var(--muted);font-size:14px;font-weight:500;margin-top:4px}
+
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);
+      box-shadow:var(--sh-sm);padding:20px;margin-bottom:16px}
+.card-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px;flex-wrap:wrap}
+.card-title{font-size:15px;font-weight:800;letter-spacing:-.02em}
+.card-sub{font-size:12.5px;color:var(--muted);font-weight:500;margin-top:3px}
+
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;
+     padding:11px 19px;border-radius:11px;font-size:13.5px;font-weight:700;
+     background:var(--accent-grad);color:#fff;box-shadow:var(--sh-accent);transition:transform .16s,box-shadow .16s}
+.btn:hover{transform:translateY(-1.5px)}
+.btn:disabled{opacity:.5;cursor:not-allowed;transform:none}
+.btn-ghost{background:var(--surface);color:var(--ink);border:1px solid var(--line-2);
+           padding:9px 15px;font-size:12.5px;border-radius:10px;font-weight:700;
+           display:inline-flex;align-items:center;gap:7px;transition:all .15s}
+.btn-ghost:hover{border-color:var(--muted);transform:translateY(-1px)}
+.btn-sm{padding:6px 12px;font-size:11.5px;border-radius:8px}
+.btn-danger{color:var(--danger)}
+.btn-danger:hover{background:var(--danger-soft);border-color:var(--danger)}
+
+/* Mode switch */
+.modes{display:flex;gap:8px;flex-wrap:wrap}
+.mode-opt{flex:1;min-width:170px;border:1.5px solid var(--line-2);border-radius:var(--r);
+          padding:14px 16px;cursor:pointer;transition:all .16s;background:var(--surface-2)}
+.mode-opt:hover{border-color:var(--muted)}
+.mode-opt.on{border-color:var(--accent);background:var(--accent-soft);box-shadow:0 0 0 3px rgba(79,70,229,.08)}
+.mode-name{font-size:13.5px;font-weight:800;display:flex;align-items:center;gap:8px}
+.mode-desc{font-size:11.5px;color:var(--muted);font-weight:500;margin-top:4px;line-height:1.5}
+.radio{width:16px;height:16px;border-radius:50%;border:2px solid var(--line-2);flex-shrink:0;display:grid;place-items:center}
+.mode-opt.on .radio{border-color:var(--accent)}
+.mode-opt.on .radio::after{content:'';width:8px;height:8px;border-radius:50%;background:var(--accent)}
+
+/* Dropzone */
+.drop{border:2px dashed var(--line-2);border-radius:var(--r-lg);padding:26px;text-align:center;
+      background:var(--surface-2);transition:all .18s;cursor:pointer}
+.drop:hover,.drop.over{border-color:var(--accent);background:var(--accent-soft)}
+.drop-ico{width:44px;height:44px;border-radius:13px;background:var(--accent-soft);color:var(--accent);
+          display:grid;place-items:center;margin:0 auto 11px}
+.drop.over .drop-ico{background:#fff}
+.drop-t{font-size:14px;font-weight:800}
+.drop-d{font-size:12.5px;color:var(--muted);font-weight:500;margin-top:4px}
+
+/* Grille maillots */
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:16px}
+.jersey{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);
+        overflow:hidden;box-shadow:var(--sh-xs);transition:box-shadow .16s,border-color .16s}
+.jersey:hover{box-shadow:var(--sh-md);border-color:var(--line-2)}
+.jersey.off{opacity:.5}
+.j-img{width:100%;aspect-ratio:1;object-fit:contain;background:#fff;display:block;border-bottom:1px solid var(--line)}
+.j-body{padding:13px 14px}
+.j-name{width:100%;font-size:13.5px;font-weight:700;border:none;background:transparent;
+        padding:4px 0;border-bottom:1px solid transparent;letter-spacing:-.015em}
+.j-name:focus{outline:none;border-bottom-color:var(--accent)}
+.j-sub{width:100%;font-size:11.5px;color:var(--muted);font-weight:500;border:none;
+       background:transparent;padding:3px 0;border-bottom:1px solid transparent}
+.j-sub:focus{outline:none;border-bottom-color:var(--accent)}
+.sizes{display:flex;gap:6px;margin-top:11px}
+.size-in{flex:1;text-align:center}
+.size-lbl{font-size:10px;font-weight:800;color:var(--muted);letter-spacing:.05em}
+.size-in input{width:100%;text-align:center;border:1px solid var(--line-2);border-radius:8px;
+               padding:6px 2px;font-size:13px;font-weight:700;margin-top:3px;background:var(--surface-2)}
+.size-in input:focus{outline:none;border-color:var(--accent);background:#fff}
+.size-in.zero input{color:var(--faint)}
+.j-foot{display:flex;gap:6px;margin-top:11px;align-items:center}
+.toggle{display:flex;align-items:center;gap:6px;font-size:11.5px;font-weight:700;color:var(--muted);cursor:pointer;flex:1}
+.tg{width:34px;height:19px;border-radius:20px;background:var(--line-2);position:relative;transition:background .18s;flex-shrink:0}
+.tg::after{content:'';position:absolute;top:2.5px;left:2.5px;width:14px;height:14px;border-radius:50%;
+           background:#fff;transition:transform .18s;box-shadow:0 1px 3px rgba(0,0,0,.2)}
+.toggle.on .tg{background:var(--ok)}
+.toggle.on .tg::after{transform:translateX(15px)}
+.toggle.on{color:var(--ok)}
+
+.empty{text-align:center;padding:40px 20px}
+.empty-ico{width:48px;height:48px;border-radius:14px;background:var(--accent-soft);color:var(--accent);
+           display:grid;place-items:center;margin:0 auto 13px}
+.empty-t{font-size:15px;font-weight:800}
+.empty-d{font-size:13px;color:var(--muted);font-weight:500;margin:6px auto 0;max-width:340px;line-height:1.55}
+
+.savebar{position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(110px);
+         background:var(--ink);color:#fff;padding:11px 13px 11px 20px;border-radius:100px;
+         box-shadow:var(--sh-lg);display:flex;align-items:center;gap:14px;z-index:99;
+         transition:transform .3s cubic-bezier(.2,.8,.2,1)}
+.savebar.show{transform:translateX(-50%) translateY(0)}
+.savebar span{font-size:13px;font-weight:700}
+.savebar .btn{padding:8px 16px;font-size:12.5px;box-shadow:none}
+
+.toast{position:fixed;top:22px;left:50%;transform:translateX(-50%) translateY(-90px);
+       background:var(--ink);color:#fff;padding:11px 20px;border-radius:100px;
+       font-size:13px;font-weight:700;box-shadow:var(--sh-lg);z-index:120;transition:transform .3s cubic-bezier(.2,.8,.2,1)}
+.toast.show{transform:translateX(-50%) translateY(0)}
+
+.stat-row{display:flex;gap:9px;flex-wrap:wrap}
+.chip{display:inline-flex;align-items:center;gap:7px;background:var(--surface-2);border:1px solid var(--line);
+      border-radius:100px;padding:7px 14px;font-size:12.5px;font-weight:700;color:var(--ink-2)}
+.chip b{color:var(--ink)}
+.dot{width:8px;height:8px;border-radius:50%}
+
+@media(max-width:860px){
+    .side{display:none}
+    .main{padding:18px 15px 80px}
+    .grid{grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px}
+}
+</style>
+</head>
+<body>
+<div class="shell">
+    <aside class="side">
+        <div class="side-brand">
+            <div class="brand-mark">V</div>
+            <div><div class="brand-name">Volakits</div><div class="brand-sub">Back-office</div></div>
+        </div>
+        <nav class="nav-group">
+            <div class="nav-label">Influence</div>
+            <a class="nav-item" href="/influenceurs">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8zM23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                Influenceurs
+            </a>
+            <button class="nav-item active">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M20.6 13.5L12 22l-9-9V3h10l7.6 7.6a2 2 0 010 2.9z" stroke-linecap="round" stroke-linejoin="round"/><circle cx="7.5" cy="7.5" r="1.5" fill="currentColor"/></svg>
+                Catalogue gifting
+            </button>
+        </nav>
+        <nav class="nav-group">
+            <div class="nav-label">Contenu</div>
+            <a class="nav-item" href="/">🎨 Générateur</a>
+            <a class="nav-item" href="/queue">📋 File TikTok</a>
+            <a class="nav-item" href="/dashboard">📊 Dashboard</a>
+        </nav>
+        <div class="side-foot">Les maillots actifs et en stock sont visibles par les influenceurs dans leur espace.</div>
+    </aside>
+
+    <main class="main">
+        <div class="topline">
+            <div>
+                <h1>Catalogue gifting</h1>
+                <p class="sub">Les maillots que tes influenceurs peuvent choisir</p>
+            </div>
+            <div class="stat-row" id="stats"></div>
+        </div>
+
+        <div class="card">
+            <div class="card-head">
+                <div>
+                    <div class="card-title">Mode de sélection</div>
+                    <div class="card-sub">Ce que voient les influenceurs dans leur espace</div>
+                </div>
+            </div>
+            <div class="modes" id="modes"></div>
+        </div>
+
+        <div class="card">
+            <div class="card-head">
+                <div>
+                    <div class="card-title">Ajouter des maillots</div>
+                    <div class="card-sub">Photos détourées sur fond blanc de préférence — plusieurs à la fois</div>
+                </div>
+            </div>
+            <div class="drop" id="drop">
+                <div class="drop-ico">
+                    <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </div>
+                <div class="drop-t">Glisse tes photos ici</div>
+                <div class="drop-d">ou clique pour parcourir · PNG, JPG · 8 Mo max</div>
+                <input type="file" id="file" accept="image/*" multiple hidden>
+            </div>
+            <div id="upStatus" style="margin-top:11px;font-size:12.5px;font-weight:600;color:var(--accent)"></div>
+        </div>
+
+        <div class="card">
+            <div class="card-head">
+                <div>
+                    <div class="card-title">Maillots du catalogue</div>
+                    <div class="card-sub">Renseigne le nom et les quantités par taille · 0 = épuisé</div>
+                </div>
+            </div>
+            <div id="list"></div>
+        </div>
+    </main>
+</div>
+
+<div class="savebar" id="savebar">
+    <span id="saveTxt">Modifications non enregistrées</span>
+    <button class="btn" id="saveBtn">Enregistrer</button>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const SIZES = ['S','M','L','XL','2XL'];
+let CAT = {mode:'stock', jerseys:[]};
+let dirty = false;
+
+const MODES = [
+    {id:'stock',     name:'Stock physique',   desc:"L'influenceur choisit uniquement parmi les maillots que tu as réellement en stock."},
+    {id:'catalogue', name:'Catalogue complet',desc:"Accès large au catalogue. À utiliser quand ton stock est épuisé."},
+    {id:'both',      name:'Les deux',         desc:"Stock en priorité, catalogue proposé en complément sur commande."},
+];
+
+async function load(){
+    try{
+        const r = await fetch('/api/gifting/catalog');
+        CAT = await r.json();
+        if(!Array.isArray(CAT.jerseys)) CAT.jerseys = [];
+    }catch(e){ CAT = {mode:'stock', jerseys:[]}; }
+    dirty = false; document.getElementById('savebar').classList.remove('show');
+    render();
+}
+
+function render(){ renderModes(); renderStats(); renderList(); }
+
+function renderModes(){
+    document.getElementById('modes').innerHTML = MODES.map(m=>`
+        <div class="mode-opt ${CAT.mode===m.id?'on':''}" data-mode="${m.id}">
+            <div class="mode-name"><span class="radio"></span>${m.name}</div>
+            <div class="mode-desc">${m.desc}</div>
+        </div>`).join('');
+    document.querySelectorAll('[data-mode]').forEach(el=>{
+        el.onclick = ()=>{ CAT.mode = el.getAttribute('data-mode'); touch(); render(); };
+    });
+}
+
+function renderStats(){
+    const total = CAT.jerseys.length;
+    const active = CAT.jerseys.filter(j=>j.active!==false).length;
+    const pieces = CAT.jerseys.reduce((s,j)=>s+Object.values(j.sizes||{}).reduce((a,b)=>a+(+b||0),0),0);
+    document.getElementById('stats').innerHTML = `
+        <div class="chip"><span class="dot" style="background:var(--accent)"></span>Modèles <b>${total}</b></div>
+        <div class="chip"><span class="dot" style="background:var(--ok)"></span>Actifs <b>${active}</b></div>
+        <div class="chip"><span class="dot" style="background:var(--warn)"></span>Pièces <b>${pieces}</b></div>`;
+}
+
+function renderList(){
+    const el = document.getElementById('list');
+    if(!CAT.jerseys.length){
+        el.innerHTML = `<div class="empty">
+            <div class="empty-ico"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.6 13.5L12 22l-9-9V3h10l7.6 7.6a2 2 0 010 2.9z" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+            <div class="empty-t">Aucun maillot pour l'instant</div>
+            <div class="empty-d">Ajoute tes photos ci-dessus, puis renseigne le nom et les quantités disponibles par taille.</div>
+        </div>`;
+        return;
+    }
+    el.innerHTML = `<div class="grid">${CAT.jerseys.map((j,i)=>{
+        const on = j.active !== false;
+        return `<div class="jersey ${on?'':'off'}">
+            <img class="j-img" src="${escAttr(j.image||'')}" alt="${escAttr(j.name)}" loading="lazy">
+            <div class="j-body">
+                <input class="j-name" value="${escAttr(j.name||'')}" placeholder="Nom du maillot" data-f="name" data-i="${i}">
+                <input class="j-sub" value="${escAttr(j.sub||'')}" placeholder="Couleur · saison" data-f="sub" data-i="${i}">
+                <div class="sizes">
+                    ${SIZES.map(s=>{
+                        const q = (j.sizes||{})[s] || 0;
+                        return `<div class="size-in ${q>0?'':'zero'}">
+                            <div class="size-lbl">${s}</div>
+                            <input type="number" min="0" value="${q}" data-size="${s}" data-i="${i}">
+                        </div>`;
+                    }).join('')}
+                </div>
+                <div class="j-foot">
+                    <div class="toggle ${on?'on':''}" data-toggle="${i}">
+                        <span class="tg"></span>${on?'Visible':'Masqué'}
+                    </div>
+                    <button class="btn-ghost btn-sm btn-danger" data-del="${i}">Retirer</button>
+                </div>
+            </div>
+        </div>`;
+    }).join('')}</div>`;
+
+    el.querySelectorAll('[data-f]').forEach(inp=>{
+        inp.oninput = ()=>{ CAT.jerseys[+inp.dataset.i][inp.dataset.f] = inp.value; touch(); };
+    });
+    el.querySelectorAll('[data-size]').forEach(inp=>{
+        inp.oninput = ()=>{
+            const j = CAT.jerseys[+inp.dataset.i];
+            j.sizes = j.sizes || {};
+            j.sizes[inp.dataset.size] = Math.max(0, parseInt(inp.value||0));
+            inp.parentElement.classList.toggle('zero', !j.sizes[inp.dataset.size]);
+            touch(); renderStats();
+        };
+    });
+    el.querySelectorAll('[data-toggle]').forEach(t=>{
+        t.onclick = ()=>{
+            const j = CAT.jerseys[+t.dataset.toggle];
+            j.active = j.active === false;
+            touch(); renderList(); renderStats();
+        };
+    });
+    el.querySelectorAll('[data-del]').forEach(b=>{
+        b.onclick = async ()=>{
+            const i = +b.dataset.del;
+            const j = CAT.jerseys[i];
+            if(!confirm(`Retirer "${j.name||'ce maillot'}" du catalogue ?`)) return;
+            if(j.r2_key){
+                try{ await fetch('/api/gifting/delete_image',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({r2_key:j.r2_key})}); }catch(e){}
+            }
+            CAT.jerseys.splice(i,1);
+            touch(); render(); save();
+        };
+    });
+}
+
+// ── Upload ──────────────────────────────────────────────────────────────
+const drop = document.getElementById('drop');
+const fileInput = document.getElementById('file');
+drop.onclick = ()=> fileInput.click();
+drop.ondragover = e=>{ e.preventDefault(); drop.classList.add('over'); };
+drop.ondragleave = ()=> drop.classList.remove('over');
+drop.ondrop = e=>{ e.preventDefault(); drop.classList.remove('over'); handleFiles(e.dataTransfer.files); };
+fileInput.onchange = ()=>{ handleFiles(fileInput.files); fileInput.value=''; };
+
+async function handleFiles(files){
+    const arr = [...files].filter(f=>f.type.startsWith('image/'));
+    if(!arr.length) return;
+    const st = document.getElementById('upStatus');
+    let done = 0;
+    for(const f of arr){
+        st.textContent = `Envoi ${done+1}/${arr.length} — ${f.name}`;
+        const fd = new FormData(); fd.append('image', f);
+        try{
+            const r = await fetch('/api/gifting/upload',{method:'POST',body:fd});
+            const d = await r.json();
+            if(d.success){
+                CAT.jerseys.push({
+                    id:'jr_'+Math.random().toString(36).slice(2,12),
+                    name:d.suggested_name||'', sub:'', r2_key:d.r2_key, image:d.image,
+                    sizes:{}, active:true
+                });
+                done++;
+            }else{ st.textContent = '❌ ' + (d.error||'échec'); }
+        }catch(e){ st.textContent = '❌ Erreur réseau'; }
+    }
+    st.textContent = done ? `✅ ${done} maillot(s) ajouté(s) — renseigne les noms et quantités` : '';
+    setTimeout(()=>{ st.textContent=''; }, 5000);
+    touch(); render(); save();
+}
+
+// ── Sauvegarde ──────────────────────────────────────────────────────────
+function touch(){
+    dirty = true;
+    document.getElementById('savebar').classList.add('show');
+    document.getElementById('saveTxt').textContent = 'Modifications non enregistrées';
+}
+async function save(){
+    const btn = document.getElementById('saveBtn');
+    btn.disabled = true; document.getElementById('saveTxt').textContent = 'Enregistrement…';
+    try{
+        const r = await fetch('/api/gifting/catalog',{
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({mode:CAT.mode, jerseys:CAT.jerseys})
+        });
+        const d = await r.json();
+        if(d.success){
+            dirty = false;
+            document.getElementById('savebar').classList.remove('show');
+            toast('Catalogue enregistré');
+        }else toast('Erreur : ' + (d.error||''));
+    }catch(e){ toast('Erreur réseau'); }
+    finally{ btn.disabled = false; }
+}
+document.getElementById('saveBtn').onclick = save;
+window.addEventListener('beforeunload', e=>{ if(dirty){ e.preventDefault(); e.returnValue=''; } });
+
+let tT=null;
+function toast(m){
+    const t=document.getElementById('toast');
+    t.textContent=m; t.classList.add('show');
+    clearTimeout(tT); tT=setTimeout(()=>t.classList.remove('show'),2200);
+}
+function escAttr(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
+load();
+</script>
+</body>
+</html>
