@@ -3140,6 +3140,324 @@ def api_influ_videos_delete():
         _save_influ_videos(videos)
     return jsonify({"success": True})
 
+# ══════════════════════════════════════════════════════════════════════════════
+# ESPACE INFLUENCEUR PUBLIC — /espace/<slug>
+#
+# Vue publique individuelle pour chaque influenceur (programme ambassadeur).
+# L'influenceur y consulte sa progression, ses missions, son colis, son code promo,
+# et y renseigne lui-même son profil (réseaux, livraison, maillots, vidéos).
+#
+# IMPORTANT — Gamification : les paliers, seuils et récompenses ci-dessous sont
+# VOLONTAIREMENT configurables et provisoires. Les valeurs définitives seront
+# définies plus tard. Toute la structure est pensée pour les modifier sans
+# toucher au reste du code.
+# ══════════════════════════════════════════════════════════════════════════════
+
+# ── Configuration des paliers (PROVISOIRE — à ajuster) ────────────────────
+INFLUENCER_TIERS = [
+    {
+        "id": "decouverte",
+        "name": "Découverte",
+        "icon": "🥉",
+        "color": "#94A3B8",
+        # Critères pour ATTEINDRE ce palier (le premier est acquis d'office)
+        "requirements": {},
+        "perks": [
+            "2 maillots offerts",
+            "Code promo personnalisé -15%",
+            "Commission 10% sur tes ventes",
+        ],
+    },
+    {
+        "id": "ambassadeur",
+        "name": "Ambassadeur",
+        "icon": "🥈",
+        "color": "#6366F1",
+        "requirements": {"videos": 3, "views": 50000, "sales": 5},
+        "perks": [
+            "Commission augmentée à 15%",
+            "Nouveaux maillots chaque mois",
+            "Accès anticipé aux nouveautés",
+            "Mise en avant sur nos comptes",
+        ],
+    },
+    {
+        "id": "partenaire",
+        "name": "Partenaire",
+        "icon": "🥇",
+        "color": "#C9A227",
+        "requirements": {"videos": 10, "views": 250000, "sales": 30},
+        "perks": [
+            "Rémunération fixe + commission 20%",
+            "Co-création d'un maillot signature",
+            "Collaboration longue durée",
+            "Budget contenu dédié",
+        ],
+    },
+]
+
+# Missions par défaut (PROVISOIRE — configurable)
+DEFAULT_MISSIONS = [
+    {"id": "profil",    "label": "Compléter ton profil",         "desc": "Réseaux sociaux et statistiques",     "auto": True},
+    {"id": "maillots",  "label": "Choisir tes 2 maillots",       "desc": "Depuis le catalogue Volakits",        "auto": True},
+    {"id": "livraison", "label": "Renseigner ton adresse",       "desc": "Pour l'expédition de ton colis",      "auto": True},
+    {"id": "unboxing",  "label": "Publier ton unboxing",         "desc": "Une vidéo de réception du colis",     "auto": False},
+    {"id": "video1",    "label": "Publier ta 1ʳᵉ vidéo",         "desc": "Playback ou selon ton contenu",       "auto": False},
+    {"id": "video2",    "label": "Publier ta 2ᵉ vidéo",          "desc": "En portant le second maillot",        "auto": False},
+]
+
+def _slugify(text):
+    """Transforme un pseudo en slug URL-safe."""
+    import unicodedata, re as _re
+    t = unicodedata.normalize("NFKD", str(text or "")).encode("ascii", "ignore").decode()
+    t = _re.sub(r"[^a-zA-Z0-9]+", "-", t).strip("-").lower()
+    return t or "influenceur"
+
+def _get_influencer_by_slug(slug):
+    """Retrouve un influenceur via son slug public (pseudo-hash)."""
+    try:
+        data = r2_get_json(INFLUENCEURS_R2_KEY) or {}
+        for inf in data.get("influenceurs", []):
+            if _public_slug(inf) == slug:
+                return inf
+    except Exception as e:
+        print(f"[ESPACE] Erreur lecture influenceur: {e}")
+    return None
+
+def _public_slug(inf):
+    """Slug public stable : pseudo-slugifié + suffixe de l'id (non devinable)."""
+    base = _slugify(inf.get("pseudo") or "influenceur")
+    suffix = str(inf.get("id", ""))[-6:] or "000000"
+    return f"{base}-{suffix}"
+
+def _compute_tier_progress(stats):
+    """
+    Détermine le palier courant et la progression vers le suivant.
+    stats : {"videos": int, "views": int, "sales": int}
+    Retourne (tier_index, next_tier_or_None, progress_pct, details[])
+    """
+    videos = int(stats.get("videos", 0) or 0)
+    views  = int(stats.get("views", 0) or 0)
+    sales  = int(stats.get("sales", 0) or 0)
+
+    # Palier atteint = le plus haut dont tous les critères sont remplis
+    tier_idx = 0
+    for i, tier in enumerate(INFLUENCER_TIERS):
+        req = tier.get("requirements") or {}
+        if not req:
+            tier_idx = max(tier_idx, i)
+            continue
+        if (videos >= req.get("videos", 0) and
+            views  >= req.get("views", 0) and
+            sales  >= req.get("sales", 0)):
+            tier_idx = max(tier_idx, i)
+
+    next_tier = INFLUENCER_TIERS[tier_idx + 1] if tier_idx + 1 < len(INFLUENCER_TIERS) else None
+
+    details, pct = [], 100
+    if next_tier:
+        req = next_tier.get("requirements") or {}
+        ratios = []
+        mapping = [("videos", "Vidéos publiées", videos), ("views", "Vues cumulées", views), ("sales", "Ventes générées", sales)]
+        for key, label, current in mapping:
+            target = req.get(key, 0)
+            if target > 0:
+                r = min(1.0, current / target)
+                ratios.append(r)
+                details.append({
+                    "key": key, "label": label,
+                    "current": current, "target": target,
+                    "pct": round(r * 100), "done": current >= target,
+                })
+        pct = round(sum(ratios) / len(ratios) * 100) if ratios else 0
+
+    return tier_idx, next_tier, pct, details
+
+def _espace_payload(inf):
+    """Construit toutes les données affichées dans l'espace influenceur."""
+    stats = dict(inf.get("stats") or {})
+
+    # Vidéos de la bibliothèque appartenant à cet influenceur
+    try:
+        all_vids = _load_influ_videos()
+        my_vids = [v for v in all_vids if v.get("influ_id") == inf.get("id")]
+    except Exception:
+        my_vids = []
+
+    # Le nombre de vidéos publiées est TOUJOURS dérivé des vidéos réelles,
+    # pas d'une valeur saisie à la main : c'est la seule source fiable.
+    stats["videos"] = len(my_vids)
+
+    tier_idx, next_tier, pct, details = _compute_tier_progress(stats)
+    current_tier = INFLUENCER_TIERS[tier_idx]
+
+    # Missions : état calculé (auto) ou déclaré
+    done_map = inf.get("missions_done") or {}
+    missions = []
+    for m in DEFAULT_MISSIONS:
+        if m["id"] == "profil":
+            done = bool((inf.get("platforms") or {}))
+        elif m["id"] == "maillots":
+            done = len(inf.get("jerseys") or []) >= 2
+        elif m["id"] == "livraison":
+            done = bool(inf.get("address"))
+        elif m["id"] == "unboxing":
+            done = any(v.get("type") == "unboxing" for v in my_vids)
+        elif m["id"] == "video1":
+            done = len([v for v in my_vids if v.get("type") == "playback"]) >= 1
+        elif m["id"] == "video2":
+            done = len([v for v in my_vids if v.get("type") == "playback"]) >= 2
+        else:
+            done = bool(done_map.get(m["id"]))
+        missions.append({**m, "done": done})
+
+    return {
+        "influencer": {
+            "id": inf.get("id"),
+            "pseudo": inf.get("pseudo") or "",
+            "platform": inf.get("platform") or "",
+            "promo_code": inf.get("promo_code") or "",
+            "address": inf.get("address") or "",
+            "platforms": inf.get("platforms") or {},
+            "jerseys": inf.get("jerseys") or [],
+            "shipping": inf.get("shipping") or {},
+            "tracking": inf.get("tracking") or "",
+            "tracking_status": inf.get("trackingStatus") or "",
+            "quota": inf.get("quota") or "",
+            "status": inf.get("status", 0),
+        },
+        "stats": {
+            "views":  int(stats.get("views", 0) or 0),
+            "sales":  int(stats.get("sales", 0) or 0),
+            "revenue": float(stats.get("revenue", 0) or 0),
+            "videos": len(my_vids),
+            "commission": float(stats.get("commission", 0) or 0),
+        },
+        "tier": {
+            "current": current_tier,
+            "next": next_tier,
+            "progress": pct,
+            "details": details,
+            "all": INFLUENCER_TIERS,
+            "index": tier_idx,
+        },
+        "missions": missions,
+        "videos": [{
+            "id": v.get("id"), "type": v.get("type"), "orig_link": v.get("orig_link", ""),
+            "uploaded_at": v.get("uploaded_at", ""), "filename": v.get("filename", ""),
+        } for v in my_vids],
+    }
+
+@app.route("/espace/<slug>")
+def espace_influenceur(slug):
+    """Page publique de l'espace influenceur."""
+    inf = _get_influencer_by_slug(slug)
+    if not inf:
+        return render_template("espace_404.html"), 404
+    return render_template("espace.html", slug=slug)
+
+@app.route("/api/espace/<slug>")
+def api_espace_data(slug):
+    """Données de l'espace influenceur (lecture publique)."""
+    inf = _get_influencer_by_slug(slug)
+    if not inf:
+        return jsonify({"error": "introuvable"}), 404
+    return jsonify(_espace_payload(inf))
+
+@app.route("/api/espace/<slug>/update", methods=["POST"])
+def api_espace_update(slug):
+    """
+    L'influenceur met à jour son propre profil (champs autorisés uniquement).
+    Champs modifiables : platforms, shipping, jerseys.
+    Tout le reste (stats, palier, tracking) reste sous contrôle admin.
+    """
+    ALLOWED = {"platforms", "shipping", "jerseys"}
+    payload = request.json or {}
+    updates = {k: v for k, v in payload.items() if k in ALLOWED}
+    if not updates:
+        return jsonify({"success": False, "error": "aucun champ modifiable"}), 400
+
+    with _influenceurs_lock:
+        data = r2_get_json(INFLUENCEURS_R2_KEY) or {}
+        influenceurs = data.get("influenceurs", [])
+        found = None
+        for inf in influenceurs:
+            if _public_slug(inf) == slug:
+                found = inf
+                break
+        if not found:
+            return jsonify({"success": False, "error": "introuvable"}), 404
+
+        found.update(updates)
+        found["lastModified"] = datetime.now(timezone.utc).isoformat()
+        # Miroir de l'adresse principale pour le back-office
+        if "shipping" in updates:
+            sh = updates["shipping"] or {}
+            parts = [sh.get("address",""), sh.get("postal",""), sh.get("city",""), sh.get("country","")]
+            found["address"] = ", ".join([p for p in parts if p])
+
+        data["influenceurs"] = influenceurs
+        data["version"] = data.get("version", 0) + 1
+        data["updated_at"] = datetime.now(timezone.utc).isoformat()
+        r2_put_json(INFLUENCEURS_R2_KEY, data)
+
+    return jsonify({"success": True})
+
+@app.route("/api/espace/<slug>/video", methods=["POST"])
+def api_espace_add_video(slug):
+    """L'influenceur déclare une vidéo publiée (lien + type + stats déclarées)."""
+    inf = _get_influencer_by_slug(slug)
+    if not inf:
+        return jsonify({"success": False, "error": "introuvable"}), 404
+    payload = request.json or {}
+    vtype = payload.get("type")
+    link  = (payload.get("link") or "").strip()
+    if vtype not in ("unboxing", "playback") or not link:
+        return jsonify({"success": False, "error": "type ou lien invalide"}), 400
+
+    meta = {
+        "id": f"vid_{int(time.time())}_{uuid.uuid4().hex[:8]}",
+        "influ_id": inf.get("id"),
+        "influ_name": inf.get("pseudo", ""),
+        "type": vtype,
+        "orig_link": link,
+        "ads_status": "",
+        "r2_key": "",
+        "filename": f"{vtype} déclaré",
+        "size": 0,
+        "declared_views": int(payload.get("views", 0) or 0),
+        "declared_likes": int(payload.get("likes", 0) or 0),
+        "validated": False,
+        "uploaded_at": datetime.now(timezone.utc).isoformat(),
+    }
+    with _influ_videos_lock:
+        videos = _load_influ_videos()
+        videos.append(meta)
+        _save_influ_videos(videos)
+    return jsonify({"success": True, "video": meta})
+
+@app.route("/api/espace/<slug>/link")
+def api_espace_link(slug):
+    """Retourne l'URL publique complète (pour partage côté admin)."""
+    return jsonify({"url": request.host_url.rstrip("/") + "/espace/" + slug})
+
+@app.route("/api/influenceurs/slugs")
+def api_influenceurs_slugs():
+    """Liste des slugs publics (back-office : récupérer le lien de chaque influenceur)."""
+    try:
+        data = r2_get_json(INFLUENCEURS_R2_KEY) or {}
+        out = []
+        for inf in data.get("influenceurs", []):
+            out.append({
+                "id": inf.get("id"),
+                "pseudo": inf.get("pseudo", ""),
+                "slug": _public_slug(inf),
+                "url": request.host_url.rstrip("/") + "/espace/" + _public_slug(inf),
+            })
+        return jsonify({"influenceurs": out})
+    except Exception as e:
+        return jsonify({"influenceurs": [], "error": str(e)})
+
 @app.route("/queue_ig")
 def page_queue_ig(): return render_template("queue_ig.html")
 
