@@ -3458,6 +3458,146 @@ def api_influenceurs_slugs():
     except Exception as e:
         return jsonify({"influenceurs": [], "error": str(e)})
 
+# ══════════════════════════════════════════════════════════════════════════════
+# CATALOGUE GIFTING — maillots proposés aux influenceurs
+#
+# Deux modes :
+#   "stock"     → sélection restreinte gérée à la main (stock physique réel)
+#   "catalogue" → recherche large dans le catalogue Shopify (quand stock épuisé)
+# Le mode est stocké dans le catalogue lui-même et bascule depuis le back-office.
+# ══════════════════════════════════════════════════════════════════════════════
+GIFTING_CATALOG_KEY = "meta/gifting_catalog.json"
+GIFTING_IMG_PFX     = "gifting/"
+GIFTING_IMG_MAX     = 8 * 1024 * 1024   # 8 Mo par photo
+_gifting_lock = threading.Lock()
+
+def _load_gifting_catalog():
+    """Retourne {"mode": str, "jerseys": [...]} — jamais None."""
+    try:
+        data = r2_get_json(GIFTING_CATALOG_KEY) or {}
+        return {
+            "mode": data.get("mode", "stock"),
+            "jerseys": data.get("jerseys", []) if isinstance(data.get("jerseys"), list) else [],
+        }
+    except Exception as e:
+        print(f"[GIFTING] Erreur lecture catalogue: {e}")
+        return {"mode": "stock", "jerseys": []}
+
+def _save_gifting_catalog(cat):
+    try:
+        return r2_put_json(GIFTING_CATALOG_KEY, {
+            "mode": cat.get("mode", "stock"),
+            "jerseys": cat.get("jerseys", []),
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        })
+    except Exception as e:
+        print(f"[GIFTING] Erreur écriture catalogue: {e}")
+        return False
+
+def _gifting_public_view(cat):
+    """Version publique : uniquement les maillots actifs avec au moins une taille dispo."""
+    out = []
+    for j in cat.get("jerseys", []):
+        if not j.get("active", True):
+            continue
+        sizes = {s: q for s, q in (j.get("sizes") or {}).items() if int(q or 0) > 0}
+        if not sizes:
+            continue
+        out.append({
+            "id": j.get("id"),
+            "name": j.get("name", ""),
+            "sub": j.get("sub", ""),
+            "sizes": sizes,
+            "image": r2_presigned(j["r2_key"], expires=604800) if j.get("r2_key") else "",
+        })
+    return out
+
+@app.route("/catalogue")
+def catalogue_page():
+    return render_template("catalogue.html")
+
+@app.route("/api/gifting/catalog", methods=["GET"])
+def api_gifting_catalog_get():
+    """Catalogue complet (back-office) avec URLs d'images signées."""
+    cat = _load_gifting_catalog()
+    for j in cat["jerseys"]:
+        j["image"] = r2_presigned(j["r2_key"], expires=604800) if j.get("r2_key") else ""
+    return jsonify(cat)
+
+@app.route("/api/gifting/catalog", methods=["POST"])
+def api_gifting_catalog_save():
+    """Sauvegarde le catalogue (mode + liste des maillots)."""
+    payload = request.json or {}
+    jerseys = payload.get("jerseys")
+    if jerseys is not None and not isinstance(jerseys, list):
+        return jsonify({"success": False, "error": "format invalide"}), 400
+    with _gifting_lock:
+        cat = _load_gifting_catalog()
+        if "mode" in payload and payload["mode"] in ("stock", "catalogue", "both"):
+            cat["mode"] = payload["mode"]
+        if jerseys is not None:
+            # On ne conserve que les champs attendus (pas d'URL signée en base)
+            clean = []
+            for j in jerseys:
+                clean.append({
+                    "id":     j.get("id") or f"jr_{uuid.uuid4().hex[:10]}",
+                    "name":   (j.get("name") or "").strip(),
+                    "sub":    (j.get("sub") or "").strip(),
+                    "r2_key": j.get("r2_key", ""),
+                    "sizes":  {k: int(v or 0) for k, v in (j.get("sizes") or {}).items()},
+                    "active": bool(j.get("active", True)),
+                })
+            cat["jerseys"] = clean
+        ok = _save_gifting_catalog(cat)
+    return jsonify({"success": ok, "count": len(cat["jerseys"])})
+
+@app.route("/api/gifting/upload", methods=["POST"])
+def api_gifting_upload():
+    """Upload d'une photo de maillot vers R2."""
+    f = request.files.get("image")
+    if not f:
+        return jsonify({"success": False, "error": "aucun fichier"}), 400
+    data = f.read()
+    if not data:
+        return jsonify({"success": False, "error": "fichier vide"}), 400
+    if len(data) > GIFTING_IMG_MAX:
+        return jsonify({"success": False, "error": "image trop lourde (max 8 Mo)"}), 400
+
+    fname = (f.filename or "maillot.png")
+    ext = fname.rsplit(".", 1)[-1].lower() if "." in fname else "png"
+    if ext not in ("png", "jpg", "jpeg", "webp"):
+        ext = "png"
+    base = _slugify(fname.rsplit(".", 1)[0]) or "maillot"
+    key = f"{GIFTING_IMG_PFX}{base}-{uuid.uuid4().hex[:6]}.{ext}"
+
+    if not r2_put_image(key, data, mime=f.mimetype or "image/png"):
+        return jsonify({"success": False, "error": "échec upload R2"}), 500
+
+    return jsonify({
+        "success": True,
+        "r2_key": key,
+        "image": r2_presigned(key, expires=604800),
+        "suggested_name": fname.rsplit(".", 1)[0].replace("-", " ").replace("_", " ").title(),
+    })
+
+@app.route("/api/gifting/delete_image", methods=["POST"])
+def api_gifting_delete_image():
+    """Supprime une photo de maillot du stockage."""
+    key = (request.json or {}).get("r2_key")
+    if not key or not key.startswith(GIFTING_IMG_PFX):
+        return jsonify({"success": False, "error": "clé invalide"}), 400
+    r2_delete(key)
+    return jsonify({"success": True})
+
+@app.route("/api/espace/<slug>/jerseys", methods=["GET"])
+def api_espace_jerseys(slug):
+    """Catalogue visible par l'influenceur (maillots actifs et en stock)."""
+    inf = _get_influencer_by_slug(slug)
+    if not inf:
+        return jsonify({"error": "introuvable"}), 404
+    cat = _load_gifting_catalog()
+    return jsonify({"mode": cat["mode"], "jerseys": _gifting_public_view(cat)})
+
 @app.route("/queue_ig")
 def page_queue_ig(): return render_template("queue_ig.html")
 
