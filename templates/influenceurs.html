@@ -549,7 +549,9 @@ async function triggerShopifySync(){
         const r = await fetch('/api/influenceurs/sync-shopify', {method:'POST'});
         const d = await r.json();
         if(d.success){
-            _showSyncStatus(`✅ Synchronisé : ${d.synced} influenceur(s) mis à jour${d.errors && d.errors.length ? ' · '+d.errors.length+' erreur(s)' : ''}`, 'ok');
+            const errCount = d.errors && d.errors.length;
+            const errDetail = errCount ? ` · ⚠️ ${d.errors.slice(0,2).join(' | ')}${errCount>2?` (+${errCount-2} autre(s))`:''}` : '';
+            _showSyncStatus(`✅ Synchronisé : ${d.synced} influenceur(s) mis à jour${errDetail}`, errCount ? 'warn' : 'ok');
             await load();  // recharger les données fraîches
         }else{
             _showSyncStatus(`❌ ${d.error || 'Erreur de synchronisation'}`, 'error');
