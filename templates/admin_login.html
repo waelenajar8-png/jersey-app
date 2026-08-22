@@ -3,406 +3,100 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Admin Ambassadeurs — Volakits</title>
+<title>Accès admin — Volakits</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
-:root{
-    --bg:#F7F8FC; --surface:#FFFFFF; --surface-2:#FBFCFE;
-    --sidebar:#0E1330; --sidebar-2:#161C3F;
-    --ink:#0B1020; --ink-2:#3A4157; --muted:#7C859B; --faint:#A8B0C3;
-    --on-dark:#EEF1FA; --on-dark-dim:#98A2C0;
-    --accent:#4F46E5; --accent-2:#7C3AED; --accent-soft:#EEF0FE;
+  :root{
+    --sidebar:#0E1330;
+    --bg:#F7F8FC;
+    --accent:#4F46E5;
+    --accent-2:#7C3AED;
     --accent-grad:linear-gradient(135deg,#4F46E5 0%,#7C3AED 100%);
-    --ok:#10B981; --ok-soft:#E7F8F1;
-    --warn:#F59E0B; --warn-soft:#FEF4E4;
-    --danger:#EF4444; --danger-soft:#FEECEC;
-    --line:#EAECF3; --line-2:#DFE3EE;
-    --sh-xs:0 1px 2px rgba(11,16,32,.04);
-    --sh-sm:0 1px 3px rgba(11,16,32,.05),0 1px 2px rgba(11,16,32,.03);
-    --sh-md:0 4px 16px rgba(11,16,32,.06),0 1px 4px rgba(11,16,32,.04);
-    --sh-lg:0 12px 32px rgba(11,16,32,.09),0 2px 8px rgba(11,16,32,.04);
-    --r-sm:10px; --r:14px; --r-lg:20px; --r-xl:26px;
-}
-*{box-sizing:border-box;margin:0;padding:0}
-body{
+    --text-dim:#6B7280;
+    --danger:#DC2626;
+    --danger-bg:#FEF2F2;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
     font-family:'Plus Jakarta Sans',-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
-    background:var(--bg);color:var(--ink);letter-spacing:-.011em;line-height:1.5;
-}
-a{color:inherit;text-decoration:none}
-button{font-family:inherit;cursor:pointer;border:none;background:none}
-input{font-family:inherit}
-
-.shell{display:flex;min-height:100vh}
-
-/* Sidebar */
-.side{
-    width:250px;flex-shrink:0;background:var(--sidebar);color:var(--on-dark);
-    display:flex;flex-direction:column;position:sticky;top:0;height:100vh;padding:22px 14px;
-}
-.side-brand{display:flex;align-items:center;gap:10px;padding:0 8px 20px;margin-bottom:10px}
-.brand-mark{
-    width:34px;height:34px;border-radius:9px;background:var(--accent-grad);
-    display:grid;place-items:center;font-weight:800;font-size:15px;color:#fff;
-    box-shadow:0 4px 14px rgba(79,70,229,.4);flex-shrink:0;
-}
-.brand-name{font-size:15.5px;font-weight:800;letter-spacing:-.02em}
-.brand-sub{font-size:10.5px;color:var(--on-dark-dim);font-weight:600;letter-spacing:.08em;text-transform:uppercase}
-
-.nav-label{font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:#5A648C;padding:0 10px 7px}
-.nav-item{
-    display:flex;align-items:center;gap:11px;padding:10px 11px;border-radius:10px;
-    font-size:13.5px;font-weight:600;color:var(--on-dark-dim);width:100%;text-align:left;
-    transition:background .16s,color .16s;
-}
-.nav-item.active{background:var(--accent);color:#fff;box-shadow:0 4px 14px rgba(79,70,229,.35)}
-.nav-item:hover:not(.active){background:rgba(255,255,255,.05);color:var(--on-dark)}
-
-.side-foot{margin-top:auto;padding:14px 10px 0;border-top:1px solid rgba(255,255,255,.07)}
-.logout-link{font-size:12.5px;color:var(--on-dark-dim);font-weight:600;display:flex;align-items:center;gap:7px}
-.logout-link:hover{color:#fca5a5}
-
-/* Main */
-.main{flex:1;min-width:0;padding:26px 30px 60px}
-.topline{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;margin-bottom:24px;flex-wrap:wrap}
-.hello h1{font-size:26px;font-weight:800;letter-spacing:-.03em}
-.hello p{color:var(--muted);font-size:13.5px;font-weight:500;margin-top:4px}
-
-.toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
-.search-box{
-    display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--line);
-    border-radius:100px;padding:9px 16px;box-shadow:var(--sh-xs);min-width:220px;
-}
-.search-box input{border:none;outline:none;font-size:13.5px;background:none;width:100%;color:var(--ink)}
-.btn{
-    display:inline-flex;align-items:center;gap:7px;padding:10px 16px;border-radius:100px;
-    font-size:13px;font-weight:700;background:var(--surface);border:1px solid var(--line);
-    box-shadow:var(--sh-xs);color:var(--ink-2);white-space:nowrap;
-}
-.btn:hover{border-color:var(--accent);color:var(--accent)}
-.btn.primary{background:var(--accent-grad);color:#fff;border:none;box-shadow:0 6px 18px rgba(79,70,229,.28)}
-.btn.primary:hover{opacity:.92;color:#fff}
-.btn:disabled{opacity:.5;cursor:not-allowed}
-
-/* KPI row */
-.kpi-row{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:26px}
-.kpi{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:17px 18px;box-shadow:var(--sh-xs)}
-.kpi-label{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
-.kpi-value{font-size:24px;font-weight:800;letter-spacing:-.03em;margin-top:5px}
-
-/* Sync status banner */
-.sync-banner{
-    display:none;margin-bottom:18px;padding:11px 16px;border-radius:12px;
-    font-size:12.5px;font-weight:600;
-}
-
-/* Influencer cards grid */
-.inf-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px}
-.inf-card{
-    background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);
-    padding:18px;box-shadow:var(--sh-sm);display:flex;flex-direction:column;gap:12px;
-}
-.inf-top{display:flex;align-items:center;gap:12px}
-.inf-avatar{
-    width:42px;height:42px;border-radius:11px;background:var(--accent-grad);
-    display:grid;place-items:center;font-weight:800;font-size:16px;color:#fff;flex-shrink:0;
-}
-.inf-name{font-size:15px;font-weight:800;letter-spacing:-.01em}
-.inf-platform{font-size:11.5px;color:var(--muted);font-weight:600}
-
-.tier-badge{
-    display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;
-    padding:5px 11px;border-radius:100px;width:fit-content;
-}
-.mini-track{height:6px;background:var(--line);border-radius:100px;overflow:hidden;margin-top:6px}
-.mini-fill{height:100%;border-radius:100px;background:linear-gradient(90deg,#818CF8,#C084FC);transition:width .8s ease}
-.mini-label{font-size:11px;color:var(--muted);font-weight:600;margin-top:5px;display:flex;justify-content:space-between}
-
-.inf-stats{display:flex;gap:16px}
-.inf-stat-label{font-size:10.5px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.04em}
-.inf-stat-value{font-size:16px;font-weight:800;margin-top:2px}
-
-.promo-row{
-    display:flex;align-items:center;gap:8px;background:var(--accent-soft);border-radius:10px;
-    padding:8px 12px;font-family:monospace;font-weight:700;font-size:13px;color:var(--accent);
-}
-.promo-row.empty{background:var(--warn-soft);color:#B45309;font-family:inherit;font-weight:600;font-size:12px}
-
-.inf-actions{display:flex;gap:8px;margin-top:auto}
-.inf-actions .btn{flex:1;justify-content:center}
-
-.empty-state{
-    grid-column:1/-1;text-align:center;padding:60px 20px;color:var(--muted);
-}
-
-/* Modal (quick edit) */
-.modal-overlay{
-    display:none;position:fixed;inset:0;background:rgba(11,16,32,.5);z-index:100;
-    align-items:center;justify-content:center;padding:20px;
-}
-.modal-overlay.open{display:flex}
-.modal{
-    background:var(--surface);border-radius:var(--r-lg);padding:24px;width:100%;max-width:400px;
-    box-shadow:var(--sh-lg);
-}
-.modal h3{font-size:16px;font-weight:800;margin-bottom:16px}
-.modal label{display:block;font-size:11.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px;margin-top:14px}
-.modal input{
-    width:100%;padding:10px 12px;border-radius:9px;border:1.5px solid var(--line);font-size:13.5px;outline:none;
-}
-.modal input:focus{border-color:var(--accent)}
-.modal-actions{display:flex;gap:8px;margin-top:20px}
-.modal-actions .btn{flex:1;justify-content:center}
-
-@media(max-width:860px){
-    .side{display:none}
-    .kpi-row{grid-template-columns:1fr}
-    .inf-grid{grid-template-columns:1fr}
-}
+    background:var(--sidebar);
+    min-height:100vh;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:20px;
+  }
+  .card{
+    background:var(--bg);
+    border-radius:20px;
+    padding:40px 36px;
+    width:100%;
+    max-width:380px;
+    box-shadow:0 20px 60px rgba(0,0,0,0.35);
+  }
+  .logo{
+    width:48px;height:48px;
+    border-radius:12px;
+    background:var(--accent-grad);
+    display:flex;align-items:center;justify-content:center;
+    font-size:22px;
+    margin-bottom:20px;
+  }
+  h1{font-size:20px;font-weight:800;color:#111827;letter-spacing:-0.02em;margin-bottom:4px}
+  p.sub{font-size:13.5px;color:var(--text-dim);margin-bottom:28px}
+  label{display:block;font-size:11.5px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:8px}
+  input[type=password]{
+    width:100%;
+    padding:13px 14px;
+    border-radius:10px;
+    border:1.5px solid #E5E7EB;
+    font-size:14.5px;
+    font-family:inherit;
+    background:#fff;
+    outline:none;
+    transition:border-color .15s;
+  }
+  input[type=password]:focus{border-color:var(--accent)}
+  button{
+    width:100%;
+    margin-top:18px;
+    padding:13px;
+    border:none;
+    border-radius:10px;
+    background:var(--accent-grad);
+    color:#fff;
+    font-family:inherit;
+    font-size:14.5px;
+    font-weight:700;
+    cursor:pointer;
+    transition:opacity .15s;
+  }
+  button:hover{opacity:0.92}
+  .error{
+    background:var(--danger-bg);
+    color:var(--danger);
+    font-size:13px;
+    font-weight:600;
+    padding:11px 14px;
+    border-radius:9px;
+    margin-bottom:18px;
+  }
 </style>
 </head>
 <body>
-<div class="shell">
-    <div class="side">
-        <div class="side-brand">
-            <div class="brand-mark">V</div>
-            <div>
-                <div class="brand-name">Volakits</div>
-                <div class="brand-sub">Admin</div>
-            </div>
-        </div>
-        <div class="nav-label">Pilotage</div>
-        <div class="nav-item active">📋 Tous les influenceurs</div>
-        <a href="/influenceurs" class="nav-item">⚙️ Back-office complet</a>
-        <div class="side-foot">
-            <a href="/influenceurs/logout" class="logout-link">🚪 Déconnexion</a>
-        </div>
-    </div>
-
-    <div class="main">
-        <div class="topline">
-            <div class="hello">
-                <h1>Ambassadeurs</h1>
-                <p>Vue d'ensemble de ton programme — clique sur un influenceur pour ouvrir son espace.</p>
-            </div>
-            <div class="toolbar">
-                <div class="search-box">
-                    🔍 <input type="text" id="searchInput" placeholder="Rechercher un influenceur...">
-                </div>
-                <button class="btn" id="syncBtn" onclick="triggerSync()">🔄 Sync Shopify</button>
-            </div>
-        </div>
-
-        <div class="sync-banner" id="syncBanner"></div>
-
-        <div class="kpi-row">
-            <div class="kpi">
-                <div class="kpi-label">Influenceurs</div>
-                <div class="kpi-value" id="kpiCount">—</div>
-            </div>
-            <div class="kpi">
-                <div class="kpi-label">Ventes cumulées</div>
-                <div class="kpi-value" id="kpiSales">—</div>
-            </div>
-            <div class="kpi">
-                <div class="kpi-label">Commissions cumulées</div>
-                <div class="kpi-value" id="kpiCommission">—</div>
-            </div>
-        </div>
-
-        <div class="inf-grid" id="infGrid">
-            <div class="empty-state">Chargement…</div>
-        </div>
-    </div>
-</div>
-
-<!-- Modal édition rapide -->
-<div class="modal-overlay" id="editModal">
-    <div class="modal">
-        <h3 id="editModalTitle">Modifier</h3>
-        <label>Code promo Shopify</label>
-        <input type="text" id="editPromoCode" placeholder="ex: SJD15" style="text-transform:uppercase;font-weight:700">
-        <label>Date de départ programme</label>
-        <input type="date" id="editStartDate">
-        <div class="modal-actions">
-            <button class="btn" onclick="closeEditModal()">Annuler</button>
-            <button class="btn primary" onclick="saveEdit()">Enregistrer</button>
-        </div>
-    </div>
-</div>
-
-<script>
-let ALL_INFLUENCEURS = [];
-let EDIT_TARGET_ID = null;
-
-function esc(s){ return String(s??'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
-function initials(name){
-    const parts = String(name||'').trim().split(/\s+/);
-    return (parts[0]?.[0]||'?').toUpperCase() + (parts[1]?.[0]||'').toUpperCase();
-}
-function fmtEuro(v){ return '€' + Math.round(v||0).toLocaleString('fr-FR'); }
-function fmtDateTime(iso){
-    if(!iso) return null;
-    const d = new Date(iso);
-    if(isNaN(d.getTime())) return null;
-    return d.toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit'}) + ' à ' + d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
-}
-
-async function load(){
-    try{
-        const r = await fetch('/api/admin/influenceurs-summary');
-        const d = await r.json();
-        ALL_INFLUENCEURS = d.influenceurs || [];
-        document.getElementById('kpiCount').textContent = d.totals?.count ?? 0;
-        document.getElementById('kpiSales').textContent = d.totals?.sales ?? 0;
-        document.getElementById('kpiCommission').textContent = fmtEuro(d.totals?.commission ?? 0);
-        render();
-    }catch(e){
-        document.getElementById('infGrid').innerHTML = '<div class="empty-state">Erreur de chargement. Réessaie.</div>';
-    }
-}
-
-function render(){
-    const query = (document.getElementById('searchInput').value || '').toLowerCase().trim();
-    const grid = document.getElementById('infGrid');
-    let list = ALL_INFLUENCEURS;
-    if(query){
-        list = list.filter(i =>
-            (i.pseudo||'').toLowerCase().includes(query) ||
-            (i.promo_code||'').toLowerCase().includes(query)
-        );
-    }
-    if(list.length === 0){
-        grid.innerHTML = '<div class="empty-state">Aucun influenceur trouvé.</div>';
-        return;
-    }
-    grid.innerHTML = list.map(cardHtml).join('');
-}
-
-function cardHtml(inf){
-    const t = inf.tier;
-    const hasNext = !!t.next_name;
-    const lastSync = fmtDateTime(inf.last_synced_at);
-    return `
-    <div class="inf-card">
-        <div class="inf-top">
-            <div class="inf-avatar">${esc(initials(inf.pseudo))}</div>
-            <div>
-                <div class="inf-name">${esc(inf.pseudo)}</div>
-                <div class="inf-platform">${esc(inf.platform || '—')}</div>
-            </div>
-        </div>
-
-        <div>
-            <span class="tier-badge" style="background:${t.color}22;color:${t.color}">${t.icon} ${esc(t.name)}</span>
-            ${hasNext ? `
-            <div class="mini-track"><div class="mini-fill" style="width:${t.progress_pct}%"></div></div>
-            <div class="mini-label"><span>${inf.sales} ventes</span><span>${esc(t.next_name)} à ${t.next_sales}</span></div>
-            ` : `<div class="mini-label" style="margin-top:6px">${inf.sales} ventes cumulées</div>`}
-        </div>
-
-        <div class="inf-stats">
-            <div>
-                <div class="inf-stat-label">Ce mois</div>
-                <div class="inf-stat-value">${inf.sales_month}</div>
-            </div>
-            <div>
-                <div class="inf-stat-label">CA net</div>
-                <div class="inf-stat-value">${fmtEuro(inf.revenue)}</div>
-            </div>
-            <div>
-                <div class="inf-stat-label">Commissions</div>
-                <div class="inf-stat-value">${fmtEuro(inf.commission)}</div>
-            </div>
-        </div>
-
-        ${inf.promo_code
-            ? `<div class="promo-row">🏷️ ${esc(inf.promo_code)}${lastSync ? `<span style="margin-left:auto;font-family:inherit;font-weight:600;font-size:10.5px;color:var(--muted)">Sync ${lastSync}</span>` : ''}</div>`
-            : `<div class="promo-row empty">⚠️ Aucun code promo renseigné</div>`
-        }
-
-        <div class="inf-actions">
-            <button class="btn" onclick="openEditModal('${esc(inf.id)}')">✏️ Modifier</button>
-            <button class="btn primary" onclick="window.open('${esc(inf.espace_url)}','_blank')">↗ Ouvrir l'espace</button>
-        </div>
-    </div>`;
-}
-
-function openEditModal(id){
-    const inf = ALL_INFLUENCEURS.find(i => i.id === id);
-    if(!inf) return;
-    EDIT_TARGET_ID = id;
-    document.getElementById('editModalTitle').textContent = `Modifier ${inf.pseudo}`;
-    document.getElementById('editPromoCode').value = inf.promo_code || '';
-    document.getElementById('editStartDate').value = inf.program_start_date || '';
-    document.getElementById('editModal').classList.add('open');
-}
-
-function closeEditModal(){
-    document.getElementById('editModal').classList.remove('open');
-    EDIT_TARGET_ID = null;
-}
-
-async function saveEdit(){
-    if(!EDIT_TARGET_ID) return;
-    const promo_code = document.getElementById('editPromoCode').value.trim();
-    const program_start_date = document.getElementById('editStartDate').value;
-    try{
-        const r = await fetch(`/api/admin/influenceur/${EDIT_TARGET_ID}/quick-update`, {
-            method: 'POST',
-            headers: {'Content-Type':'application/json'},
-            body: JSON.stringify({promo_code, program_start_date})
-        });
-        const d = await r.json();
-        if(d.success){
-            closeEditModal();
-            await load();
-        }else{
-            alert(d.error || 'Erreur lors de la sauvegarde');
-        }
-    }catch(e){
-        alert('Erreur réseau');
-    }
-}
-
-function _showSyncBanner(msg, kind){
-    const el = document.getElementById('syncBanner');
-    el.style.display = 'block';
-    el.textContent = msg;
-    el.style.background = kind==='error' ? 'var(--danger-soft)' : kind==='ok' ? 'var(--ok-soft)' : 'var(--warn-soft)';
-    el.style.color = kind==='error' ? 'var(--danger)' : kind==='ok' ? '#047857' : '#B45309';
-}
-
-async function triggerSync(){
-    const btn = document.getElementById('syncBtn');
-    btn.disabled = true;
-    const orig = btn.textContent;
-    btn.textContent = '⏳ Synchronisation…';
-    _showSyncBanner('⏳ Synchronisation en cours…', 'warn');
-    try{
-        const r = await fetch('/api/influenceurs/sync-shopify', {method:'POST'});
-        const d = await r.json();
-        if(d.success){
-            const errCount = d.errors && d.errors.length;
-            const errDetail = errCount ? ` · ⚠️ ${d.errors.slice(0,2).join(' | ')}` : '';
-            _showSyncBanner(`✅ Synchronisé : ${d.synced} influenceur(s) mis à jour${errDetail}`, errCount ? 'warn' : 'ok');
-            await load();
-        }else{
-            _showSyncBanner(`❌ ${d.error || 'Erreur de synchronisation'}`, 'error');
-        }
-    }catch(e){
-        _showSyncBanner('❌ Erreur réseau', 'error');
-    }finally{
-        btn.disabled = false;
-        btn.textContent = orig;
-    }
-}
-
-document.getElementById('searchInput').addEventListener('input', render);
-document.getElementById('editModal').addEventListener('click', e => { if(e.target.id === 'editModal') closeEditModal(); });
-
-load();
-</script>
+  <div class="card">
+    <div class="logo">🔒</div>
+    <h1>Accès admin</h1>
+    <p class="sub">Espace réservé — pilotage du programme ambassadeur Volakits.</p>
+    {% if error %}
+    <div class="error">{{ error }}</div>
+    {% endif %}
+    <form method="POST" action="/influenceurs/login">
+      <label>Mot de passe</label>
+      <input type="password" name="password" autofocus {% if not configured %}disabled{% endif %} placeholder="{% if configured %}••••••••{% else %}Non configuré côté serveur{% endif %}">
+      <button type="submit" {% if not configured %}disabled{% endif %}>Se connecter</button>
+    </form>
+  </div>
 </body>
 </html>
