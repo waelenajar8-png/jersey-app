@@ -2859,6 +2859,306 @@ INFLUENCEURS_BACKUP_PREFIX = "meta/influenceurs_backups/"
 INFLUENCEURS_BACKUP_KEEP = 5  # nombre de sauvegardes de secours conservées
 _influenceurs_lock = threading.Lock()
 
+def _safe_int(v, default=0):
+    try: return int(float(v))
+    except (TypeError, ValueError): return default
+
+def _safe_float(v, default=0.0):
+    try: return float(v)
+    except (TypeError, ValueError): return default
+
+# ══════════════════════════════════════════════════════════════════════════════
+# SYNC SHOPIFY — suivi automatique des ventes par code promo
+#
+# Pour chaque influenceur ayant un promo_code renseigné, on interroge l'API
+# Admin Shopify (GraphQL) pour compter ses commandes et son CA net, en ne
+# comptant que les commandes passées APRÈS sa "program_start_date" (date de
+# départ choisie manuellement par l'admin — les ventes historiques d'avant
+# le programme de paliers ne sont pas comptées, sauf si la date est laissée
+# vide/antérieure).
+# ══════════════════════════════════════════════════════════════════════════════
+
+SHOPIFY_SHOP_DOMAIN     = os.environ.get("SHOPIFY_SHOP_DOMAIN", "")      # ex: volakits.myshopify.com
+SHOPIFY_CLIENT_ID       = os.environ.get("SHOPIFY_CLIENT_ID", "")        # ID client (Dev Dashboard)
+SHOPIFY_CLIENT_SECRET   = os.environ.get("SHOPIFY_CLIENT_SECRET", "")    # Secret (Dev Dashboard)
+SHOPIFY_API_VERSION     = "2025-01"
+SHOPIFY_SYNC_INTERVAL_SEC = 30 * 60   # sync auto toutes les 30 minutes
+
+_shopify_sync_lock = threading.Lock()
+_shopify_last_sync_status = {"running": False, "last_run": None, "last_error": None, "synced_count": 0}
+
+# Cache du token d'accès obtenu via Client Credentials Grant (expire ~24h,
+# on le régénère automatiquement avec une marge de sécurité de 5 minutes).
+_shopify_token_cache = {"token": None, "expires_at": 0}
+_shopify_token_lock = threading.Lock()
+
+
+def _shopify_configured():
+    return bool(SHOPIFY_SHOP_DOMAIN and SHOPIFY_CLIENT_ID and SHOPIFY_CLIENT_SECRET)
+
+
+def _shopify_get_access_token():
+    """
+    Retourne un Admin API access token valide, en le générant via le flux
+    Client Credentials Grant si besoin (les apps créées via le Dev Dashboard
+    depuis 2026 n'ont plus de token statique — il faut l'échanger dynamiquement
+    contre le Client ID + Secret, et il expire après ~24h).
+    """
+    if not _shopify_configured():
+        return None
+
+    with _shopify_token_lock:
+        now = time.time()
+        if _shopify_token_cache["token"] and _shopify_token_cache["expires_at"] > now + 300:
+            return _shopify_token_cache["token"]
+
+        url = f"https://{SHOPIFY_SHOP_DOMAIN}/admin/oauth/access_token"
+        try:
+            resp = requests.post(url, data={
+                "grant_type": "client_credentials",
+                "client_id": SHOPIFY_CLIENT_ID,
+                "client_secret": SHOPIFY_CLIENT_SECRET,
+            }, timeout=20)
+            resp.raise_for_status()
+            payload = resp.json()
+            token      = payload.get("access_token")
+            expires_in = int(payload.get("expires_in", 3600) or 3600)
+            if not token:
+                print(f"[SHOPIFY] Réponse OAuth sans token: {payload}")
+                return None
+            _shopify_token_cache["token"] = token
+            _shopify_token_cache["expires_at"] = now + expires_in
+            print(f"[SHOPIFY] Nouveau token obtenu, valide {expires_in}s")
+            return token
+        except Exception as e:
+            print(f"[SHOPIFY] Erreur obtention token OAuth: {e}")
+            return None
+
+
+def _shopify_graphql(query, variables=None, max_retries=3):
+    """Exécute une requête GraphQL contre l'API Admin Shopify. Retourne le dict 'data' ou None."""
+    token = _shopify_get_access_token()
+    if not token:
+        return None
+    url = f"https://{SHOPIFY_SHOP_DOMAIN}/admin/api/{SHOPIFY_API_VERSION}/graphql.json"
+    headers = {
+        "X-Shopify-Access-Token": token,
+        "Content-Type": "application/json",
+    }
+    for attempt in range(1, max_retries + 1):
+        try:
+            resp = requests.post(url, headers=headers, json={"query": query, "variables": variables or {}}, timeout=30)
+            if resp.status_code == 401:
+                # Token invalide/expiré malgré le cache → on force un renouvellement et on retente
+                _shopify_token_cache["token"] = None
+                token = _shopify_get_access_token()
+                if not token:
+                    return None
+                headers["X-Shopify-Access-Token"] = token
+                continue
+            if resp.status_code == 429:
+                # Rate limit Shopify → backoff
+                time.sleep(min(2 * attempt, 10))
+                continue
+            resp.raise_for_status()
+            payload = resp.json()
+            if "errors" in payload:
+                print(f"[SHOPIFY] Erreurs GraphQL: {payload['errors']}")
+                return None
+            return payload.get("data")
+        except Exception as e:
+            print(f"[SHOPIFY] Erreur requête (tentative {attempt}/{max_retries}): {e}")
+            if attempt < max_retries:
+                time.sleep(min(2 * attempt, 10))
+    return None
+
+
+def _shopify_fetch_orders_for_code(code, since_iso=None, max_pages=20):
+    """
+    Récupère toutes les commandes payées utilisant un code promo donné,
+    depuis since_iso (ISO 8601) si fourni. Retourne une liste de dicts
+    {created_at, net_amount, cancelled}.
+    Utilise le filtre de recherche Shopify `discount_code:XXX`.
+    """
+    if not code:
+        return []
+
+    search = f"discount_code:{code}"
+    if since_iso:
+        search += f" AND created_at:>={since_iso}"
+
+    query = """
+    query($search: String!, $cursor: String) {
+      orders(first: 100, query: $search, after: $cursor) {
+        pageInfo { hasNextPage endCursor }
+        edges {
+          node {
+            createdAt
+            cancelledAt
+            currentTotalPriceSet { shopMoney { amount } }
+          }
+        }
+      }
+    }
+    """
+
+    orders, cursor, page = [], None, 0
+    while page < max_pages:
+        data = _shopify_graphql(query, {"search": search, "cursor": cursor})
+        if not data or not data.get("orders"):
+            break
+        edges = data["orders"]["edges"]
+        for e in edges:
+            n = e["node"]
+            orders.append({
+                "created_at": n.get("createdAt"),
+                "net_amount": float((n.get("currentTotalPriceSet") or {}).get("shopMoney", {}).get("amount", 0) or 0),
+                "cancelled": bool(n.get("cancelledAt")),
+            })
+        page_info = data["orders"]["pageInfo"]
+        if not page_info.get("hasNextPage"):
+            break
+        cursor = page_info.get("endCursor")
+        page += 1
+
+    return orders
+
+
+def _aggregate_orders(orders):
+    """
+    Agrège une liste de commandes en stats : ventes/CA cumulés (hors annulées)
+    + ventes/CA du mois calendaire courant.
+    """
+    now = datetime.now(timezone.utc)
+    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+    sales = revenue = 0
+    sales_month = revenue_month = 0
+
+    for o in orders:
+        if o.get("cancelled"):
+            continue
+        amount = o.get("net_amount", 0) or 0
+        sales += 1
+        revenue += amount
+
+        try:
+            created = datetime.fromisoformat((o["created_at"] or "").replace("Z", "+00:00"))
+        except Exception:
+            created = None
+        if created and created >= month_start:
+            sales_month += 1
+            revenue_month += amount
+
+    return {
+        "sales": sales, "revenue": round(revenue, 2),
+        "sales_month": sales_month, "revenue_month": round(revenue_month, 2),
+    }
+
+
+def sync_influencer_stats(force=False):
+    """
+    Synchronise les stats de TOUS les influenceurs ayant un code promo.
+    Met à jour inf['stats'] avec les vrais chiffres Shopify et sauvegarde sur R2.
+    Retourne un résumé {synced, skipped, errors}.
+    """
+    if not _shopify_configured():
+        return {"success": False, "error": "Shopify non configuré (variables d'environnement manquantes)"}
+
+    with _shopify_sync_lock:
+        _shopify_last_sync_status["running"] = True
+        synced, skipped, errors = 0, 0, []
+        try:
+            with _influenceurs_lock:
+                data = r2_get_json(INFLUENCEURS_R2_KEY) or {}
+                influenceurs = data.get("influenceurs", [])
+                if not isinstance(influenceurs, list):
+                    influenceurs = []
+
+                for inf in influenceurs:
+                    code = (inf.get("promo_code") or "").strip()
+                    if not code:
+                        skipped += 1
+                        continue
+                    try:
+                        since_iso = inf.get("program_start_date") or None  # YYYY-MM-DD ou None
+                        orders = _shopify_fetch_orders_for_code(code, since_iso=since_iso)
+                        agg = _aggregate_orders(orders)
+                        s = inf.get("stats") or {}
+                        s["sales"]         = agg["sales"]
+                        s["revenue"]       = agg["revenue"]
+                        s["sales_month"]   = agg["sales_month"]
+                        s["revenue_month"] = agg["revenue_month"]
+                        inf["stats"] = s
+                        inf["last_synced_at"] = datetime.now(timezone.utc).isoformat()
+                        synced += 1
+                    except Exception as e:
+                        errors.append(f"{inf.get('pseudo','?')}: {e}")
+                        print(f"[SHOPIFY SYNC] Erreur pour {inf.get('pseudo')}: {e}")
+
+                if synced > 0:
+                    new_version = data.get("version", 0) + 1
+                    now_iso = datetime.now(timezone.utc).isoformat()
+                    r2_put_json(INFLUENCEURS_R2_KEY, {
+                        "influenceurs": influenceurs, "version": new_version, "updated_at": now_iso,
+                    })
+
+            _shopify_last_sync_status.update({
+                "running": False,
+                "last_run": datetime.now(timezone.utc).isoformat(),
+                "last_error": "; ".join(errors) if errors else None,
+                "synced_count": synced,
+            })
+            return {"success": True, "synced": synced, "skipped": skipped, "errors": errors}
+        except Exception as e:
+            _shopify_last_sync_status.update({"running": False, "last_error": str(e)})
+            print(f"[SHOPIFY SYNC] Erreur globale: {e}")
+            return {"success": False, "error": str(e)}
+
+
+def _shopify_background_loop():
+    """Boucle de fond : sync automatique toutes les SHOPIFY_SYNC_INTERVAL_SEC secondes."""
+    # Petit délai initial pour laisser l'app démarrer proprement
+    time.sleep(30)
+    while True:
+        if _shopify_configured():
+            try:
+                print("[SHOPIFY SYNC] Sync automatique en cours…")
+                result = sync_influencer_stats()
+                print(f"[SHOPIFY SYNC] Résultat: {result}")
+            except Exception as e:
+                print(f"[SHOPIFY SYNC] Erreur boucle de fond: {e}")
+        time.sleep(SHOPIFY_SYNC_INTERVAL_SEC)
+
+
+# Démarrage du thread de sync automatique (une seule fois, au chargement du module)
+if _shopify_configured():
+    threading.Thread(target=_shopify_background_loop, daemon=True).start()
+    print("[SHOPIFY SYNC] Thread de synchronisation automatique démarré (toutes les 30 min)")
+else:
+    print("[SHOPIFY SYNC] Non configuré — SHOPIFY_SHOP_DOMAIN / SHOPIFY_CLIENT_ID / SHOPIFY_CLIENT_SECRET manquants")
+
+
+@app.route("/api/influenceurs/sync-shopify", methods=["POST"])
+def api_sync_shopify():
+    """Déclenche une synchronisation manuelle immédiate depuis le back-office."""
+    if not _shopify_configured():
+        return jsonify({"success": False, "error": "Shopify non configuré sur ce serveur"}), 400
+    if _shopify_last_sync_status.get("running"):
+        return jsonify({"success": False, "error": "Une synchronisation est déjà en cours"}), 409
+    result = sync_influencer_stats(force=True)
+    return jsonify(result)
+
+
+@app.route("/api/influenceurs/sync-shopify/status", methods=["GET"])
+def api_sync_shopify_status():
+    """Retourne l'état de la dernière synchronisation (pour affichage admin)."""
+    return jsonify({
+        "configured": _shopify_configured(),
+        **_shopify_last_sync_status,
+    })
+
+
 @app.route("/influenceurs")
 def influenceurs_page(): return render_template("influenceurs.html")
 
@@ -2873,12 +3173,6 @@ def api_get_influenceurs():
 
         # Enrichissement côté serveur : ajouter _espace_url + mapper stats depuis sous-objet
         base_url = request.host_url.rstrip("/")
-        def _safe_int(v, default=0):
-            try: return int(float(v))
-            except (TypeError, ValueError): return default
-        def _safe_float(v, default=0.0):
-            try: return float(v)
-            except (TypeError, ValueError): return default
         for inf in influenceurs:
             # URL espace public
             try:
@@ -2924,13 +3218,6 @@ def api_save_influenceurs():
         force        = bool(payload.get("force", False))
 
         # Normaliser les champs stats_* → sous-objet stats avant persistance
-        def _safe_int(v, default=0):
-            try: return int(float(v))
-            except (TypeError, ValueError): return default
-        def _safe_float(v, default=0.0):
-            try: return float(v)
-            except (TypeError, ValueError): return default
-
         for inf in influenceurs:
             s = inf.get("stats") or {}
             # Champs plats envoyés par le front admin → sous-objet stats
