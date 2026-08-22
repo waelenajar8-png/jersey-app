@@ -3157,11 +3157,18 @@ def sync_influencer_stats(force=False):
                             print(f"[SHOPIFY SYNC] Erreur pour {inf.get('pseudo')} ({code}): {fetch_err}")
                             continue
                         agg = _aggregate_orders(orders)
+                        # Ventes de référence : Shopify ne donne accès qu'aux commandes
+                        # des 60 derniers jours par défaut (limite de plateforme, pas de
+                        # notre code). Le "baseline" permet d'ajouter manuellement les
+                        # ventes antérieures à cette fenêtre, une fois, pour ne pas perdre
+                        # l'historique d'un influenceur actif depuis longtemps.
+                        baseline_sales   = _safe_int(inf.get("baseline_sales", 0))
+                        baseline_revenue = _safe_float(inf.get("baseline_revenue", 0))
                         s = inf.get("stats") or {}
-                        s["sales"]         = agg["sales"]
-                        s["revenue"]       = agg["revenue"]
-                        s["sales_month"]   = agg["sales_month"]
-                        s["revenue_month"] = agg["revenue_month"]
+                        s["sales"]         = baseline_sales + agg["sales"]
+                        s["revenue"]       = round(baseline_revenue + agg["revenue"], 2)
+                        s["sales_month"]   = agg["sales_month"]      # jamais affecté par le baseline
+                        s["revenue_month"] = agg["revenue_month"]    # (toujours dans les 60j accessibles)
 
                         # Ledger mensuel de commission : on calcule la commission du mois
                         # en cours avec les stats fraîches, et on l'enregistre dans un
