@@ -453,8 +453,58 @@ function normalize(i){
         address: i.address||'',
         quota: i.quota||'',
         videos: Array.isArray(i.videos)?i.videos:[],
-        notes: i.notes||''
+        notes: i.notes||'',
+        promo_code: i.promo_code||'',
+        stats_sales: i.stats_sales||0,
+        stats_sales_month: i.stats_sales_month||0,
+        stats_revenue: i.stats_revenue||0,
+        stats_revenue_month: i.stats_revenue_month||0,
+        _espace_url: i._espace_url||''
     };
+}
+
+// ── Helpers palier ───────────────────────────────────────────────────────
+const TIERS = [
+    {id:'decouverte', name:'Découverte', icon:'⭐', color:'#94A3B8', sales:0,  type:'percent', value:10,  jerseys:2},
+    {id:'partenaire', name:'Partenaire', icon:'🔥', color:'#6366F1', sales:10, type:'percent', value:15,  jerseys:2},
+    {id:'ambassadeur',name:'Ambassadeur',icon:'💎', color:'#C9A227', sales:30, type:'fixed',   value:150, jerseys:4},
+    {id:'vip',        name:'VIP',        icon:'👑', color:'#F59E0B', sales:60, type:'fixed',   value:400, jerseys:6},
+];
+
+function _getTier(salesCumul){
+    let t = TIERS[0];
+    for(const tier of TIERS){ if(salesCumul >= tier.sales) t = tier; }
+    return t;
+}
+
+function _renderTierBadge(inf){
+    const sales = parseInt(inf.stats_sales)||0;
+    const t = _getTier(sales);
+    const next = TIERS[TIERS.indexOf(t)+1];
+    const com = t.type==='percent' ? `${t.value}% com` : `${t.value}€/mois fixe`;
+    let prog = '';
+    if(next){
+        const pct = Math.min(100, Math.round((sales - t.sales) / (next.sales - t.sales) * 100));
+        prog = ` · <b>${pct}%</b> vers ${next.icon} ${next.name} (${next.sales} ventes)`;
+    }
+    return `<span style="color:${t.color};font-weight:700">${t.icon} ${t.name}</span> · ${com} · ${t.jerseys} maillots/mois${prog}`;
+}
+
+function copyPromo(code, btn){
+    navigator.clipboard.writeText(code).then(()=>{
+        const orig = btn.textContent;
+        btn.textContent = '✅ Copié !';
+        setTimeout(()=>btn.textContent=orig, 1500);
+    });
+}
+
+function copyEspaceLink(url, btn){
+    if(!url) return;
+    navigator.clipboard.writeText(url).then(()=>{
+        const orig = btn.textContent;
+        btn.textContent = '✅ Copié !';
+        setTimeout(()=>btn.textContent=orig, 1500);
+    });
 }
 
 function genId(){ return 'inf_'+Date.now()+'_'+Math.random().toString(36).slice(2,9); }
@@ -672,6 +722,44 @@ function cardHtml(inf){
                 <select data-act="status" data-id="${eid}">
                     ${STATUSES.map((s,i)=>`<option value="${i}" ${i===inf.status?'selected':''}>${esc(s)}</option>`).join('')}
                 </select>
+            </div>
+            <div class="field">
+                <label>Code promo Shopify</label>
+                <div style="display:flex;gap:8px;align-items:center">
+                    <input type="text" value="${escAttr(inf.promo_code||'')}" placeholder="ex: SJD15" data-act="field" data-field="promo_code" data-id="${eid}" style="text-transform:uppercase;font-weight:700;letter-spacing:0.05em">
+                    ${inf.promo_code?`<button class="act-btn" onclick="copyPromo('${escAttr(inf.promo_code)}',this)" style="white-space:nowrap">📋 Copier</button>`:''}
+                </div>
+            </div>
+            <div class="field field-full">
+                <label>📊 Stats & Ventes</label>
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px">
+                    <div>
+                        <div style="font-size:11px;color:var(--text-faint);margin-bottom:4px">Ventes cumulées</div>
+                        <input type="number" min="0" value="${escAttr(inf.stats_sales||0)}" placeholder="0" data-act="field" data-field="stats_sales" data-id="${eid}" style="width:100%">
+                    </div>
+                    <div>
+                        <div style="font-size:11px;color:var(--text-faint);margin-bottom:4px">Ventes ce mois</div>
+                        <input type="number" min="0" value="${escAttr(inf.stats_sales_month||0)}" placeholder="0" data-act="field" data-field="stats_sales_month" data-id="${eid}" style="width:100%">
+                    </div>
+                    <div>
+                        <div style="font-size:11px;color:var(--text-faint);margin-bottom:4px">CA net cumulé (€)</div>
+                        <input type="number" min="0" step="0.01" value="${escAttr(inf.stats_revenue||0)}" placeholder="0.00" data-act="field" data-field="stats_revenue" data-id="${eid}" style="width:100%">
+                    </div>
+                    <div>
+                        <div style="font-size:11px;color:var(--text-faint);margin-bottom:4px">CA net ce mois (€)</div>
+                        <input type="number" min="0" step="0.01" value="${escAttr(inf.stats_revenue_month||0)}" placeholder="0.00" data-act="field" data-field="stats_revenue_month" data-id="${eid}" style="width:100%">
+                    </div>
+                </div>
+                <div style="margin-top:8px;padding:10px 12px;background:var(--accent-dim);border-radius:8px;font-size:12.5px;color:var(--text-dim)">
+                    ${_renderTierBadge(inf)}
+                </div>
+            </div>
+            <div class="field field-full">
+                <label>🔗 Lien espace influenceur</label>
+                <div style="display:flex;gap:8px;align-items:center">
+                    <input type="text" value="${escAttr(inf._espace_url||'')}" readonly style="flex:1;cursor:text;font-size:12px;color:var(--text-dim)">
+                    <button class="act-btn primary" onclick="copyEspaceLink('${escAttr(inf._espace_url||'')}',this)" ${!inf._espace_url?'disabled':''}>📋 Copier</button>
+                </div>
             </div>
             <div class="field">
                 <label>Plateforme</label>
