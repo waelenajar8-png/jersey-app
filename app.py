@@ -2870,6 +2870,28 @@ def api_get_influenceurs():
         influenceurs = data.get("influenceurs", [])
         if not isinstance(influenceurs, list):
             influenceurs = []
+
+        # Enrichissement côté serveur : ajouter _espace_url + mapper stats depuis sous-objet
+        base_url = request.host_url.rstrip("/")
+        def _safe_int(v, default=0):
+            try: return int(float(v))
+            except (TypeError, ValueError): return default
+        def _safe_float(v, default=0.0):
+            try: return float(v)
+            except (TypeError, ValueError): return default
+        for inf in influenceurs:
+            # URL espace public
+            try:
+                inf["_espace_url"] = f"{base_url}/espace/{_public_slug(inf)}"
+            except Exception:
+                inf["_espace_url"] = ""
+            # Mapper stats (sous-objet) vers champs plats pour le front admin
+            s = inf.get("stats") or {}
+            inf.setdefault("stats_sales",         _safe_int(s.get("sales", 0)))
+            inf.setdefault("stats_sales_month",   _safe_int(s.get("sales_month", 0)))
+            inf.setdefault("stats_revenue",       _safe_float(s.get("revenue", 0)))
+            inf.setdefault("stats_revenue_month", _safe_float(s.get("revenue_month", 0)))
+
         return jsonify({
             "influenceurs": influenceurs,
             "version": data.get("version", 0),
@@ -2900,6 +2922,29 @@ def api_save_influenceurs():
 
         base_version = payload.get("base_version")   # version que le client avait au chargement
         force        = bool(payload.get("force", False))
+
+        # Normaliser les champs stats_* → sous-objet stats avant persistance
+        def _safe_int(v, default=0):
+            try: return int(float(v))
+            except (TypeError, ValueError): return default
+        def _safe_float(v, default=0.0):
+            try: return float(v)
+            except (TypeError, ValueError): return default
+
+        for inf in influenceurs:
+            s = inf.get("stats") or {}
+            # Champs plats envoyés par le front admin → sous-objet stats
+            if "stats_sales" in inf:
+                s["sales"]         = _safe_int(inf.pop("stats_sales"))
+            if "stats_sales_month" in inf:
+                s["sales_month"]   = _safe_int(inf.pop("stats_sales_month"))
+            if "stats_revenue" in inf:
+                s["revenue"]       = _safe_float(inf.pop("stats_revenue"))
+            if "stats_revenue_month" in inf:
+                s["revenue_month"] = _safe_float(inf.pop("stats_revenue_month"))
+            inf["stats"] = s
+            # Nettoyer champ virtuel non persisté
+            inf.pop("_espace_url", None)
 
         with _influenceurs_lock:
             current = r2_get_json(INFLUENCEURS_R2_KEY) or {}
@@ -3153,45 +3198,81 @@ def api_influ_videos_delete():
 # toucher au reste du code.
 # ══════════════════════════════════════════════════════════════════════════════
 
-# ── Configuration des paliers (PROVISOIRE — à ajuster) ────────────────────
+# ── Configuration des paliers ──────────────────────────────────────────────
+# Critère unique : ventes CUMULÉES depuis le début de la collaboration.
+# Rémunération :
+#   - Découverte / Partenaire : commission % sur ventes nettes (panier moyen ~38€)
+#   - Ambassadeur / VIP       : fixe mensuel (versé si l'influenceur maintient
+#                               son seuil de ventes sur le mois calendaire)
+# Gifting : maillots floqués envoyés chaque mois tant que le palier est maintenu.
+# Coûts maillots indicatifs (prix dégressif) :
+#   2 maillots = 25,52€ | 4 maillots = 44€ | 6 maillots = 62€
 INFLUENCER_TIERS = [
     {
         "id": "decouverte",
         "name": "Découverte",
-        "icon": "🥉",
+        "icon": "⭐",
         "color": "#94A3B8",
-        # Critères pour ATTEINDRE ce palier (le premier est acquis d'office)
-        "requirements": {},
+        # Palier de départ — acquis d'office, aucune vente requise.
+        # C'est une mise de départ : on envoie 2 maillots sans garantie de ventes.
+        "requirements": {"sales": 0},
+        "commission_type": "percent",   # "percent" | "fixed"
+        "commission_value": 10,         # 10% sur ventes nettes
+        "monthly_jerseys": 2,           # maillots envoyés chaque mois
+        "jersey_cost": 25.52,
         "perks": [
-            "2 maillots offerts",
+            "2 maillots floqués offerts",
             "Code promo personnalisé -15%",
-            "Commission 10% sur tes ventes",
-        ],
-    },
-    {
-        "id": "ambassadeur",
-        "name": "Ambassadeur",
-        "icon": "🥈",
-        "color": "#6366F1",
-        "requirements": {"videos": 3, "views": 50000, "sales": 5},
-        "perks": [
-            "Commission augmentée à 15%",
-            "Nouveaux maillots chaque mois",
-            "Accès anticipé aux nouveautés",
-            "Mise en avant sur nos comptes",
+            "10% de commission sur tes ventes",
         ],
     },
     {
         "id": "partenaire",
         "name": "Partenaire",
-        "icon": "🥇",
-        "color": "#C9A227",
-        "requirements": {"videos": 10, "views": 250000, "sales": 30},
+        "icon": "🔥",
+        "color": "#6366F1",
+        "requirements": {"sales": 10},  # 10 ventes cumulées
+        "commission_type": "percent",
+        "commission_value": 15,         # 15% sur ventes nettes
+        "monthly_jerseys": 2,
+        "jersey_cost": 25.52,
         "perks": [
-            "Rémunération fixe + commission 20%",
-            "Co-création d'un maillot signature",
-            "Collaboration longue durée",
-            "Budget contenu dédié",
+            "2 maillots floqués par mois",
+            "Commission augmentée à 15%",
+            "Accès anticipé aux nouveautés",
+        ],
+    },
+    {
+        "id": "ambassadeur",
+        "name": "Ambassadeur",
+        "icon": "💎",
+        "color": "#C9A227",
+        "requirements": {"sales": 30},  # 30 ventes cumulées
+        "commission_type": "fixed",
+        "commission_value": 150,        # 150€ fixe/mois (proratisé si < seuil)
+        "monthly_jerseys": 4,
+        "jersey_cost": 44.0,
+        "perks": [
+            "4 maillots floqués par mois",
+            "Rémunération fixe 150€/mois",
+            "Mise en avant sur nos comptes",
+        ],
+    },
+    {
+        "id": "vip",
+        "name": "VIP",
+        "icon": "👑",
+        "color": "#F59E0B",
+        "requirements": {"sales": 60},  # 60 ventes cumulées
+        "commission_type": "fixed",
+        "commission_value": 400,        # 400€ fixe/mois (proratisé si < seuil)
+        "monthly_jerseys": 6,
+        "jersey_cost": 62.0,
+        "perks": [
+            "6 maillots floqués par mois",
+            "Rémunération fixe 400€/mois",
+            "Avantages exclusifs & accès direct",
+            "Avant-première nouveautés Volakits",
         ],
     },
 ]
@@ -3232,46 +3313,90 @@ def _public_slug(inf):
 
 def _compute_tier_progress(stats):
     """
-    Détermine le palier courant et la progression vers le suivant.
-    stats : {"videos": int, "views": int, "sales": int}
+    Détermine le palier courant basé UNIQUEMENT sur les ventes cumulées.
+    stats : {"sales": int, "sales_month": int, ...}
     Retourne (tier_index, next_tier_or_None, progress_pct, details[])
     """
-    videos = int(stats.get("videos", 0) or 0)
-    views  = int(stats.get("views", 0) or 0)
-    sales  = int(stats.get("sales", 0) or 0)
+    sales_cumul = int(stats.get("sales", 0) or 0)
 
-    # Palier atteint = le plus haut dont tous les critères sont remplis
+    # Palier atteint = le plus haut dont le seuil de ventes cumulées est atteint
     tier_idx = 0
     for i, tier in enumerate(INFLUENCER_TIERS):
         req = tier.get("requirements") or {}
-        if not req:
-            tier_idx = max(tier_idx, i)
-            continue
-        if (videos >= req.get("videos", 0) and
-            views  >= req.get("views", 0) and
-            sales  >= req.get("sales", 0)):
-            tier_idx = max(tier_idx, i)
+        if sales_cumul >= req.get("sales", 0):
+            tier_idx = i
 
     next_tier = INFLUENCER_TIERS[tier_idx + 1] if tier_idx + 1 < len(INFLUENCER_TIERS) else None
 
     details, pct = [], 100
     if next_tier:
-        req = next_tier.get("requirements") or {}
-        ratios = []
-        mapping = [("videos", "Vidéos publiées", videos), ("views", "Vues cumulées", views), ("sales", "Ventes générées", sales)]
-        for key, label, current in mapping:
-            target = req.get(key, 0)
-            if target > 0:
-                r = min(1.0, current / target)
-                ratios.append(r)
-                details.append({
-                    "key": key, "label": label,
-                    "current": current, "target": target,
-                    "pct": round(r * 100), "done": current >= target,
-                })
-        pct = round(sum(ratios) / len(ratios) * 100) if ratios else 0
+        req_next  = next_tier.get("requirements") or {}
+        req_cur   = INFLUENCER_TIERS[tier_idx].get("requirements") or {}
+        target    = req_next.get("sales", 0)
+        base      = req_cur.get("sales", 0)   # ventes au début du palier actuel
+        span      = max(target - base, 1)
+        progress  = min(sales_cumul - base, span)
+        pct       = round(progress / span * 100)
+        details   = [{
+            "key":     "sales",
+            "label":   "Ventes cumulées",
+            "current": sales_cumul,
+            "target":  target,
+            "pct":     pct,
+            "done":    sales_cumul >= target,
+        }]
 
     return tier_idx, next_tier, pct, details
+
+
+def _compute_monthly_commission(inf, stats):
+    """
+    Calcule la rémunération du mois courant selon le palier.
+    - Paliers % (Découverte / Partenaire) : commission sur ventes nettes du mois.
+    - Paliers fixes (Ambassadeur / VIP)   : fixe proratisé si l'influenceur
+      est proche du seuil mensuel minimum (tolérance -20%).
+      En dessous de cette tolérance → il redescend au palier inférieur.
+    Retourne un dict avec type, montant, et éventuellement un avertissement.
+    """
+    tier_idx, _, _, _ = _compute_tier_progress(stats)
+    tier = INFLUENCER_TIERS[tier_idx]
+
+    sales_month  = int(stats.get("sales_month", 0) or 0)
+    revenue_month = float(stats.get("revenue_month", 0) or 0)
+
+    commission_type  = tier.get("commission_type", "percent")
+    commission_value = tier.get("commission_value", 0)
+
+    if commission_type == "percent":
+        amount = round(revenue_month * commission_value / 100, 2)
+        return {"type": "percent", "rate": commission_value, "amount": amount, "warning": None}
+
+    # Palier fixe : vérifier maintien
+    req_sales = tier.get("requirements", {}).get("sales", 0)
+    # Seuil mensuel minimum = seuil de ventes mensuelles attendu pour ce palier
+    # On utilise le seuil du palier précédent comme référence mensuelle minimum
+    # Le seuil mensuel de maintien = le seuil de ventes CUMULÉES qui a permis
+    # d'atteindre ce palier (ex: Ambassadeur → 30 ventes/mois attendues, pas 10)
+    monthly_min = req_sales
+    tolerance   = round(monthly_min * 0.8)  # -20% de tolérance
+
+    if sales_month < tolerance:
+        # Trop loin du seuil → redescente signalée
+        return {
+            "type": "fixed", "rate": commission_value, "amount": 0,
+            "warning": f"Ventes insuffisantes ce mois ({sales_month} ventes). Palier à risque."
+        }
+
+    # Proratisation si entre tolérance et seuil plein
+    if sales_month < monthly_min:
+        ratio  = sales_month / monthly_min
+        amount = round(commission_value * ratio, 2)
+        return {
+            "type": "fixed_prorated", "rate": commission_value, "amount": amount,
+            "warning": f"Fixe proratisé ({sales_month}/{monthly_min} ventes ce mois)."
+        }
+
+    return {"type": "fixed", "rate": commission_value, "amount": commission_value, "warning": None}
 
 def _espace_payload(inf):
     """Construit toutes les données affichées dans l'espace influenceur."""
@@ -3327,12 +3452,15 @@ def _espace_payload(inf):
             "status": inf.get("status", 0),
         },
         "stats": {
-            "views":  int(stats.get("views", 0) or 0),
-            "sales":  int(stats.get("sales", 0) or 0),
-            "revenue": float(stats.get("revenue", 0) or 0),
-            "videos": len(my_vids),
-            "commission": float(stats.get("commission", 0) or 0),
+            "views":         int(stats.get("views", 0) or 0),
+            "sales":         int(stats.get("sales", 0) or 0),       # ventes cumulées
+            "sales_month":   int(stats.get("sales_month", 0) or 0), # ventes mois courant
+            "revenue":       float(stats.get("revenue", 0) or 0),   # CA cumulé net
+            "revenue_month": float(stats.get("revenue_month", 0) or 0),
+            "videos":        len(my_vids),
+            "commission":    float(stats.get("commission", 0) or 0),
         },
+        "commission_month": _compute_monthly_commission(inf, stats),
         "tier": {
             "current": current_tier,
             "next": next_tier,
