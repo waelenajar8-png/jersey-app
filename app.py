@@ -2899,18 +2899,19 @@ def _shopify_configured():
 
 def _shopify_get_access_token():
     """
-    Retourne un Admin API access token valide, en le générant via le flux
-    Client Credentials Grant si besoin (les apps créées via le Dev Dashboard
-    depuis 2026 n'ont plus de token statique — il faut l'échanger dynamiquement
-    contre le Client ID + Secret, et il expire après ~24h).
+    Retourne (token, error) — error est None si succès.
+    Génère un Admin API access token via le flux Client Credentials Grant
+    (les apps créées via le Dev Dashboard depuis 2026 n'ont plus de token
+    statique — il faut l'échanger dynamiquement contre le Client ID + Secret,
+    et il expire après ~24h).
     """
     if not _shopify_configured():
-        return None
+        return None, "Shopify non configuré (SHOPIFY_SHOP_DOMAIN / CLIENT_ID / CLIENT_SECRET manquants)"
 
     with _shopify_token_lock:
         now = time.time()
         if _shopify_token_cache["token"] and _shopify_token_cache["expires_at"] > now + 300:
-            return _shopify_token_cache["token"]
+            return _shopify_token_cache["token"], None
 
         url = f"https://{SHOPIFY_SHOP_DOMAIN}/admin/oauth/access_token"
         try:
@@ -2919,69 +2920,79 @@ def _shopify_get_access_token():
                 "client_id": SHOPIFY_CLIENT_ID,
                 "client_secret": SHOPIFY_CLIENT_SECRET,
             }, timeout=20)
-            resp.raise_for_status()
+            if resp.status_code >= 400:
+                err = f"OAuth token HTTP {resp.status_code}: {resp.text[:300]}"
+                print(f"[SHOPIFY] {err}")
+                return None, err
             payload = resp.json()
             token      = payload.get("access_token")
             expires_in = int(payload.get("expires_in", 3600) or 3600)
             if not token:
-                print(f"[SHOPIFY] Réponse OAuth sans token: {payload}")
-                return None
+                err = f"Réponse OAuth sans token: {payload}"
+                print(f"[SHOPIFY] {err}")
+                return None, err
             _shopify_token_cache["token"] = token
             _shopify_token_cache["expires_at"] = now + expires_in
             print(f"[SHOPIFY] Nouveau token obtenu, valide {expires_in}s")
-            return token
+            return token, None
         except Exception as e:
-            print(f"[SHOPIFY] Erreur obtention token OAuth: {e}")
-            return None
+            err = f"Erreur obtention token OAuth: {e}"
+            print(f"[SHOPIFY] {err}")
+            return None, err
 
 
 def _shopify_graphql(query, variables=None, max_retries=3):
-    """Exécute une requête GraphQL contre l'API Admin Shopify. Retourne le dict 'data' ou None."""
-    token = _shopify_get_access_token()
+    """Exécute une requête GraphQL contre l'API Admin Shopify. Retourne (data, error)."""
+    token, err = _shopify_get_access_token()
     if not token:
-        return None
+        return None, err
     url = f"https://{SHOPIFY_SHOP_DOMAIN}/admin/api/{SHOPIFY_API_VERSION}/graphql.json"
     headers = {
         "X-Shopify-Access-Token": token,
         "Content-Type": "application/json",
     }
+    last_err = None
     for attempt in range(1, max_retries + 1):
         try:
             resp = requests.post(url, headers=headers, json={"query": query, "variables": variables or {}}, timeout=30)
             if resp.status_code == 401:
                 # Token invalide/expiré malgré le cache → on force un renouvellement et on retente
                 _shopify_token_cache["token"] = None
-                token = _shopify_get_access_token()
+                token, err = _shopify_get_access_token()
                 if not token:
-                    return None
+                    return None, err
                 headers["X-Shopify-Access-Token"] = token
                 continue
             if resp.status_code == 429:
                 # Rate limit Shopify → backoff
                 time.sleep(min(2 * attempt, 10))
                 continue
-            resp.raise_for_status()
+            if resp.status_code >= 400:
+                last_err = f"HTTP {resp.status_code}: {resp.text[:300]}"
+                print(f"[SHOPIFY] {last_err}")
+                return None, last_err
             payload = resp.json()
             if "errors" in payload:
-                print(f"[SHOPIFY] Erreurs GraphQL: {payload['errors']}")
-                return None
-            return payload.get("data")
+                last_err = f"Erreurs GraphQL: {payload['errors']}"
+                print(f"[SHOPIFY] {last_err}")
+                return None, last_err
+            return payload.get("data"), None
         except Exception as e:
-            print(f"[SHOPIFY] Erreur requête (tentative {attempt}/{max_retries}): {e}")
+            last_err = f"Erreur requête (tentative {attempt}/{max_retries}): {e}"
+            print(f"[SHOPIFY] {last_err}")
             if attempt < max_retries:
                 time.sleep(min(2 * attempt, 10))
-    return None
+    return None, last_err
 
 
 def _shopify_fetch_orders_for_code(code, since_iso=None, max_pages=20):
     """
     Récupère toutes les commandes payées utilisant un code promo donné,
-    depuis since_iso (ISO 8601) si fourni. Retourne une liste de dicts
-    {created_at, net_amount, cancelled}.
+    depuis since_iso (ISO 8601) si fourni. Retourne (orders, error).
     Utilise le filtre de recherche Shopify `discount_code:XXX`.
     """
     if not code:
-        return []
+        return [], None
 
     search = f"discount_code:{code}"
     if since_iso:
@@ -3004,7 +3015,9 @@ def _shopify_fetch_orders_for_code(code, since_iso=None, max_pages=20):
 
     orders, cursor, page = [], None, 0
     while page < max_pages:
-        data = _shopify_graphql(query, {"search": search, "cursor": cursor})
+        data, err = _shopify_graphql(query, {"search": search, "cursor": cursor})
+        if err:
+            return orders, err
         if not data or not data.get("orders"):
             break
         edges = data["orders"]["edges"]
@@ -3021,7 +3034,7 @@ def _shopify_fetch_orders_for_code(code, since_iso=None, max_pages=20):
         cursor = page_info.get("endCursor")
         page += 1
 
-    return orders
+    return orders, None
 
 
 def _aggregate_orders(orders):
@@ -3082,7 +3095,11 @@ def sync_influencer_stats(force=False):
                         continue
                     try:
                         since_iso = inf.get("program_start_date") or None  # YYYY-MM-DD ou None
-                        orders = _shopify_fetch_orders_for_code(code, since_iso=since_iso)
+                        orders, fetch_err = _shopify_fetch_orders_for_code(code, since_iso=since_iso)
+                        if fetch_err:
+                            errors.append(f"{inf.get('pseudo','?')} ({code}): {fetch_err}")
+                            print(f"[SHOPIFY SYNC] Erreur pour {inf.get('pseudo')} ({code}): {fetch_err}")
+                            continue
                         agg = _aggregate_orders(orders)
                         s = inf.get("stats") or {}
                         s["sales"]         = agg["sales"]
@@ -3093,7 +3110,7 @@ def sync_influencer_stats(force=False):
                         inf["last_synced_at"] = datetime.now(timezone.utc).isoformat()
                         synced += 1
                     except Exception as e:
-                        errors.append(f"{inf.get('pseudo','?')}: {e}")
+                        errors.append(f"{inf.get('pseudo','?')} ({code}): {e}")
                         print(f"[SHOPIFY SYNC] Erreur pour {inf.get('pseudo')}: {e}")
 
                 if synced > 0:
