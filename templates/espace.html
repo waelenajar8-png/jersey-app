@@ -654,6 +654,7 @@ function viewHome(){
         </div>
         <div>
             ${blockCommissionMonth()}
+            ${blockGiftingMonth()}
             ${blockPromo()}
             <div class="card" style="margin-top:16px">
                 <div class="card-head"><div class="card-title"><span class="ico-box">${ICO.box}</span>Ton colis</div></div>
@@ -851,10 +852,10 @@ function blockCommissionMonth(){
     else if(c.beats_fixed) sub = `${c.rate}% sur tes ventes — au-dessus de ton fixe`;
     else                   sub = `${c.rate}% sur tes ventes du mois`;
 
-    // S'il reste des ventes à faire pour débloquer le fixe, on le dit clairement.
+    // S'il reste des ventes à faire pour débloquer le prochain fixe, on le dit.
     let unlock = '';
-    if(c.missing > 0 && c.next_gain){
-        const pct = Math.min(100, Math.round((c.sales_month / c.threshold) * 100));
+    if(c.missing > 0 && c.next_gain && c.next_threshold){
+        const pct = Math.min(100, Math.round((c.sales_month / c.next_threshold) * 100));
         unlock = `<div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--line)">
             <div style="display:flex;justify-content:space-between;font-size:12.5px;font-weight:700;margin-bottom:7px">
                 <span>Plus que ${fmt(c.missing)} vente${c.missing>1?'s':''}</span>
@@ -862,7 +863,7 @@ function blockCommissionMonth(){
             </div>
             <div class="track" style="height:6px"><div class="track-fill" data-fill="${pct}" style="width:0"></div></div>
             <div style="font-size:11.5px;color:var(--text-faint);margin-top:6px">
-                ${fmt(c.sales_month)} / ${fmt(c.threshold)} ventes ce mois
+                ${fmt(c.sales_month)} / ${fmt(c.next_threshold)} ventes ce mois
             </div>
         </div>`;
     }
@@ -873,6 +874,34 @@ function blockCommissionMonth(){
         <div class="card-sub">${sub}</div>
         ${unlock}
         ${c.warning ? `<div class="badge b-warn" style="margin-top:12px">${ICO.warn} ${esc(c.warning)}</div>` : ''}
+    </div>`;
+}
+
+// ── Gifting du mois ─────────────────────────────────────────────────────
+function blockGiftingMonth(){
+    const g = D.gifting_month;
+    if(!g) return '';
+
+    if(g.unlocked){
+        return `<div class="card" style="margin-bottom:16px">
+            <div class="card-head"><div class="card-title"><span class="ico-box">${ICO.box}</span>Tes maillots du mois</div></div>
+            <div style="font-size:28px;font-weight:800;letter-spacing:-.02em;margin:4px 0 2px">${fmt(g.jerseys)} maillots</div>
+            <div class="card-sub">Débloqués — on les prépare pour toi</div>
+        </div>`;
+    }
+
+    const pct = Math.min(100, Math.round((g.threshold - g.missing) / g.threshold * 100));
+    return `<div class="card" style="margin-bottom:16px">
+        <div class="card-head"><div class="card-title"><span class="ico-box">${ICO.box}</span>Tes maillots du mois</div></div>
+        <div style="font-size:28px;font-weight:800;letter-spacing:-.02em;margin:4px 0 2px">${fmt(g.tier_jerseys)} maillots</div>
+        <div class="card-sub">À débloquer avec ${fmt(g.threshold)} ventes dans le mois</div>
+        <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--line)">
+            <div style="display:flex;justify-content:space-between;font-size:12.5px;font-weight:700;margin-bottom:7px">
+                <span>Plus que ${fmt(g.missing)} vente${g.missing>1?'s':''}</span>
+                <span style="color:var(--accent)">${fmt(g.tier_jerseys)} maillots</span>
+            </div>
+            <div class="track" style="height:6px"><div class="track-fill" data-fill="${pct}" style="width:0"></div></div>
+        </div>
     </div>`;
 }
 
