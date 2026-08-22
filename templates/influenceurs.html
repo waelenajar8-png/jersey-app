@@ -298,9 +298,13 @@ h1{font-size:24px;margin:0;font-weight:800;letter-spacing:-0.02em}
                     <a href="/remove_box">🗑️ Supprimer boîte</a>
                 </div>
             </div>
+            <button class="btn-sec" id="shopifySyncBtn" onclick="triggerShopifySync()" title="Synchronise les ventes de tous les influenceurs depuis Shopify">🔄 Sync Shopify</button>
             <button class="theme-btn" id="themeBtn">☀️</button>
         </div>
     </div>
+
+    <!-- Statut synchro Shopify -->
+    <div id="shopifySyncStatus" style="display:none;margin-bottom:14px;padding:10px 14px;border-radius:10px;font-size:12.5px;font-weight:600"></div>
 
     <!-- Compteurs globaux -->
     <div class="stats-row" id="statsRow"></div>
@@ -459,7 +463,9 @@ function normalize(i){
         stats_sales_month: i.stats_sales_month||0,
         stats_revenue: i.stats_revenue||0,
         stats_revenue_month: i.stats_revenue_month||0,
-        _espace_url: i._espace_url||''
+        _espace_url: i._espace_url||'',
+        program_start_date: i.program_start_date||'',
+        last_synced_at: i.last_synced_at||''
     };
 }
 
@@ -505,6 +511,55 @@ function copyEspaceLink(url, btn){
         btn.textContent = '✅ Copié !';
         setTimeout(()=>btn.textContent=orig, 1500);
     });
+}
+
+// ── Sync Shopify ──────────────────────────────────────────────────────────
+function _showSyncStatus(msg, kind){
+    const el = document.getElementById('shopifySyncStatus');
+    el.style.display = 'block';
+    el.textContent = msg;
+    el.style.background = kind==='error' ? 'var(--danger-dim)' : kind==='ok' ? 'var(--ok-dim)' : 'var(--warn-dim)';
+    el.style.color = kind==='error' ? 'var(--danger)' : kind==='ok' ? 'var(--ok)' : 'var(--warn)';
+}
+
+async function checkShopifySyncStatus(){
+    try{
+        const r = await fetch('/api/influenceurs/sync-shopify/status');
+        const d = await r.json();
+        if(!d.configured){
+            _showSyncStatus("⚠️ Shopify non configuré sur le serveur (variables d'environnement manquantes)", 'warn');
+            document.getElementById('shopifySyncBtn').disabled = true;
+            return;
+        }
+        if(d.last_run){
+            const kind = d.last_error ? 'warn' : 'ok';
+            const errTxt = d.last_error ? ` — ⚠️ ${d.last_error}` : '';
+            _showSyncStatus(`✅ Dernière synchro Shopify : ${fmtDateTime(d.last_run)} · ${d.synced_count} influenceur(s) mis à jour${errTxt}`, kind);
+        }
+    }catch(e){ /* silencieux */ }
+}
+
+async function triggerShopifySync(){
+    const btn = document.getElementById('shopifySyncBtn');
+    btn.disabled = true;
+    const orig = btn.textContent;
+    btn.textContent = '⏳ Synchronisation…';
+    _showSyncStatus('⏳ Synchronisation en cours…', 'warn');
+    try{
+        const r = await fetch('/api/influenceurs/sync-shopify', {method:'POST'});
+        const d = await r.json();
+        if(d.success){
+            _showSyncStatus(`✅ Synchronisé : ${d.synced} influenceur(s) mis à jour${d.errors && d.errors.length ? ' · '+d.errors.length+' erreur(s)' : ''}`, 'ok');
+            await load();  // recharger les données fraîches
+        }else{
+            _showSyncStatus(`❌ ${d.error || 'Erreur de synchronisation'}`, 'error');
+        }
+    }catch(e){
+        _showSyncStatus('❌ Erreur réseau pendant la synchronisation', 'error');
+    }finally{
+        btn.disabled = false;
+        btn.textContent = orig;
+    }
 }
 
 function genId(){ return 'inf_'+Date.now()+'_'+Math.random().toString(36).slice(2,9); }
@@ -730,24 +785,29 @@ function cardHtml(inf){
                     ${inf.promo_code?`<button class="act-btn" onclick="copyPromo('${escAttr(inf.promo_code)}',this)" style="white-space:nowrap">📋 Copier</button>`:''}
                 </div>
             </div>
+            <div class="field">
+                <label>Date de départ programme</label>
+                <input type="date" value="${escAttr(inf.program_start_date||'')}" data-act="field" data-field="program_start_date" data-id="${eid}">
+                <div style="font-size:10.5px;color:var(--text-faint);margin-top:3px">Ses ventes ne comptent pour ses paliers qu'à partir de cette date. Laisser vide = tout l'historique compte.</div>
+            </div>
             <div class="field field-full">
-                <label>📊 Stats & Ventes</label>
+                <label>📊 Stats & Ventes ${inf.promo_code?`<span style="font-weight:400;color:var(--text-faint);font-size:11px">— synchronisé automatiquement via Shopify${inf.last_synced_at?` · dernière synchro ${fmtDateTime(inf.last_synced_at)}`:' · pas encore synchronisé'}</span>`:''}</label>
                 <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px">
                     <div>
                         <div style="font-size:11px;color:var(--text-faint);margin-bottom:4px">Ventes cumulées</div>
-                        <input type="number" min="0" value="${escAttr(inf.stats_sales||0)}" placeholder="0" data-act="field" data-field="stats_sales" data-id="${eid}" style="width:100%">
+                        <input type="number" min="0" value="${escAttr(inf.stats_sales||0)}" placeholder="0" data-act="field" data-field="stats_sales" data-id="${eid}" style="width:100%" ${inf.promo_code?'readonly title="Synchronisé automatiquement — modifie le code promo pour repasser en saisie manuelle"':''}>
                     </div>
                     <div>
                         <div style="font-size:11px;color:var(--text-faint);margin-bottom:4px">Ventes ce mois</div>
-                        <input type="number" min="0" value="${escAttr(inf.stats_sales_month||0)}" placeholder="0" data-act="field" data-field="stats_sales_month" data-id="${eid}" style="width:100%">
+                        <input type="number" min="0" value="${escAttr(inf.stats_sales_month||0)}" placeholder="0" data-act="field" data-field="stats_sales_month" data-id="${eid}" style="width:100%" ${inf.promo_code?'readonly':''}>
                     </div>
                     <div>
                         <div style="font-size:11px;color:var(--text-faint);margin-bottom:4px">CA net cumulé (€)</div>
-                        <input type="number" min="0" step="0.01" value="${escAttr(inf.stats_revenue||0)}" placeholder="0.00" data-act="field" data-field="stats_revenue" data-id="${eid}" style="width:100%">
+                        <input type="number" min="0" step="0.01" value="${escAttr(inf.stats_revenue||0)}" placeholder="0.00" data-act="field" data-field="stats_revenue" data-id="${eid}" style="width:100%" ${inf.promo_code?'readonly':''}>
                     </div>
                     <div>
                         <div style="font-size:11px;color:var(--text-faint);margin-bottom:4px">CA net ce mois (€)</div>
-                        <input type="number" min="0" step="0.01" value="${escAttr(inf.stats_revenue_month||0)}" placeholder="0.00" data-act="field" data-field="stats_revenue_month" data-id="${eid}" style="width:100%">
+                        <input type="number" min="0" step="0.01" value="${escAttr(inf.stats_revenue_month||0)}" placeholder="0.00" data-act="field" data-field="stats_revenue_month" data-id="${eid}" style="width:100%" ${inf.promo_code?'readonly':''}>
                     </div>
                 </div>
                 <div style="margin-top:8px;padding:10px 12px;background:var(--accent-dim);border-radius:8px;font-size:12.5px;color:var(--text-dim)">
@@ -1028,6 +1088,12 @@ function fmtDate(iso){
     return d.toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit',year:'2-digit'});
 }
 
+function fmtDateTime(iso){
+    const d=new Date(iso);
+    if(isNaN(d.getTime())) return '—';
+    return d.toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit'}) + ' à ' + d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
+}
+
 // ── Bibliothèque vidéos ─────────────────────────────────────────────────
 let allVideos = [];
 let libFilterType='', libFilterInflu='', libFilterAds='';
@@ -1269,6 +1335,7 @@ themeBtn.addEventListener('click',()=>applyTheme(theme==='dark'?'light':'dark'))
 // ── Init ────────────────────────────────────────────────────────────────
 load();
 loadVideos();
+checkShopifySyncStatus();
 </script>
 </body>
 </html>
