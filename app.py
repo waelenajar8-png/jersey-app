@@ -3106,6 +3106,19 @@ def sync_influencer_stats(force=False):
                         s["revenue"]       = agg["revenue"]
                         s["sales_month"]   = agg["sales_month"]
                         s["revenue_month"] = agg["revenue_month"]
+
+                        # Ledger mensuel de commission : on calcule la commission du mois
+                        # en cours avec les stats fraîches, et on l'enregistre dans un
+                        # historique par mois (clé YYYY-MM). On ÉCRASE l'entrée du mois
+                        # en cours à chaque sync (pas d'addition) pour éviter tout
+                        # double-comptage — la commission cumulée = somme de l'historique.
+                        month_key = datetime.now(timezone.utc).strftime("%Y-%m")
+                        history = s.get("commission_history") or {}
+                        month_commission = _compute_monthly_commission(inf, s)
+                        history[month_key] = month_commission.get("amount", 0)
+                        s["commission_history"] = history
+                        s["commission"] = round(sum(history.values()), 2)
+
                         inf["stats"] = s
                         inf["last_synced_at"] = datetime.now(timezone.utc).isoformat()
                         synced += 1
