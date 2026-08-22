@@ -32,7 +32,7 @@ body{
 }
 a{color:inherit;text-decoration:none}
 button{font-family:inherit;cursor:pointer;border:none;background:none}
-input{font-family:inherit}
+input,select,textarea{font-family:inherit}
 
 .shell{display:flex;min-height:100vh}
 
@@ -50,7 +50,7 @@ input{font-family:inherit}
 .brand-name{font-size:15.5px;font-weight:800;letter-spacing:-.02em}
 .brand-sub{font-size:10.5px;color:var(--on-dark-dim);font-weight:600;letter-spacing:.08em;text-transform:uppercase}
 
-.nav-label{font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:#5A648C;padding:0 10px 7px}
+.nav-label{font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:#5A648C;padding:0 10px 7px;margin-top:14px}
 .nav-item{
     display:flex;align-items:center;gap:11px;padding:10px 11px;border-radius:10px;
     font-size:13.5px;font-weight:600;color:var(--on-dark-dim);width:100%;text-align:left;
@@ -64,15 +64,15 @@ input{font-family:inherit}
 .logout-link:hover{color:#fca5a5}
 
 /* Main */
-.main{flex:1;min-width:0;padding:26px 30px 60px}
-.topline{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;margin-bottom:24px;flex-wrap:wrap}
+.main{flex:1;min-width:0;padding:26px 30px 80px}
+.topline{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;margin-bottom:20px;flex-wrap:wrap}
 .hello h1{font-size:26px;font-weight:800;letter-spacing:-.03em}
 .hello p{color:var(--muted);font-size:13.5px;font-weight:500;margin-top:4px}
 
 .toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 .search-box{
     display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--line);
-    border-radius:100px;padding:9px 16px;box-shadow:var(--sh-xs);min-width:220px;
+    border-radius:100px;padding:9px 16px;box-shadow:var(--sh-xs);min-width:200px;
 }
 .search-box input{border:none;outline:none;font-size:13.5px;background:none;width:100%;color:var(--ink)}
 .btn{
@@ -83,26 +83,38 @@ input{font-family:inherit}
 .btn:hover{border-color:var(--accent);color:var(--accent)}
 .btn.primary{background:var(--accent-grad);color:#fff;border:none;box-shadow:0 6px 18px rgba(79,70,229,.28)}
 .btn.primary:hover{opacity:.92;color:#fff}
+.btn.danger{color:var(--danger)}
+.btn.danger:hover{border-color:var(--danger);color:var(--danger)}
 .btn:disabled{opacity:.5;cursor:not-allowed}
+.btn.sm{padding:7px 12px;font-size:12px}
 
-/* KPI row */
-.kpi-row{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:26px}
-.kpi{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:17px 18px;box-shadow:var(--sh-xs)}
+/* KPI */
+.kpi-row{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:18px}
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:16px 18px;box-shadow:var(--sh-xs)}
 .kpi-label{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
-.kpi-value{font-size:24px;font-weight:800;letter-spacing:-.03em;margin-top:5px}
+.kpi-value{font-size:23px;font-weight:800;letter-spacing:-.03em;margin-top:4px}
 
-/* Sync status banner */
-.sync-banner{
-    display:none;margin-bottom:18px;padding:11px 16px;border-radius:12px;
-    font-size:12.5px;font-weight:600;
+/* Pipeline chips */
+.pipeline{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px}
+.chip{
+    display:flex;align-items:center;gap:6px;padding:7px 13px;border-radius:100px;
+    background:var(--surface);border:1px solid var(--line);font-size:12px;font-weight:700;
+    color:var(--ink-2);box-shadow:var(--sh-xs);
 }
+.chip.active{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
+.chip .n{background:var(--line);border-radius:100px;padding:1px 7px;font-size:10.5px}
+.chip.active .n{background:var(--accent);color:#fff}
 
-/* Influencer cards grid */
+.sync-banner{display:none;margin-bottom:18px;padding:11px 16px;border-radius:12px;font-size:12.5px;font-weight:600}
+
+/* Cards grid */
 .inf-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px}
 .inf-card{
     background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);
     padding:18px;box-shadow:var(--sh-sm);display:flex;flex-direction:column;gap:12px;
+    cursor:pointer;transition:box-shadow .15s,border-color .15s;
 }
+.inf-card:hover{box-shadow:var(--sh-md);border-color:var(--line-2)}
 .inf-top{display:flex;align-items:center;gap:12px}
 .inf-avatar{
     width:42px;height:42px;border-radius:11px;background:var(--accent-grad);
@@ -110,11 +122,17 @@ input{font-family:inherit}
 }
 .inf-name{font-size:15px;font-weight:800;letter-spacing:-.01em}
 .inf-platform{font-size:11.5px;color:var(--muted);font-weight:600}
+.urgency-dot{width:8px;height:8px;border-radius:50%;margin-left:auto;flex-shrink:0}
+.urgency-dot.urgent{background:var(--danger)}
+.urgency-dot.warn{background:var(--warn)}
+.urgency-dot.ok{background:var(--ok)}
 
-.tier-badge{
-    display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;
-    padding:5px 11px;border-radius:100px;width:fit-content;
+.status-pill{
+    display:inline-flex;align-items:center;font-size:11px;font-weight:700;padding:4px 10px;
+    border-radius:100px;width:fit-content;background:var(--surface-2);border:1px solid var(--line);color:var(--ink-2);
 }
+
+.tier-badge{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;padding:5px 11px;border-radius:100px;width:fit-content}
 .mini-track{height:6px;background:var(--line);border-radius:100px;overflow:hidden;margin-top:6px}
 .mini-fill{height:100%;border-radius:100px;background:linear-gradient(90deg,#818CF8,#C084FC);transition:width .8s ease}
 .mini-label{font-size:11px;color:var(--muted);font-weight:600;margin-top:5px;display:flex;justify-content:space-between}
@@ -132,33 +150,62 @@ input{font-family:inherit}
 .inf-actions{display:flex;gap:8px;margin-top:auto}
 .inf-actions .btn{flex:1;justify-content:center}
 
-.empty-state{
-    grid-column:1/-1;text-align:center;padding:60px 20px;color:var(--muted);
-}
+.empty-state{grid-column:1/-1;text-align:center;padding:60px 20px;color:var(--muted)}
 
-/* Modal (quick edit) */
+/* Save indicator */
+.save-indicator{
+    position:fixed;bottom:20px;right:24px;background:var(--surface);border:1px solid var(--line);
+    border-radius:100px;padding:9px 18px;font-size:12.5px;font-weight:700;box-shadow:var(--sh-md);
+    display:none;align-items:center;gap:8px;z-index:200;color:var(--ink-2);
+}
+.save-indicator.show{display:flex}
+
+/* Modal */
 .modal-overlay{
-    display:none;position:fixed;inset:0;background:rgba(11,16,32,.5);z-index:100;
-    align-items:center;justify-content:center;padding:20px;
+    display:none;position:fixed;inset:0;background:rgba(11,16,32,.55);z-index:100;
+    align-items:flex-start;justify-content:center;padding:40px 20px;overflow-y:auto;
 }
 .modal-overlay.open{display:flex}
 .modal{
-    background:var(--surface);border-radius:var(--r-lg);padding:24px;width:100%;max-width:400px;
-    box-shadow:var(--sh-lg);
+    background:var(--surface);border-radius:var(--r-lg);padding:0;width:100%;max-width:560px;
+    box-shadow:var(--sh-lg);margin-bottom:40px;
 }
-.modal h3{font-size:16px;font-weight:800;margin-bottom:16px}
-.modal label{display:block;font-size:11.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px;margin-top:14px}
-.modal input{
-    width:100%;padding:10px 12px;border-radius:9px;border:1.5px solid var(--line);font-size:13.5px;outline:none;
+.modal-head{
+    display:flex;align-items:center;justify-content:space-between;padding:20px 24px;
+    border-bottom:1px solid var(--line);
 }
-.modal input:focus{border-color:var(--accent)}
-.modal-actions{display:flex;gap:8px;margin-top:20px}
-.modal-actions .btn{flex:1;justify-content:center}
+.modal-head h3{font-size:17px;font-weight:800}
+.modal-close{font-size:20px;color:var(--muted);padding:4px}
+.modal-body{padding:20px 24px;display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.modal-body .full{grid-column:1/-1}
+.f-label{display:block;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px}
+.f-input, .modal-body select, .modal-body textarea{
+    width:100%;padding:10px 12px;border-radius:9px;border:1.5px solid var(--line);font-size:13.5px;outline:none;background:var(--surface);
+}
+.f-input:focus, .modal-body select:focus, .modal-body textarea:focus{border-color:var(--accent)}
+.f-input[readonly]{background:var(--surface-2);color:var(--muted)}
+.f-hint{font-size:10.5px;color:var(--faint);margin-top:4px}
+.modal-body textarea{min-height:70px;resize:vertical}
+.modal-foot{
+    display:flex;justify-content:space-between;align-items:center;padding:16px 24px;
+    border-top:1px solid var(--line);gap:10px;flex-wrap:wrap;
+}
+.relance-row{display:flex;align-items:center;gap:10px;font-size:12px;color:var(--muted);font-weight:600}
+
+/* Add form */
+.add-form{
+    background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);
+    padding:16px 18px;box-shadow:var(--sh-sm);margin-bottom:20px;
+    display:grid;grid-template-columns:1fr 1fr 1fr 140px auto;gap:10px;align-items:end;
+}
+.add-form .f-label{margin-bottom:5px}
 
 @media(max-width:860px){
     .side{display:none}
     .kpi-row{grid-template-columns:1fr}
     .inf-grid{grid-template-columns:1fr}
+    .modal-body{grid-template-columns:1fr}
+    .add-form{grid-template-columns:1fr}
 }
 </style>
 </head>
@@ -172,9 +219,9 @@ input{font-family:inherit}
                 <div class="brand-sub">Admin</div>
             </div>
         </div>
-        <div class="nav-label">Pilotage</div>
-        <div class="nav-item active">📋 Tous les influenceurs</div>
-        <a href="/influenceurs" class="nav-item">⚙️ Back-office complet</a>
+        <div class="nav-item active">📋 Ambassadeurs</div>
+        <div class="nav-label">Outils avancés</div>
+        <a href="/influenceurs" class="nav-item">🎬 Vidéos &amp; export CSV</a>
         <div class="side-foot">
             <a href="/influenceurs/logout" class="logout-link">🚪 Déconnexion</a>
         </div>
@@ -184,12 +231,10 @@ input{font-family:inherit}
         <div class="topline">
             <div class="hello">
                 <h1>Ambassadeurs</h1>
-                <p>Vue d'ensemble de ton programme — clique sur un influenceur pour ouvrir son espace.</p>
+                <p>Gère tout ton programme depuis ici — ajoute, suis, ouvre l'espace de chacun.</p>
             </div>
             <div class="toolbar">
-                <div class="search-box">
-                    🔍 <input type="text" id="searchInput" placeholder="Rechercher un influenceur...">
-                </div>
+                <div class="search-box">🔍 <input type="text" id="searchInput" placeholder="Rechercher..."></div>
                 <button class="btn" id="syncBtn" onclick="triggerSync()">🔄 Sync Shopify</button>
             </div>
         </div>
@@ -197,82 +242,235 @@ input{font-family:inherit}
         <div class="sync-banner" id="syncBanner"></div>
 
         <div class="kpi-row">
-            <div class="kpi">
-                <div class="kpi-label">Influenceurs</div>
-                <div class="kpi-value" id="kpiCount">—</div>
-            </div>
-            <div class="kpi">
-                <div class="kpi-label">Ventes cumulées</div>
-                <div class="kpi-value" id="kpiSales">—</div>
-            </div>
-            <div class="kpi">
-                <div class="kpi-label">Commissions cumulées</div>
-                <div class="kpi-value" id="kpiCommission">—</div>
-            </div>
+            <div class="kpi"><div class="kpi-label">Influenceurs</div><div class="kpi-value" id="kpiCount">—</div></div>
+            <div class="kpi"><div class="kpi-label">Ventes cumulées</div><div class="kpi-value" id="kpiSales">—</div></div>
+            <div class="kpi"><div class="kpi-label">Commissions cumulées</div><div class="kpi-value" id="kpiCommission">—</div></div>
         </div>
 
-        <div class="inf-grid" id="infGrid">
-            <div class="empty-state">Chargement…</div>
+        <div class="add-form">
+            <div><label class="f-label">Pseudo</label><input class="f-input" id="addPseudo" placeholder="ex: SoJourd"></div>
+            <div><label class="f-label">Lien profil</label><input class="f-input" id="addProfil" placeholder="TikTok/Insta/Snap"></div>
+            <div><label class="f-label">WhatsApp</label><input class="f-input" id="addWhatsapp" placeholder="+33..."></div>
+            <div>
+                <label class="f-label">Plateforme</label>
+                <select id="addPlatform" class="f-input">
+                    <option value="">—</option>
+                    <option value="TikTok">TikTok</option>
+                    <option value="Instagram">Instagram</option>
+                    <option value="Snapchat">Snapchat</option>
+                    <option value="YouTube">YouTube</option>
+                </select>
+            </div>
+            <button class="btn primary" onclick="addInfluenceur()">+ Ajouter</button>
         </div>
+
+        <div class="pipeline" id="pipelineRow"></div>
+
+        <div class="inf-grid" id="infGrid"><div class="empty-state">Chargement…</div></div>
     </div>
 </div>
 
-<!-- Modal édition rapide -->
+<div class="save-indicator" id="saveIndicator"></div>
+
+<!-- Modal fiche complète -->
 <div class="modal-overlay" id="editModal">
     <div class="modal">
-        <h3 id="editModalTitle">Modifier</h3>
-        <label>Code promo Shopify</label>
-        <input type="text" id="editPromoCode" placeholder="ex: SJD15" style="text-transform:uppercase;font-weight:700">
-        <label>Date de départ programme</label>
-        <input type="date" id="editStartDate">
-        <div class="modal-actions">
-            <button class="btn" onclick="closeEditModal()">Annuler</button>
-            <button class="btn primary" onclick="saveEdit()">Enregistrer</button>
+        <div class="modal-head">
+            <h3 id="modalTitle">Fiche influenceur</h3>
+            <button class="modal-close" onclick="closeModal()">✕</button>
+        </div>
+        <div class="modal-body">
+            <div>
+                <label class="f-label">Statut</label>
+                <select class="f-input" id="fStatus"></select>
+            </div>
+            <div>
+                <label class="f-label">Plateforme</label>
+                <select class="f-input" id="fPlatform">
+                    <option value="">—</option>
+                    <option value="TikTok">TikTok</option>
+                    <option value="Instagram">Instagram</option>
+                    <option value="Snapchat">Snapchat</option>
+                    <option value="YouTube">YouTube</option>
+                </select>
+            </div>
+
+            <div class="full">
+                <label class="f-label">Code promo Shopify</label>
+                <input class="f-input" id="fPromoCode" style="text-transform:uppercase;font-weight:700" placeholder="ex: SJD15">
+            </div>
+            <div>
+                <label class="f-label">Date de départ programme</label>
+                <input class="f-input" type="date" id="fStartDate">
+                <div class="f-hint">Ventes comptées à partir de cette date. Vide = tout l'historique.</div>
+            </div>
+            <div>
+                <label class="f-label">Ventes cumulées</label>
+                <input class="f-input" id="fSales" readonly>
+            </div>
+
+            <div>
+                <label class="f-label">Contrepartie</label>
+                <select class="f-input" id="fDeal">
+                    <option value="">—</option>
+                    <option value="gifting">Gifting</option>
+                    <option value="paye">Payé</option>
+                </select>
+            </div>
+            <div>
+                <label class="f-label">Montant (si payé)</label>
+                <input class="f-input" id="fDealAmount" placeholder="ex: 50€">
+            </div>
+
+            <div>
+                <label class="f-label">Quota de contenu</label>
+                <input class="f-input" id="fQuota" placeholder="ex: 1 unboxing + 2 playback">
+            </div>
+            <div>
+                <label class="f-label">Deadline contenu</label>
+                <input class="f-input" type="date" id="fDeadline">
+            </div>
+
+            <div>
+                <label class="f-label">Numéro de suivi colis</label>
+                <input class="f-input" id="fTracking" placeholder="Numéro de suivi">
+            </div>
+            <div>
+                <label class="f-label">Statut colis</label>
+                <select class="f-input" id="fTrackingStatus">
+                    <option value="">—</option>
+                    <option value="prepare">Préparé</option>
+                    <option value="envoye">Envoyé</option>
+                    <option value="livre">Livré</option>
+                    <option value="probleme">Problème</option>
+                </select>
+            </div>
+
+            <div class="full">
+                <label class="f-label">Adresse de livraison</label>
+                <input class="f-input" id="fAddress" placeholder="Adresse complète">
+            </div>
+            <div class="full">
+                <label class="f-label">Notes</label>
+                <textarea class="f-input" id="fNotes" placeholder="Notes libres..."></textarea>
+            </div>
+        </div>
+        <div class="modal-foot">
+            <div class="relance-row">
+                <span id="relanceInfo"></span>
+                <button class="btn sm" onclick="relancer()">📨 Relancer</button>
+            </div>
+            <div style="display:flex;gap:8px">
+                <button class="btn danger sm" onclick="deleteCurrentInfluenceur()">🗑 Supprimer</button>
+                <button class="btn sm" id="openEspaceBtn" onclick="openCurrentEspace()">↗ Ouvrir l'espace</button>
+                <button class="btn primary sm" onclick="saveModal()">Enregistrer</button>
+            </div>
         </div>
     </div>
 </div>
 
 <script>
-let ALL_INFLUENCEURS = [];
-let EDIT_TARGET_ID = null;
+const STATUSES = ["À contacter","Contacté","En négociation","Accord","Colis envoyé","Livré","Contenu en cours","Terminé"];
+const RELANCE_THRESHOLD = {1:4, 2:5, 3:3, 4:7, 5:7, 6:10};
+const TIERS = [
+    {id:'decouverte', name:'Découverte', icon:'⭐', color:'#94A3B8', sales:0},
+    {id:'partenaire', name:'Partenaire', icon:'🔥', color:'#6366F1', sales:10},
+    {id:'ambassadeur',name:'Ambassadeur',icon:'💎', color:'#C9A227', sales:30},
+    {id:'vip',        name:'VIP',        icon:'👑', color:'#F59E0B', sales:60},
+];
+
+let influenceurs = [];
+let dataVersion = 0;
+let saveTimer = null;
+let filterStatus = '';
+let currentEditId = null;
 
 function esc(s){ return String(s??'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function genId(){ return 'inf_'+Date.now()+'_'+Math.random().toString(36).slice(2,9); }
 function initials(name){
-    const parts = String(name||'').trim().split(/\s+/);
+    const parts = String(name||'?').trim().split(/\s+/);
     return (parts[0]?.[0]||'?').toUpperCase() + (parts[1]?.[0]||'').toUpperCase();
 }
 function fmtEuro(v){ return '€' + Math.round(v||0).toLocaleString('fr-FR'); }
-function fmtDateTime(iso){
-    if(!iso) return null;
-    const d = new Date(iso);
-    if(isNaN(d.getTime())) return null;
-    return d.toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit'}) + ' à ' + d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
+function daysSince(iso){
+    const t = new Date(iso).getTime();
+    if(isNaN(t)) return 0;
+    return Math.max(0, Math.floor((Date.now()-t)/86400000));
+}
+function getTier(sales){
+    let t = TIERS[0];
+    for(const tier of TIERS){ if(sales >= tier.sales) t = tier; }
+    return t;
+}
+function urgencyLevel(inf){
+    if(inf.status===7) return 'ok';
+    if(inf.trackingStatus==='probleme') return 'urgent';
+    const threshold = RELANCE_THRESHOLD[inf.status];
+    if(threshold===undefined) return 'ok';
+    const days = daysSince(inf.lastContact);
+    if(days >= threshold) return 'urgent';
+    if(days >= threshold-2) return 'warn';
+    return 'ok';
+}
+
+function normalize(i){
+    const nowIso = new Date().toISOString();
+    return {
+        id: i.id || genId(),
+        pseudo: i.pseudo||'', profil: i.profil||'', whatsapp: i.whatsapp||'', platform: i.platform||'',
+        status: (typeof i.status==='number' && i.status>=0 && i.status<=7) ? i.status : 0,
+        lastContact: i.lastContact || nowIso, lastModified: i.lastModified || nowIso, addedAt: i.addedAt || nowIso,
+        relances: i.relances||0, relanceHistory: Array.isArray(i.relanceHistory)?i.relanceHistory:[],
+        tracking: i.tracking||'', trackingStatus: i.trackingStatus||'',
+        deal: i.deal||'', dealAmount: i.dealAmount||'', deadline: i.deadline||'', address: i.address||'', quota: i.quota||'',
+        videos: Array.isArray(i.videos)?i.videos:[], notes: i.notes||'', promo_code: i.promo_code||'',
+        stats_sales: i.stats_sales||0, stats_sales_month: i.stats_sales_month||0,
+        stats_revenue: i.stats_revenue||0, stats_revenue_month: i.stats_revenue_month||0,
+        stats_commission: (i.stats && i.stats.commission) || 0,
+        _espace_url: i._espace_url||'', program_start_date: i.program_start_date||'', last_synced_at: i.last_synced_at||''
+    };
 }
 
 async function load(){
     try{
-        const r = await fetch('/api/admin/influenceurs-summary');
+        const r = await fetch('/api/influenceurs');
         const d = await r.json();
-        ALL_INFLUENCEURS = d.influenceurs || [];
-        document.getElementById('kpiCount').textContent = d.totals?.count ?? 0;
-        document.getElementById('kpiSales').textContent = d.totals?.sales ?? 0;
-        document.getElementById('kpiCommission').textContent = fmtEuro(d.totals?.commission ?? 0);
-        render();
-    }catch(e){
-        document.getElementById('infGrid').innerHTML = '<div class="empty-state">Erreur de chargement. Réessaie.</div>';
-    }
+        influenceurs = (d.influenceurs||[]).map(normalize);
+        dataVersion = d.version || 0;
+    }catch(e){ influenceurs = []; dataVersion = 0; }
+    renderAll();
 }
 
-function render(){
+function renderAll(){
+    const totalSales = influenceurs.reduce((s,i)=>s+(i.stats_sales||0),0);
+    const totalCommission = influenceurs.reduce((s,i)=>s+ (i.stats_commission||0), 0);
+    document.getElementById('kpiCount').textContent = influenceurs.length;
+    document.getElementById('kpiSales').textContent = totalSales;
+    document.getElementById('kpiCommission').textContent = fmtEuro(totalCommission);
+    renderPipeline();
+    renderGrid();
+}
+
+function renderPipeline(){
+    const counts = {};
+    influenceurs.forEach(i => counts[i.status] = (counts[i.status]||0)+1);
+    let html = `<div class="chip ${filterStatus===''?'active':''}" onclick="setFilterStatus('')">Tous <span class="n">${influenceurs.length}</span></div>`;
+    STATUSES.forEach((label, idx) => {
+        const n = counts[idx] || 0;
+        html += `<div class="chip ${filterStatus===String(idx)?'active':''}" onclick="setFilterStatus('${idx}')">${esc(label)} <span class="n">${n}</span></div>`;
+    });
+    document.getElementById('pipelineRow').innerHTML = html;
+}
+
+function setFilterStatus(v){ filterStatus = v; renderGrid(); renderPipeline(); }
+
+function renderGrid(){
     const query = (document.getElementById('searchInput').value || '').toLowerCase().trim();
+    let list = influenceurs;
+    if(filterStatus !== '') list = list.filter(i => String(i.status) === filterStatus);
+    if(query) list = list.filter(i => (i.pseudo||'').toLowerCase().includes(query) || (i.promo_code||'').toLowerCase().includes(query));
+
     const grid = document.getElementById('infGrid');
-    let list = ALL_INFLUENCEURS;
-    if(query){
-        list = list.filter(i =>
-            (i.pseudo||'').toLowerCase().includes(query) ||
-            (i.promo_code||'').toLowerCase().includes(query)
-        );
-    }
     if(list.length === 0){
         grid.innerHTML = '<div class="empty-state">Aucun influenceur trouvé.</div>';
         return;
@@ -281,91 +479,211 @@ function render(){
 }
 
 function cardHtml(inf){
-    const t = inf.tier;
-    const hasNext = !!t.next_name;
-    const lastSync = fmtDateTime(inf.last_synced_at);
+    const t = getTier(inf.stats_sales||0);
+    const nextIdx = TIERS.indexOf(t) + 1;
+    const next = TIERS[nextIdx];
+    const urgency = urgencyLevel(inf);
+    const espaceUrl = inf._espace_url || '';
     return `
-    <div class="inf-card">
+    <div class="inf-card" onclick="openModal('${esc(inf.id)}')">
         <div class="inf-top">
             <div class="inf-avatar">${esc(initials(inf.pseudo))}</div>
             <div>
-                <div class="inf-name">${esc(inf.pseudo)}</div>
+                <div class="inf-name">${esc(inf.pseudo||'Sans nom')}</div>
                 <div class="inf-platform">${esc(inf.platform || '—')}</div>
             </div>
+            <div class="urgency-dot ${urgency}" title="${urgency}"></div>
         </div>
+
+        <span class="status-pill">${esc(STATUSES[inf.status] || '—')}</span>
 
         <div>
             <span class="tier-badge" style="background:${t.color}22;color:${t.color}">${t.icon} ${esc(t.name)}</span>
-            ${hasNext ? `
-            <div class="mini-track"><div class="mini-fill" style="width:${t.progress_pct}%"></div></div>
-            <div class="mini-label"><span>${inf.sales} ventes</span><span>${esc(t.next_name)} à ${t.next_sales}</span></div>
-            ` : `<div class="mini-label" style="margin-top:6px">${inf.sales} ventes cumulées</div>`}
+            ${next ? `
+            <div class="mini-track"><div class="mini-fill" style="width:${Math.min(100, Math.round((inf.stats_sales-t.sales)/(next.sales-t.sales)*100))}%"></div></div>
+            <div class="mini-label"><span>${inf.stats_sales||0} ventes</span><span>${esc(next.name)} à ${next.sales}</span></div>
+            ` : `<div class="mini-label" style="margin-top:6px">${inf.stats_sales||0} ventes cumulées</div>`}
         </div>
 
         <div class="inf-stats">
-            <div>
-                <div class="inf-stat-label">Ce mois</div>
-                <div class="inf-stat-value">${inf.sales_month}</div>
-            </div>
-            <div>
-                <div class="inf-stat-label">CA net</div>
-                <div class="inf-stat-value">${fmtEuro(inf.revenue)}</div>
-            </div>
-            <div>
-                <div class="inf-stat-label">Commissions</div>
-                <div class="inf-stat-value">${fmtEuro(inf.commission)}</div>
-            </div>
+            <div><div class="inf-stat-label">Ce mois</div><div class="inf-stat-value">${inf.stats_sales_month||0}</div></div>
+            <div><div class="inf-stat-label">CA net</div><div class="inf-stat-value">${fmtEuro(inf.stats_revenue||0)}</div></div>
+            <div><div class="inf-stat-label">Commissions</div><div class="inf-stat-value">${fmtEuro(inf.stats_commission||0)}</div></div>
         </div>
 
         ${inf.promo_code
-            ? `<div class="promo-row">🏷️ ${esc(inf.promo_code)}${lastSync ? `<span style="margin-left:auto;font-family:inherit;font-weight:600;font-size:10.5px;color:var(--muted)">Sync ${lastSync}</span>` : ''}</div>`
-            : `<div class="promo-row empty">⚠️ Aucun code promo renseigné</div>`
+            ? `<div class="promo-row">🏷️ ${esc(inf.promo_code)}</div>`
+            : `<div class="promo-row empty">⚠️ Pas de code promo</div>`
         }
 
-        <div class="inf-actions">
-            <button class="btn" onclick="openEditModal('${esc(inf.id)}')">✏️ Modifier</button>
-            <button class="btn primary" onclick="window.open('${esc(inf.espace_url)}','_blank')">↗ Ouvrir l'espace</button>
+        <div class="inf-actions" onclick="event.stopPropagation()">
+            <button class="btn" onclick="openModal('${esc(inf.id)}')">✏️ Modifier</button>
+            <button class="btn primary" ${!espaceUrl?'disabled':''} onclick="window.open('${esc(espaceUrl)}','_blank')">↗ Ouvrir l'espace</button>
         </div>
     </div>`;
 }
 
-function openEditModal(id){
-    const inf = ALL_INFLUENCEURS.find(i => i.id === id);
+function find(id){ return influenceurs.find(i => i.id === id); }
+
+// ── Ajout ──────────────────────────────────────────────────────────────
+function addInfluenceur(){
+    const p = document.getElementById('addPseudo').value.trim();
+    const prof = document.getElementById('addProfil').value.trim();
+    const wa = document.getElementById('addWhatsapp').value.trim();
+    const plat = document.getElementById('addPlatform').value;
+    if(!p && !prof && !wa){ alert("Remplis au moins un champ avant d'ajouter."); return; }
+    const nowIso = new Date().toISOString();
+    influenceurs.unshift(normalize({pseudo:p, profil:prof, whatsapp:wa, platform:plat, status:0, addedAt:nowIso, lastContact:nowIso, lastModified:nowIso}));
+    document.getElementById('addPseudo').value='';
+    document.getElementById('addProfil').value='';
+    document.getElementById('addWhatsapp').value='';
+    document.getElementById('addPlatform').value='';
+    renderAll();
+    scheduleSave();
+}
+
+// ── Modal fiche ────────────────────────────────────────────────────────
+function openModal(id){
+    const inf = find(id);
     if(!inf) return;
-    EDIT_TARGET_ID = id;
-    document.getElementById('editModalTitle').textContent = `Modifier ${inf.pseudo}`;
-    document.getElementById('editPromoCode').value = inf.promo_code || '';
-    document.getElementById('editStartDate').value = inf.program_start_date || '';
+    currentEditId = id;
+    document.getElementById('modalTitle').textContent = inf.pseudo || 'Fiche influenceur';
+
+    const statusSel = document.getElementById('fStatus');
+    statusSel.innerHTML = STATUSES.map((s,i) => `<option value="${i}" ${i===inf.status?'selected':''}>${esc(s)}</option>`).join('');
+
+    document.getElementById('fPlatform').value = inf.platform || '';
+    document.getElementById('fPromoCode').value = inf.promo_code || '';
+    document.getElementById('fStartDate').value = inf.program_start_date || '';
+    document.getElementById('fSales').value = `${inf.stats_sales||0} ventes cumulées`;
+    document.getElementById('fDeal').value = inf.deal || '';
+    document.getElementById('fDealAmount').value = inf.dealAmount || '';
+    document.getElementById('fQuota').value = inf.quota || '';
+    document.getElementById('fDeadline').value = inf.deadline || '';
+    document.getElementById('fTracking').value = inf.tracking || '';
+    document.getElementById('fTrackingStatus').value = inf.trackingStatus || '';
+    document.getElementById('fAddress').value = inf.address || '';
+    document.getElementById('fNotes').value = inf.notes || '';
+
+    const relCount = inf.relances || 0;
+    document.getElementById('relanceInfo').textContent = relCount > 0 ? `${relCount} relance(s) envoyée(s)` : 'Aucune relance';
+    document.getElementById('openEspaceBtn').disabled = !inf._espace_url;
+
     document.getElementById('editModal').classList.add('open');
 }
 
-function closeEditModal(){
+function closeModal(){
     document.getElementById('editModal').classList.remove('open');
-    EDIT_TARGET_ID = null;
+    currentEditId = null;
 }
 
-async function saveEdit(){
-    if(!EDIT_TARGET_ID) return;
-    const promo_code = document.getElementById('editPromoCode').value.trim();
-    const program_start_date = document.getElementById('editStartDate').value;
+function saveModal(){
+    const inf = find(currentEditId);
+    if(!inf) return;
+    const newStatus = parseInt(document.getElementById('fStatus').value);
+    const statusChanged = newStatus !== inf.status;
+    inf.status = newStatus;
+    inf.platform = document.getElementById('fPlatform').value;
+    inf.promo_code = document.getElementById('fPromoCode').value.trim().toUpperCase();
+    inf.program_start_date = document.getElementById('fStartDate').value;
+    inf.deal = document.getElementById('fDeal').value;
+    inf.dealAmount = document.getElementById('fDealAmount').value;
+    inf.quota = document.getElementById('fQuota').value;
+    inf.deadline = document.getElementById('fDeadline').value;
+    inf.tracking = document.getElementById('fTracking').value;
+    inf.trackingStatus = document.getElementById('fTrackingStatus').value;
+    inf.address = document.getElementById('fAddress').value;
+    inf.notes = document.getElementById('fNotes').value;
+
+    const nowIso = new Date().toISOString();
+    inf.lastModified = nowIso;
+    if(statusChanged) inf.lastContact = nowIso;
+
+    closeModal();
+    renderAll();
+    scheduleSave();
+}
+
+function relancer(){
+    const inf = find(currentEditId);
+    if(!inf) return;
+    inf.relances = (inf.relances||0) + 1;
+    const nowIso = new Date().toISOString();
+    inf.lastContact = nowIso;
+    inf.lastModified = nowIso;
+    if(!Array.isArray(inf.relanceHistory)) inf.relanceHistory = [];
+    inf.relanceHistory.push(nowIso);
+    document.getElementById('relanceInfo').textContent = `${inf.relances} relance(s) envoyée(s)`;
+    renderAll();
+    scheduleSave();
+}
+
+function deleteCurrentInfluenceur(){
+    if(!currentEditId) return;
+    if(!confirm('Supprimer cet influenceur ? Cette action est irréversible.')) return;
+    influenceurs = influenceurs.filter(i => i.id !== currentEditId);
+    closeModal();
+    renderAll();
+    scheduleSave();
+}
+
+function openCurrentEspace(){
+    const inf = find(currentEditId);
+    if(inf && inf._espace_url) window.open(inf._espace_url, '_blank');
+}
+
+// ── Sauvegarde (debounced + versioning, identique au back-office historique) ──
+function scheduleSave(){
+    showSaveIndicator('💾 Sauvegarde…');
+    if(saveTimer) clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => doSave(false), 700);
+}
+
+async function doSave(force){
     try{
-        const r = await fetch(`/api/admin/influenceur/${EDIT_TARGET_ID}/quick-update`, {
-            method: 'POST',
-            headers: {'Content-Type':'application/json'},
-            body: JSON.stringify({promo_code, program_start_date})
+        const r = await fetch('/api/influenceurs', {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({influenceurs, base_version: dataVersion, force: !!force})
         });
+        if(r.status === 409){
+            const d = await r.json();
+            if(confirm("Un autre onglet a modifié les données entre-temps. Forcer l'enregistrement de tes changements ?")){
+                dataVersion = d.server_version;
+                doSave(true);
+            }else{
+                influenceurs = (d.server_influenceurs || []).map(normalize);
+                dataVersion = d.server_version;
+                renderAll();
+                showSaveIndicator('⚠️ Rechargé (conflit)', false);
+            }
+            return;
+        }
         const d = await r.json();
         if(d.success){
-            closeEditModal();
-            await load();
+            dataVersion = d.version || dataVersion;
+            showSaveIndicator('✅ Enregistré', true);
         }else{
-            alert(d.error || 'Erreur lors de la sauvegarde');
+            showSaveIndicator('❌ Erreur — nouvelle tentative…', false);
+            setTimeout(() => doSave(force), 3000);
         }
     }catch(e){
-        alert('Erreur réseau');
+        showSaveIndicator('❌ Erreur réseau', false);
+        setTimeout(() => doSave(force), 3000);
     }
 }
 
+let saveIndicatorTimeout = null;
+function showSaveIndicator(text, autoHide){
+    const el = document.getElementById('saveIndicator');
+    el.textContent = text;
+    el.classList.add('show');
+    if(saveIndicatorTimeout) clearTimeout(saveIndicatorTimeout);
+    if(autoHide){
+        saveIndicatorTimeout = setTimeout(() => el.classList.remove('show'), 2000);
+    }
+}
+
+// ── Sync Shopify ──────────────────────────────────────────────────────
 function _showSyncBanner(msg, kind){
     const el = document.getElementById('syncBanner');
     el.style.display = 'block';
@@ -399,8 +717,8 @@ async function triggerSync(){
     }
 }
 
-document.getElementById('searchInput').addEventListener('input', render);
-document.getElementById('editModal').addEventListener('click', e => { if(e.target.id === 'editModal') closeEditModal(); });
+document.getElementById('searchInput').addEventListener('input', renderGrid);
+document.getElementById('editModal').addEventListener('click', e => { if(e.target.id === 'editModal') closeModal(); });
 
 load();
 </script>
