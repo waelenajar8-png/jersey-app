@@ -3606,6 +3606,9 @@ def api_influ_videos_delete():
 #
 # Coûts maillots (tarif dégressif) : 2 = 25,52€ | 4 = 44€ | 6 = 62€
 BASE_COMMISSION_PCT = 10  # commission plancher, tous paliers confondus
+GIFTING_MIN_SALES   = 10  # ventes minimum dans le mois pour déclencher l'envoi
+                          # des maillots : évite de payer 44€ ou 62€ de gifting
+                          # sur un mois où l'influenceur n'a rien produit.
 
 INFLUENCER_TIERS = [
     {
@@ -3755,58 +3758,79 @@ def _compute_monthly_commission(inf, stats):
     """
     Rémunération du mois calendaire en cours.
 
-    Règle : commission de base (10% des ventes nettes du mois) par défaut.
-    Si le palier atteint prévoit un fixe ET que l'influenceur atteint le seuil
-    mensuel de ce palier, le fixe remplace la commission. Seuil sec : à 9 ventes
-    pour un seuil de 10, c'est la commission qui s'applique, sans proratisation.
+    Barème universel : on calcule tous les montants auxquels l'influenceur a
+    droit ce mois-ci, et on retient le plus élevé.
+      - la commission de base (10% des ventes nettes du mois) ;
+      - chaque fixe dont le seuil mensuel est atteint (50€ / 150€ / 350€).
+    Seuils secs, sans proratisation : 29 ventes donnent la commission, 30
+    donnent le fixe de 150€.
 
-    Le palier lui-même est acquis à vie (voir _compute_tier_progress) : un mois
-    faible ne fait jamais redescendre, il donne juste la commission ce mois-là.
+    Le palier (Découverte → VIP) est acquis à vie et ne conditionne pas ce
+    montant : il détermine le titre, les avantages et le gifting. Un mois
+    faible ne fait donc jamais redescendre, il donne juste la commission.
 
     Retourne : type, amount, rate, threshold, sales_month, missing, next_gain.
     """
-    tier_idx, _, _, _ = _compute_tier_progress(stats)
-    tier = INFLUENCER_TIERS[tier_idx]
-
     sales_month   = _safe_int(stats.get("sales_month", 0))
     revenue_month = _safe_float(stats.get("revenue_month", 0))
 
     commission = round(revenue_month * BASE_COMMISSION_PCT / 100, 2)
 
-    threshold = tier.get("monthly_threshold")
-    fixed     = tier.get("monthly_fixed")
+    # Tous les paliers porteurs d'un fixe, du plus bas seuil au plus haut.
+    steps = sorted(
+        [(t["monthly_threshold"], float(t["monthly_fixed"]))
+         for t in INFLUENCER_TIERS
+         if t.get("monthly_threshold") and t.get("monthly_fixed")],
+        key=lambda s: s[0],
+    )
 
-    # Palier sans fixe (Découverte) : commission simple.
-    if not threshold or not fixed:
+    # Meilleur fixe débloqué ce mois-ci + prochain palier à atteindre.
+    best_fixed, best_threshold = None, None
+    next_threshold, next_fixed = None, None
+    for threshold, fixed in steps:
+        if sales_month >= threshold:
+            if best_fixed is None or fixed > best_fixed:
+                best_fixed, best_threshold = fixed, threshold
+        elif next_threshold is None:
+            next_threshold, next_fixed = threshold, fixed
+
+    missing = (next_threshold - sales_month) if next_threshold else 0
+
+    # On verse toujours le plus avantageux pour l'influenceur.
+    if best_fixed is not None and best_fixed >= commission:
         return {
-            "type": "percent", "amount": commission, "rate": BASE_COMMISSION_PCT,
-            "threshold": None, "sales_month": sales_month, "missing": 0,
-            "next_gain": None, "warning": None,
+            "type": "fixed", "amount": best_fixed, "rate": BASE_COMMISSION_PCT,
+            "threshold": best_threshold, "next_threshold": next_threshold,
+            "sales_month": sales_month, "missing": missing, "next_gain": next_fixed,
+            "beats_fixed": False, "warning": None,
         }
 
-    # Seuil mensuel atteint : le fixe s'applique — mais jamais au détriment de
-    # l'influenceur. S'il dépasse largement le seuil, sa commission peut valoir
-    # plus que le fixe ; on retient alors le plus avantageux des deux, sinon
-    # monter de palier reviendrait à plafonner sa rémunération.
-    if sales_month >= threshold:
-        if commission > fixed:
-            return {
-                "type": "percent", "amount": commission, "rate": BASE_COMMISSION_PCT,
-                "threshold": threshold, "sales_month": sales_month, "missing": 0,
-                "next_gain": None, "beats_fixed": True, "warning": None,
-            }
-        return {
-            "type": "fixed", "amount": float(fixed), "rate": BASE_COMMISSION_PCT,
-            "threshold": threshold, "sales_month": sales_month, "missing": 0,
-            "next_gain": None, "beats_fixed": False, "warning": None,
-        }
-
-    # Sous le seuil : commission, et on indique ce qu'il manque pour le fixe.
-    missing = threshold - sales_month
     return {
         "type": "percent", "amount": commission, "rate": BASE_COMMISSION_PCT,
-        "threshold": threshold, "sales_month": sales_month, "missing": missing,
-        "next_gain": float(fixed), "warning": None,
+        "threshold": best_threshold, "next_threshold": next_threshold,
+        "sales_month": sales_month, "missing": missing, "next_gain": next_fixed,
+        "beats_fixed": best_fixed is not None, "warning": None,
+    }
+
+
+def _monthly_gifting(stats):
+    """
+    Gifting du mois : les maillots ne partent que si l'influenceur a été actif
+    (seuil GIFTING_MIN_SALES). Sans ce garde-fou, un palier haut coûte plus en
+    maillots qu'il ne rapporte pendant un mois creux.
+    Retourne : jerseys, cost, unlocked, missing, threshold.
+    """
+    tier_idx, _, _, _ = _compute_tier_progress(stats)
+    tier = INFLUENCER_TIERS[tier_idx]
+    sales_month = _safe_int(stats.get("sales_month", 0))
+    unlocked = sales_month >= GIFTING_MIN_SALES
+    return {
+        "jerseys":   tier["monthly_jerseys"] if unlocked else 0,
+        "cost":      tier["jersey_cost"] if unlocked else 0.0,
+        "unlocked":  unlocked,
+        "missing":   max(0, GIFTING_MIN_SALES - sales_month),
+        "threshold": GIFTING_MIN_SALES,
+        "tier_jerseys": tier["monthly_jerseys"],
     }
 
 
@@ -3873,6 +3897,7 @@ def _espace_payload(inf):
             "commission":    float(stats.get("commission", 0) or 0),
         },
         "commission_month": _compute_monthly_commission(inf, stats),
+        "gifting_month": _monthly_gifting(stats),
         "tier": {
             "current": current_tier,
             "next": next_tier,
