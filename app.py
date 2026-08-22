@@ -138,10 +138,15 @@ def upscale_image_fal(img_b64, max_retries=30):
     return None
 from datetime import datetime, timezone, timedelta
 from concurrent.futures import ThreadPoolExecutor
-from flask import Flask, render_template, request, Response, jsonify
+from flask import Flask, render_template, request, Response, jsonify, session, redirect
+from functools import wraps
 from botocore.config import Config
 
 app = Flask(__name__)
+app.secret_key = os.environ.get("FLASK_SECRET_KEY") or os.urandom(32)
+# NB: sans FLASK_SECRET_KEY défini sur Railway, une clé aléatoire est générée
+# au démarrage — ça déconnecte tout le monde à chaque redéploiement. Pour des
+# sessions qui survivent aux redéploiements, définis FLASK_SECRET_KEY.
 
 # ── Cache flocages chargé au démarrage ─────────────────────────────────────
 # (sera initialisé au premier appel si pas encore chargé)
@@ -2859,6 +2864,57 @@ INFLUENCEURS_BACKUP_PREFIX = "meta/influenceurs_backups/"
 INFLUENCEURS_BACKUP_KEEP = 5  # nombre de sauvegardes de secours conservées
 _influenceurs_lock = threading.Lock()
 
+# ══════════════════════════════════════════════════════════════════════════════
+# ACCÈS ADMIN — protège /influenceurs (back-office) par mot de passe.
+# Les espaces publics /espace/<slug> restent accessibles sans authentification
+# (ce sont les liens envoyés aux influenceurs).
+# ══════════════════════════════════════════════════════════════════════════════
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
+
+
+def _is_admin():
+    return session.get("is_admin") is True
+
+
+def _require_admin_page(view_func):
+    @wraps(view_func)
+    def wrapper(*args, **kwargs):
+        if not _is_admin():
+            return render_template("admin_login.html", error=None,
+                                    configured=bool(ADMIN_PASSWORD))
+        return view_func(*args, **kwargs)
+    return wrapper
+
+
+def _require_admin_api(view_func):
+    @wraps(view_func)
+    def wrapper(*args, **kwargs):
+        if not _is_admin():
+            return jsonify({"success": False, "error": "Non authentifié"}), 401
+        return view_func(*args, **kwargs)
+    return wrapper
+
+
+@app.route("/influenceurs/login", methods=["POST"])
+def influenceurs_login():
+    if not ADMIN_PASSWORD:
+        return render_template("admin_login.html",
+                                error="ADMIN_PASSWORD non configuré côté serveur.",
+                                configured=False)
+    password = (request.form.get("password") or "").strip()
+    if password and password == ADMIN_PASSWORD:
+        session["is_admin"] = True
+        session.permanent = True
+        return redirect("/influenceurs")
+    return render_template("admin_login.html", error="Mot de passe incorrect.",
+                            configured=True)
+
+
+@app.route("/influenceurs/logout")
+def influenceurs_logout():
+    session.pop("is_admin", None)
+    return redirect("/influenceurs")
+
 def _safe_int(v, default=0):
     try: return int(float(v))
     except (TypeError, ValueError): return default
@@ -3170,6 +3226,7 @@ else:
 
 
 @app.route("/api/influenceurs/sync-shopify", methods=["POST"])
+@_require_admin_api
 def api_sync_shopify():
     """Déclenche une synchronisation manuelle immédiate depuis le back-office."""
     if not _shopify_configured():
@@ -3181,6 +3238,7 @@ def api_sync_shopify():
 
 
 @app.route("/api/influenceurs/sync-shopify/status", methods=["GET"])
+@_require_admin_api
 def api_sync_shopify_status():
     """Retourne l'état de la dernière synchronisation (pour affichage admin)."""
     return jsonify({
@@ -3190,9 +3248,11 @@ def api_sync_shopify_status():
 
 
 @app.route("/influenceurs")
+@_require_admin_page
 def influenceurs_page(): return render_template("influenceurs.html")
 
 @app.route("/api/influenceurs", methods=["GET"])
+@_require_admin_api
 def api_get_influenceurs():
     """Retourne la liste complète des influenceurs depuis R2 + le numéro de version."""
     try:
@@ -3226,6 +3286,7 @@ def api_get_influenceurs():
         return jsonify({"influenceurs": [], "version": 0, "updated_at": ""})
 
 @app.route("/api/influenceurs", methods=["POST"])
+@_require_admin_api
 def api_save_influenceurs():
     """
     Sauvegarde la liste complète des influenceurs dans R2.
@@ -3309,6 +3370,7 @@ def api_save_influenceurs():
         return jsonify({"success": False, "error": str(e)}), 500
 
 @app.route("/api/influenceurs/backups", methods=["GET"])
+@_require_admin_api
 def api_influenceurs_backups():
     """Liste les sauvegardes de secours disponibles (pour récupération manuelle)."""
     try:
@@ -3328,6 +3390,7 @@ def api_influenceurs_backups():
         return jsonify({"backups": [], "error": str(e)})
 
 @app.route("/api/influenceurs/restore", methods=["POST"])
+@_require_admin_api
 def api_influenceurs_restore():
     """Restaure une sauvegarde de secours (devient la version courante)."""
     try:
@@ -3377,6 +3440,7 @@ def _save_influ_videos(videos):
         return False
 
 @app.route("/api/influenceurs/videos", methods=["GET"])
+@_require_admin_api
 def api_influ_videos_list():
     """Liste toutes les vidéos (pour la bibliothèque globale) ou celles d'un influenceur."""
     influ_id = request.args.get("influ_id")
@@ -3392,6 +3456,7 @@ def api_influ_videos_list():
     return jsonify({"videos": videos})
 
 @app.route("/api/influenceurs/videos/upload", methods=["POST"])
+@_require_admin_api
 def api_influ_videos_upload():
     """Upload un fichier vidéo vers R2 + enregistre les métadonnées."""
     f = request.files.get("video")
@@ -3457,6 +3522,7 @@ def api_influ_videos_upload():
     return jsonify({"success": True, "video": out})
 
 @app.route("/api/influenceurs/videos/update", methods=["POST"])
+@_require_admin_api
 def api_influ_videos_update():
     """Met à jour les métadonnées d'une vidéo (type, lien, statut ads)."""
     payload = request.json or {}
@@ -3482,6 +3548,7 @@ def api_influ_videos_update():
     return jsonify({"success": True})
 
 @app.route("/api/influenceurs/videos/delete", methods=["POST"])
+@_require_admin_api
 def api_influ_videos_delete():
     """Supprime une vidéo (fichier R2 + métadonnées)."""
     vid_id = (request.json or {}).get("id")
@@ -3887,6 +3954,7 @@ def api_espace_link(slug):
     return jsonify({"url": request.host_url.rstrip("/") + "/espace/" + slug})
 
 @app.route("/api/influenceurs/slugs")
+@_require_admin_api
 def api_influenceurs_slugs():
     """Liste des slugs publics (back-office : récupérer le lien de chaque influenceur)."""
     try:
