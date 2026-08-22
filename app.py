@@ -3590,26 +3590,34 @@ def api_influ_videos_delete():
 # ══════════════════════════════════════════════════════════════════════════════
 
 # ── Configuration des paliers ──────────────────────────────────────────────
-# Critère unique : ventes CUMULÉES depuis le début de la collaboration.
-# Rémunération :
-#   - Découverte / Partenaire : commission % sur ventes nettes (panier moyen ~38€)
-#   - Ambassadeur / VIP       : fixe mensuel (versé si l'influenceur maintient
-#                               son seuil de ventes sur le mois calendaire)
-# Gifting : maillots floqués envoyés chaque mois tant que le palier est maintenu.
-# Coûts maillots indicatifs (prix dégressif) :
-#   2 maillots = 25,52€ | 4 maillots = 44€ | 6 maillots = 62€
+# Le palier est déterminé par les ventes CUMULÉES et reste ACQUIS À VIE :
+# un influenceur ne redescend jamais, même après un mois faible.
+#
+# Rémunération, évaluée chaque mois calendaire :
+#   - Par défaut, il touche sa commission de base (10% des ventes nettes du mois).
+#   - Si son palier a un fixe ET qu'il atteint le seuil mensuel de ce palier,
+#     le fixe remplace la commission (seuil sec, pas de proratisation).
+#
+# Économie sous-jacente (panier moyen net 38€) :
+#   38,00 − 16,39 (produit) − 4,56 (URSSAF 12%) − 4,75 (crédit 12,5%)
+#        − 0,82 (Shopify 1,5% + 0,25€) = 11,48€ de marge disponible par vente.
+#   Le hold Shopify de 10% n'est pas déduit : c'est de la trésorerie décalée,
+#   pas une charge — elle revient intégralement.
+#
+# Coûts maillots (tarif dégressif) : 2 = 25,52€ | 4 = 44€ | 6 = 62€
+BASE_COMMISSION_PCT = 10  # commission plancher, tous paliers confondus
+
 INFLUENCER_TIERS = [
     {
         "id": "decouverte",
         "name": "Découverte",
         "icon": "⭐",
         "color": "#94A3B8",
-        # Palier de départ — acquis d'office, aucune vente requise.
-        # C'est une mise de départ : on envoie 2 maillots sans garantie de ventes.
+        # Acquis d'office. Mise de départ : 2 maillots sans garantie de ventes.
         "requirements": {"sales": 0},
-        "commission_type": "percent",   # "percent" | "fixed"
-        "commission_value": 10,         # 10% sur ventes nettes
-        "monthly_jerseys": 2,           # maillots envoyés chaque mois
+        "monthly_threshold": None,      # aucun fixe à ce palier
+        "monthly_fixed": None,
+        "monthly_jerseys": 2,
         "jersey_cost": 25.52,
         "perks": [
             "2 maillots floqués offerts",
@@ -3622,14 +3630,15 @@ INFLUENCER_TIERS = [
         "name": "Partenaire",
         "icon": "🔥",
         "color": "#6366F1",
-        "requirements": {"sales": 10},  # 10 ventes cumulées
-        "commission_type": "percent",
-        "commission_value": 15,         # 15% sur ventes nettes
+        "requirements": {"sales": 10},   # 10 ventes cumulées pour entrer
+        "monthly_threshold": 10,         # 10 ventes dans le mois → fixe
+        "monthly_fixed": 50,
         "monthly_jerseys": 2,
         "jersey_cost": 25.52,
         "perks": [
             "2 maillots floqués par mois",
-            "Commission augmentée à 15%",
+            "50€ garantis dès 10 ventes dans le mois",
+            "10% de commission les autres mois",
             "Accès anticipé aux nouveautés",
         ],
     },
@@ -3638,14 +3647,15 @@ INFLUENCER_TIERS = [
         "name": "Ambassadeur",
         "icon": "💎",
         "color": "#C9A227",
-        "requirements": {"sales": 30},  # 30 ventes cumulées
-        "commission_type": "fixed",
-        "commission_value": 150,        # 150€ fixe/mois (proratisé si < seuil)
+        "requirements": {"sales": 30},
+        "monthly_threshold": 30,
+        "monthly_fixed": 150,
         "monthly_jerseys": 4,
         "jersey_cost": 44.0,
         "perks": [
             "4 maillots floqués par mois",
-            "Rémunération fixe 150€/mois",
+            "150€ garantis dès 30 ventes dans le mois",
+            "10% de commission les autres mois",
             "Mise en avant sur nos comptes",
         ],
     },
@@ -3654,14 +3664,15 @@ INFLUENCER_TIERS = [
         "name": "VIP",
         "icon": "👑",
         "color": "#F59E0B",
-        "requirements": {"sales": 60},  # 60 ventes cumulées
-        "commission_type": "fixed",
-        "commission_value": 400,        # 400€ fixe/mois (proratisé si < seuil)
+        "requirements": {"sales": 60},
+        "monthly_threshold": 60,
+        "monthly_fixed": 350,
         "monthly_jerseys": 6,
         "jersey_cost": 62.0,
         "perks": [
             "6 maillots floqués par mois",
-            "Rémunération fixe 400€/mois",
+            "350€ garantis dès 60 ventes dans le mois",
+            "10% de commission les autres mois",
             "Avantages exclusifs & accès direct",
             "Avant-première nouveautés Volakits",
         ],
@@ -3742,52 +3753,62 @@ def _compute_tier_progress(stats):
 
 def _compute_monthly_commission(inf, stats):
     """
-    Calcule la rémunération du mois courant selon le palier.
-    - Paliers % (Découverte / Partenaire) : commission sur ventes nettes du mois.
-    - Paliers fixes (Ambassadeur / VIP)   : fixe proratisé si l'influenceur
-      est proche du seuil mensuel minimum (tolérance -20%).
-      En dessous de cette tolérance → il redescend au palier inférieur.
-    Retourne un dict avec type, montant, et éventuellement un avertissement.
+    Rémunération du mois calendaire en cours.
+
+    Règle : commission de base (10% des ventes nettes du mois) par défaut.
+    Si le palier atteint prévoit un fixe ET que l'influenceur atteint le seuil
+    mensuel de ce palier, le fixe remplace la commission. Seuil sec : à 9 ventes
+    pour un seuil de 10, c'est la commission qui s'applique, sans proratisation.
+
+    Le palier lui-même est acquis à vie (voir _compute_tier_progress) : un mois
+    faible ne fait jamais redescendre, il donne juste la commission ce mois-là.
+
+    Retourne : type, amount, rate, threshold, sales_month, missing, next_gain.
     """
     tier_idx, _, _, _ = _compute_tier_progress(stats)
     tier = INFLUENCER_TIERS[tier_idx]
 
-    sales_month  = int(stats.get("sales_month", 0) or 0)
-    revenue_month = float(stats.get("revenue_month", 0) or 0)
+    sales_month   = _safe_int(stats.get("sales_month", 0))
+    revenue_month = _safe_float(stats.get("revenue_month", 0))
 
-    commission_type  = tier.get("commission_type", "percent")
-    commission_value = tier.get("commission_value", 0)
+    commission = round(revenue_month * BASE_COMMISSION_PCT / 100, 2)
 
-    if commission_type == "percent":
-        amount = round(revenue_month * commission_value / 100, 2)
-        return {"type": "percent", "rate": commission_value, "amount": amount, "warning": None}
+    threshold = tier.get("monthly_threshold")
+    fixed     = tier.get("monthly_fixed")
 
-    # Palier fixe : vérifier maintien
-    req_sales = tier.get("requirements", {}).get("sales", 0)
-    # Seuil mensuel minimum = seuil de ventes mensuelles attendu pour ce palier
-    # On utilise le seuil du palier précédent comme référence mensuelle minimum
-    # Le seuil mensuel de maintien = le seuil de ventes CUMULÉES qui a permis
-    # d'atteindre ce palier (ex: Ambassadeur → 30 ventes/mois attendues, pas 10)
-    monthly_min = req_sales
-    tolerance   = round(monthly_min * 0.8)  # -20% de tolérance
-
-    if sales_month < tolerance:
-        # Trop loin du seuil → redescente signalée
+    # Palier sans fixe (Découverte) : commission simple.
+    if not threshold or not fixed:
         return {
-            "type": "fixed", "rate": commission_value, "amount": 0,
-            "warning": f"Ventes insuffisantes ce mois ({sales_month} ventes). Palier à risque."
+            "type": "percent", "amount": commission, "rate": BASE_COMMISSION_PCT,
+            "threshold": None, "sales_month": sales_month, "missing": 0,
+            "next_gain": None, "warning": None,
         }
 
-    # Proratisation si entre tolérance et seuil plein
-    if sales_month < monthly_min:
-        ratio  = sales_month / monthly_min
-        amount = round(commission_value * ratio, 2)
+    # Seuil mensuel atteint : le fixe s'applique — mais jamais au détriment de
+    # l'influenceur. S'il dépasse largement le seuil, sa commission peut valoir
+    # plus que le fixe ; on retient alors le plus avantageux des deux, sinon
+    # monter de palier reviendrait à plafonner sa rémunération.
+    if sales_month >= threshold:
+        if commission > fixed:
+            return {
+                "type": "percent", "amount": commission, "rate": BASE_COMMISSION_PCT,
+                "threshold": threshold, "sales_month": sales_month, "missing": 0,
+                "next_gain": None, "beats_fixed": True, "warning": None,
+            }
         return {
-            "type": "fixed_prorated", "rate": commission_value, "amount": amount,
-            "warning": f"Fixe proratisé ({sales_month}/{monthly_min} ventes ce mois)."
+            "type": "fixed", "amount": float(fixed), "rate": BASE_COMMISSION_PCT,
+            "threshold": threshold, "sales_month": sales_month, "missing": 0,
+            "next_gain": None, "beats_fixed": False, "warning": None,
         }
 
-    return {"type": "fixed", "rate": commission_value, "amount": commission_value, "warning": None}
+    # Sous le seuil : commission, et on indique ce qu'il manque pour le fixe.
+    missing = threshold - sales_month
+    return {
+        "type": "percent", "amount": commission, "rate": BASE_COMMISSION_PCT,
+        "threshold": threshold, "sales_month": sales_month, "missing": missing,
+        "next_gain": float(fixed), "warning": None,
+    }
+
 
 def _espace_payload(inf):
     """Construit toutes les données affichées dans l'espace influenceur."""
