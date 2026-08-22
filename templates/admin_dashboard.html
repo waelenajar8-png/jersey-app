@@ -308,6 +308,15 @@ input,select,textarea{font-family:inherit}
                 <label class="f-label">Ventes cumulées</label>
                 <input class="f-input" id="fSales" readonly>
             </div>
+            <div>
+                <label class="f-label">Ventes de référence (avant Shopify)</label>
+                <input class="f-input" id="fBaselineSales" type="number" min="0" placeholder="0">
+                <div class="f-hint">Shopify ne donne accès qu'aux ventes des 60 derniers jours. Mets ici ses ventes ANTÉRIEURES à cette fenêtre (une fois) — la sync ajoute automatiquement le reste.</div>
+            </div>
+            <div class="full">
+                <label class="f-label">CA net de référence (€, avant Shopify)</label>
+                <input class="f-input" id="fBaselineRevenue" type="number" min="0" step="0.01" placeholder="0.00">
+            </div>
 
             <div>
                 <label class="f-label">Contrepartie</label>
@@ -427,6 +436,7 @@ function normalize(i){
         stats_sales: i.stats_sales||0, stats_sales_month: i.stats_sales_month||0,
         stats_revenue: i.stats_revenue||0, stats_revenue_month: i.stats_revenue_month||0,
         stats_commission: (i.stats && i.stats.commission) || 0,
+        baseline_sales: i.baseline_sales || 0, baseline_revenue: i.baseline_revenue || 0,
         _espace_url: i._espace_url||'', program_start_date: i.program_start_date||'', last_synced_at: i.last_synced_at||''
     };
 }
@@ -556,6 +566,8 @@ function openModal(id){
     document.getElementById('fPromoCode').value = inf.promo_code || '';
     document.getElementById('fStartDate').value = inf.program_start_date || '';
     document.getElementById('fSales').value = `${inf.stats_sales||0} ventes cumulées`;
+    document.getElementById('fBaselineSales').value = inf.baseline_sales || 0;
+    document.getElementById('fBaselineRevenue').value = inf.baseline_revenue || 0;
     document.getElementById('fDeal').value = inf.deal || '';
     document.getElementById('fDealAmount').value = inf.dealAmount || '';
     document.getElementById('fQuota').value = inf.quota || '';
@@ -586,6 +598,8 @@ function saveModal(){
     inf.platform = document.getElementById('fPlatform').value;
     inf.promo_code = document.getElementById('fPromoCode').value.trim().toUpperCase();
     inf.program_start_date = document.getElementById('fStartDate').value;
+    inf.baseline_sales = parseInt(document.getElementById('fBaselineSales').value) || 0;
+    inf.baseline_revenue = parseFloat(document.getElementById('fBaselineRevenue').value) || 0;
     inf.deal = document.getElementById('fDeal').value;
     inf.dealAmount = document.getElementById('fDealAmount').value;
     inf.quota = document.getElementById('fQuota').value;
