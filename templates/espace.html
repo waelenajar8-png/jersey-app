@@ -42,15 +42,13 @@
     --gold:#C9A227;    --gold-soft:#FBF5E3;
 
     /* Traits */
-    --line:#EAECF3;
-    --line-2:#DFE3EE;
+    --line:#EDEEF3;
+    --line-2:#E4E6EF;
 
     /* Ombres */
-    --sh-xs:0 1px 2px rgba(11,16,32,.04);
-    --sh-sm:0 1px 3px rgba(11,16,32,.05),0 1px 2px rgba(11,16,32,.03);
-    --sh-md:0 4px 16px rgba(11,16,32,.06),0 1px 4px rgba(11,16,32,.04);
-    --sh-lg:0 12px 32px rgba(11,16,32,.09),0 2px 8px rgba(11,16,32,.04);
-    --sh-accent:0 8px 24px rgba(79,70,229,.22);
+    /* Plus aucune ombre : la hiérarchie vient de l'espace et de la
+       typographie. Les variables restent pour ne rien casser ailleurs. */
+    --sh-xs:none; --sh-sm:none; --sh-md:none; --sh-lg:none; --sh-accent:none;
 
     /* Rayons */
     --r-sm:10px; --r:14px; --r-lg:20px; --r-xl:26px;
@@ -67,10 +65,8 @@ body{
 a{color:inherit;text-decoration:none}
 button{font-family:inherit;cursor:pointer;border:none;background:none}
 input,select{font-family:inherit}
-
 /* ── Layout ─────────────────────────────────────────────────────────────── */
 .shell{display:flex;min-height:100vh}
-
 /* ── Sidebar (sombre) ───────────────────────────────────────────────────── */
 .side{
     width:250px;flex-shrink:0;background:var(--sidebar);color:var(--on-dark);
@@ -85,8 +81,7 @@ input,select{font-family:inherit}
 }
 .brand-name{font-size:15.5px;font-weight:800;letter-spacing:-.02em}
 .brand-sub{font-size:10.5px;color:var(--on-dark-dim);font-weight:600;letter-spacing:.08em;text-transform:uppercase}
-
-.side-user{
+.side-user{background:none!important;padding-left:8px!important;padding-right:8px!important;
     display:flex;align-items:center;gap:11px;padding:11px;margin-bottom:18px;
     background:var(--sidebar-2);border-radius:var(--r);
 }
@@ -97,7 +92,6 @@ input,select{font-family:inherit}
 .side-user-info{min-width:0;flex:1}
 .side-user-name{font-size:13.5px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .side-user-tier{font-size:11px;color:var(--on-dark-dim);font-weight:600;display:flex;align-items:center;gap:4px}
-
 .nav-group{margin-bottom:16px}
 .nav-label{
     font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;
@@ -109,238 +103,103 @@ input,select{font-family:inherit}
     transition:background .16s,color .16s;width:100%;text-align:left;
 }
 .nav-item:hover{background:rgba(255,255,255,.05);color:var(--on-dark)}
-.nav-item.active{background:var(--accent);color:#fff;box-shadow:0 4px 14px rgba(79,70,229,.35)}
+.nav-item.active{background:var(--accent);color:#fff;box-shadow:none}
 .nav-ico{width:17px;height:17px;flex-shrink:0;stroke-width:1.9}
 .nav-badge{
     margin-left:auto;background:rgba(255,255,255,.14);font-size:10.5px;font-weight:800;
     padding:1px 7px;border-radius:20px;
 }
 .nav-item.active .nav-badge{background:rgba(255,255,255,.25)}
-
 .side-foot{margin-top:auto;padding:14px 10px 0;border-top:1px solid rgba(255,255,255,.07)}
 .side-help{font-size:11.5px;color:var(--on-dark-dim);line-height:1.6}
 .side-help a{color:#A5B4FC;font-weight:600}
-
 /* ── Contenu ────────────────────────────────────────────────────────────── */
-.main{flex:1;min-width:0;padding:26px 30px 60px}
+.main{flex:1;min-width:0;padding:44px 40px 90px}
+.wrap{max-width:860px;margin:0 auto}
 .topline{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;margin-bottom:26px;flex-wrap:wrap}
 .hello h1{font-size:27px;font-weight:800;letter-spacing:-.03em;line-height:1.15}
 .hello p{color:var(--muted);font-size:14px;font-weight:500;margin-top:5px}
-.tier-pill{
-    display:inline-flex;align-items:center;gap:8px;padding:9px 15px;border-radius:100px;
-    background:var(--surface);border:1px solid var(--line);box-shadow:var(--sh-sm);
-    font-size:13px;font-weight:700;
-}
 .tier-pill .dot{width:8px;height:8px;border-radius:50%}
-
 /* ── Cartes ─────────────────────────────────────────────────────────────── */
-.card{
-    background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);
-    box-shadow:var(--sh-sm);padding:22px;
-}
-.card-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px}
-.card-title{font-size:15px;font-weight:800;letter-spacing:-.02em;display:flex;align-items:center;gap:9px}
-.card-title .ico-box{
-    width:28px;height:28px;border-radius:8px;background:var(--accent-soft);
-    display:grid;place-items:center;color:var(--accent);flex-shrink:0;
-}
+/* Une « carte » n'est plus qu'une section : l'espace la délimite, pas un cadre. */
+.card{background:none;border:none;border-radius:0;box-shadow:none;padding:0}
+.card + .card{margin-top:40px}
+.card-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:18px}
+.card-title{font-size:17px;font-weight:700;letter-spacing:-.025em;display:flex;align-items:center;gap:9px}
+/* L'icône n'a plus de carré coloré derrière elle. */
+.card-title .ico-box{width:auto;height:auto;background:none;color:var(--faint);display:none}
 .card-sub{font-size:12.5px;color:var(--muted);font-weight:500}
-
 /* ── Grilles ────────────────────────────────────────────────────────────── */
 .grid{display:grid;gap:16px}
-.g-kpi{grid-template-columns:repeat(4,1fr)}
-.g-main{grid-template-columns:1.55fr 1fr;align-items:start}
 .g-2{grid-template-columns:1fr 1fr}
+/* ══ Accueil ═══════════════════════════════════════════════════════════════
+   Page continue, sans carte ni ombre. La hiérarchie tient à trois choses :
+   l'échelle typographique, le rythme vertical, et un accent violet rare.
+   ═════════════════════════════════════════════════════════════════════════ */
 
-/* ── KPI ────────────────────────────────────────────────────────────────── */
-.kpi{
-    background:var(--surface);border:1px solid var(--line);border-radius:var(--r);
-    padding:17px 18px;box-shadow:var(--sh-xs);position:relative;overflow:hidden;
+/* Rythme : une seule valeur d'écart entre sections. */
+.sec + .sec{margin-top:52px}
+/* Filet employé seulement quand la séparation doit être explicite. */
+.rule{height:1px;background:var(--line);margin:28px 0}
+/* — Ligne de statut : une phrase, pas un bloc — */
+.line-status{
+    font-size:13px;font-weight:600;color:var(--muted);
+    display:flex;align-items:center;gap:9px;flex-wrap:wrap;
 }
-.kpi-ico{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;margin-bottom:11px}
-.kpi-label{font-size:11.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
-.kpi-value{font-size:25px;font-weight:800;letter-spacing:-.035em;margin-top:3px;line-height:1.1}
-.kpi-note{font-size:11.5px;color:var(--faint);font-weight:600;margin-top:3px}
-
-/* ══ Accueil — nouvelle hiérarchie ═════════════════════════════════════════
-   1 bandeau de statut · 2 bloc « ce mois » · 3 action suivante
-   4 bande de chiffres · 5 secondaire allégé
-   ════════════════════════════════════════════════════════════════════════ */
-
-/* 1 — Bandeau de statut : compact, informatif, pas un hero */
-.status{
-    display:flex;align-items:center;gap:22px;flex-wrap:wrap;
-    background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);
-    box-shadow:var(--sh-xs);padding:16px 20px;
+.line-status b{color:var(--ink);font-weight:700}
+.line-status .sep{width:3px;height:3px;border-radius:50%;background:var(--line-2);flex-shrink:0}
+/* — Le montant : seul élément volumineux de la page — */
+.amount{
+    font-size:56px;font-weight:700;letter-spacing:-.045em;line-height:1;
+    margin-top:14px;font-variant-numeric:tabular-nums;
 }
-.status-id{display:flex;align-items:center;gap:11px;min-width:0}
-.status-badge{
-    width:38px;height:38px;border-radius:11px;display:grid;place-items:center;
-    font-size:17px;flex-shrink:0;
+.amount-note{font-size:14px;color:var(--muted);font-weight:500;margin-top:10px}
+/* — Déblocage : une mesure, pas un objet graphique — */
+.unlock-line{display:flex;justify-content:space-between;align-items:baseline;gap:16px}
+.unlock-need{font-size:14px;font-weight:600}
+.unlock-reward{font-size:14px;font-weight:600;color:var(--accent);text-align:right}
+.meter{height:2px;background:var(--line-2);border-radius:2px;margin-top:20px;overflow:hidden}
+.meter-fill{
+    height:100%;background:var(--accent);border-radius:2px;width:0;
+    transition:width .9s cubic-bezier(.2,.8,.2,1);
 }
-.status-tier{font-size:16px;font-weight:800;letter-spacing:-.028em;line-height:1.2}
-.status-next{font-size:12px;color:var(--muted);font-weight:600;margin-top:1px}
-.status-prog{flex:1;min-width:190px}
-.status-line{height:6px;background:var(--line);border-radius:100px;overflow:hidden}
-.status-fill{
-    height:100%;border-radius:100px;background:linear-gradient(90deg,#818CF8,#C084FC);
-    width:0;transition:width 1s cubic-bezier(.2,.8,.2,1);
+.unlock-foot{font-size:12px;color:var(--faint);font-weight:500;margin-top:10px}
+.unlock-done{font-size:13.5px;color:var(--ok);font-weight:600}
+/* — Action suivante : une ligne cliquable, sans cadre — */
+.act{
+    display:flex;align-items:center;gap:16px;padding:16px 0;
+    cursor:pointer;border-top:1px solid var(--line);border-bottom:1px solid var(--line);
+    transition:opacity .15s;
 }
-.status-meta{
-    display:flex;justify-content:space-between;font-size:11.5px;font-weight:600;
-    color:var(--muted);margin-top:7px;
+.act:hover{opacity:.62}
+.act-body{flex:1;min-width:0}
+.act-kicker{font-size:12px;font-weight:600;color:var(--accent)}
+.act-label{font-size:16px;font-weight:700;letter-spacing:-.02em;margin-top:3px}
+.act-desc{font-size:13.5px;color:var(--muted);font-weight:500;margin-top:2px}
+.act-go{color:var(--faint);flex-shrink:0;display:grid;place-items:center}
+.act-go svg{width:16px;height:16px;stroke-width:2}
+.act.is-done .act-kicker{color:var(--ok)}
+/* — Chiffres : alignés sur une grille, sans contenant — */
+.stats-row{display:grid;grid-template-columns:repeat(3,1fr);gap:28px}
+.stat-k{font-size:12px;font-weight:600;color:var(--muted)}
+.stat-v{
+    font-size:22px;font-weight:700;letter-spacing:-.03em;margin-top:7px;
+    font-variant-numeric:tabular-nums;line-height:1.15;
 }
-.status-meta b{color:var(--text);font-weight:800}
-.status-max{font-size:12.5px;color:var(--muted);font-weight:600}
-
-/* 2 — Bloc « ce mois » : le seul élément avec du poids visuel */
-.month{
-    background:linear-gradient(150deg,#141A3D 0%,#232A5C 55%,#2E2472 100%);
-    color:#fff;border-radius:var(--r-xl);box-shadow:var(--sh-lg);
-    position:relative;overflow:hidden;margin-top:16px;
+/* — Secondaire : deux colonnes séparées par un filet — */
+.minor{display:grid;grid-template-columns:1fr 1fr;gap:48px}
+.minor > div + div{padding-left:48px;border-left:1px solid var(--line);margin-left:-24px}
+.minor-title{font-size:12px;font-weight:600;color:var(--muted);margin-bottom:14px}
+.promo-code-l{
+    font-family:'JetBrains Mono',ui-monospace,monospace;
+    font-size:23px;font-weight:700;letter-spacing:.05em;line-height:1;
+    background:none;border:none;padding:0;cursor:pointer;color:var(--ink);
+    transition:color .15s;
 }
-.month::before{
-    content:'';position:absolute;inset:0;pointer-events:none;
-    background:radial-gradient(680px 240px at 88% -20%,rgba(124,58,237,.45),transparent 65%);
-}
-.month-in{position:relative;z-index:1;display:flex;flex-wrap:wrap}
-.month-pay{padding:26px 28px;flex:1;min-width:230px}
-.month-eyebrow{
-    font-size:10.5px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;color:#A5B4FC;
-}
-.month-amount{font-size:44px;font-weight:800;letter-spacing:-.045em;line-height:1.05;margin-top:10px}
-.month-basis{font-size:13px;color:#C3CAE8;font-weight:500;margin-top:6px}
-
-/* Récompenses : filets internes, pas de cartes empilées */
-.month-rewards{
-    flex:1.15;min-width:250px;padding:26px 28px;
-    border-left:1px solid rgba(255,255,255,.1);
-    display:flex;flex-direction:column;justify-content:center;gap:16px;
-}
-.unlock-head{display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin-bottom:9px}
-.unlock-need{font-size:13.5px;font-weight:700}
-.unlock-reward{font-size:13.5px;font-weight:800;color:#C4B5FD;text-align:right}
-.unlock-bar{height:7px;background:rgba(255,255,255,.13);border-radius:100px;overflow:hidden}
-.unlock-fill{
-    height:100%;border-radius:100px;background:linear-gradient(90deg,#818CF8,#C084FC);
-    box-shadow:0 0 16px rgba(147,124,255,.6);width:0;
-    transition:width 1.1s cubic-bezier(.2,.8,.2,1);
-}
-.unlock-foot{font-size:11.5px;color:#98A2C0;font-weight:600;margin-top:8px}
-.got{display:flex;flex-wrap:wrap;gap:7px}
-.got-chip{
-    display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;
-    padding:6px 12px;border-radius:100px;
-    background:rgba(52,211,153,.16);color:#6EE7B7;border:1px solid rgba(52,211,153,.24);
-}
-.got-chip svg{width:12px;height:12px;stroke-width:2.6}
-
-/* 3 — Action suivante : une seule, présentée comme une action */
-.next-act{
-    display:flex;align-items:center;gap:15px;margin-top:16px;padding:17px 20px;
-    background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);
-    box-shadow:var(--sh-xs);cursor:pointer;
-    transition:border-color .2s var(--ease,ease),box-shadow .2s var(--ease,ease),transform .2s var(--ease,ease);
-}
-.next-act:hover{border-color:var(--accent);box-shadow:var(--sh-md);transform:translateY(-1px)}
-.next-ico{
-    width:38px;height:38px;border-radius:11px;background:var(--accent-soft);color:var(--accent);
-    display:grid;place-items:center;flex-shrink:0;
-}
-.next-body{flex:1;min-width:0}
-.next-eyebrow{
-    font-size:10px;font-weight:800;letter-spacing:.11em;text-transform:uppercase;color:var(--accent);
-}
-.next-label{font-size:14.5px;font-weight:800;letter-spacing:-.02em;margin-top:3px}
-.next-desc{font-size:12.5px;color:var(--muted);font-weight:500;margin-top:1px}
-.next-go{color:var(--faint);flex-shrink:0;display:grid;place-items:center}
-.next-go svg{width:17px;height:17px;stroke-width:2.2}
-.next-act:hover .next-go{color:var(--accent)}
-.next-done .next-ico{background:var(--ok-soft);color:var(--ok)}
-.next-done .next-eyebrow{color:var(--ok)}
-
-/* 4 — Bande de chiffres : un contenant, des séparateurs */
-.figures{
-    display:flex;margin-top:16px;background:var(--surface);
-    border:1px solid var(--line);border-radius:var(--r-lg);box-shadow:var(--sh-xs);overflow:hidden;
-}
-.fig{flex:1;padding:17px 22px;position:relative;min-width:0}
-.fig + .fig::before{
-    content:'';position:absolute;left:0;top:18px;bottom:18px;width:1px;background:var(--line);
-}
-.fig-label{
-    font-size:10.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;
-}
-.fig-value{font-size:26px;font-weight:800;letter-spacing:-.04em;margin-top:5px;line-height:1}
-.fig-note{font-size:11.5px;color:var(--faint);font-weight:600;margin-top:3px}
-
-/* 5 — Secondaire : traitement volontairement plus léger */
-.aside-grid{display:grid;grid-template-columns:1fr 1.15fr;gap:16px;margin-top:16px;align-items:start}
-.soft{
-    background:var(--surface-2,#FBFCFE);border:1px solid var(--line);
-    border-radius:var(--r-lg);padding:20px;
-}
-.soft-title{
-    font-size:11px;font-weight:800;letter-spacing:.09em;text-transform:uppercase;
-    color:var(--muted);margin-bottom:14px;
-}
-.code-big{
-    font-size:26px;font-weight:800;letter-spacing:.06em;line-height:1;
-    color:var(--accent);font-family:'JetBrains Mono',ui-monospace,monospace;
-}
-.code-note{font-size:12px;color:var(--muted);font-weight:600;margin-top:7px}
-
-@media(max-width:1000px){
-    .aside-grid{grid-template-columns:1fr}
-}
-
-/* ── Progression (signature) ────────────────────────────────────────────── */
-.prog-card{
-    background:linear-gradient(150deg,#141A3D 0%,#232A5C 55%,#2E2472 100%);
-    color:#fff;border:none;position:relative;overflow:hidden;padding:26px;
-    border-radius:var(--r-xl);box-shadow:var(--sh-lg);
-}
-.prog-card::before{
-    content:'';position:absolute;inset:0;
-    background:radial-gradient(700px 240px at 88% -18%,rgba(124,58,237,.5),transparent 65%);
-    pointer-events:none;
-}
-.prog-card::after{
-    content:'';position:absolute;right:-70px;bottom:-95px;width:250px;height:250px;
-    border-radius:50%;border:1.5px solid rgba(255,255,255,.07);pointer-events:none;
-}
-.prog-inner{position:relative;z-index:1}
-.prog-eyebrow{
-    font-size:10.5px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;
-    color:#A5B4FC;margin-bottom:9px;
-}
-.prog-tier{font-size:31px;font-weight:800;letter-spacing:-.035em;line-height:1.1;display:flex;align-items:center;gap:11px}
-.prog-goal{font-size:13.5px;color:#C3CAE8;font-weight:500;margin-top:7px}
-.prog-goal b{color:#fff;font-weight:700}
-
-.track{margin-top:22px}
-.track-top{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:9px}
-.track-from{font-size:12px;font-weight:700;color:#C3CAE8}
-.track-pct{font-size:19px;font-weight:800;letter-spacing:-.02em}
-.track-bar{height:9px;background:rgba(255,255,255,.13);border-radius:100px;overflow:hidden;position:relative}
-.track-fill{
-    height:100%;border-radius:100px;
-    background:linear-gradient(90deg,#818CF8,#C084FC);
-    box-shadow:0 0 18px rgba(147,124,255,.65);
-    transition:width 1.1s cubic-bezier(.2,.8,.2,1);width:0;
-}
-.track-to{font-size:12px;font-weight:700;color:#fff;text-align:right;margin-top:9px}
-
-.reqs{display:grid;grid-template-columns:repeat(3,1fr);gap:11px;margin-top:22px}
-.req{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.09);border-radius:var(--r);padding:13px 14px}
-.req-label{font-size:10.5px;font-weight:700;color:#A9B2D6;text-transform:uppercase;letter-spacing:.05em}
-.req-val{font-size:16.5px;font-weight:800;margin-top:4px;letter-spacing:-.02em}
-.req-val small{font-size:11.5px;color:#98A2C0;font-weight:600}
-.req-bar{height:4px;background:rgba(255,255,255,.13);border-radius:100px;margin-top:8px;overflow:hidden}
-.req-fill{height:100%;background:#818CF8;border-radius:100px;transition:width 1s ease .3s;width:0}
+.promo-code-l:hover{color:var(--accent)}
+.promo-hint{font-size:12.5px;color:var(--faint);font-weight:500;margin-top:9px}
 .req.done .req-fill{background:#34D399}
 .req.done .req-val{color:#6EE7B7}
-
 /* ── Timeline paliers ───────────────────────────────────────────────────── */
 .ladder{display:flex;flex-direction:column;gap:0}
 .rung{display:flex;gap:14px;position:relative;padding-bottom:20px}
@@ -366,68 +225,52 @@ input,select{font-family:inherit}
 .rung-perk{font-size:12.5px;color:var(--ink-2);font-weight:500;display:flex;gap:7px;align-items:flex-start;line-height:1.45}
 .rung-perk svg{flex-shrink:0;margin-top:2px}
 .rung:not(.reached) .rung-perk{color:var(--faint)}
-
 /* ── Missions ───────────────────────────────────────────────────────────── */
+/* Une mission est une ligne, séparée par un filet — pas une carte. */
 .mission{
-    display:flex;align-items:center;gap:13px;padding:13px 14px;border-radius:var(--r);
-    border:1px solid var(--line);background:var(--surface-2);margin-bottom:9px;
-    transition:border-color .15s,box-shadow .15s;
+    display:flex;align-items:center;gap:14px;padding:17px 0;border-radius:0;
+    border:none;border-bottom:1px solid var(--line);background:none;margin-bottom:0;
+    transition:opacity .15s;
 }
-.mission:last-child{margin-bottom:0}
-.mission:hover{border-color:var(--line-2);box-shadow:var(--sh-xs)}
-.mission.done{background:var(--ok-soft);border-color:#CDEEE1}
+.mission:last-child{border-bottom:none}
+.mission:hover{opacity:.65}
+.mission.done{background:none}
 .mission-check{
-    width:22px;height:22px;border-radius:7px;flex-shrink:0;display:grid;place-items:center;
-    border:2px solid var(--line-2);background:var(--surface);
+    width:18px;height:18px;border-radius:50%;flex-shrink:0;display:grid;place-items:center;
+    border:1.5px solid var(--line-2);background:var(--surface);
 }
 .mission.done .mission-check{background:var(--ok);border-color:var(--ok)}
 .mission-body{flex:1;min-width:0}
-.mission-label{font-size:13.5px;font-weight:700;letter-spacing:-.012em}
-.mission.done .mission-label{color:var(--ink-2)}
-.mission-desc{font-size:11.5px;color:var(--muted);font-weight:500;margin-top:1px}
-.mission-state{font-size:11px;font-weight:800;padding:4px 10px;border-radius:20px;flex-shrink:0}
-.st-done{background:var(--ok);color:#fff}
-.st-todo{background:var(--surface);color:var(--muted);border:1px solid var(--line-2)}
-
+.mission-label{font-size:14.5px;font-weight:600;letter-spacing:-.015em}
+.mission.done .mission-label{color:var(--faint);text-decoration:line-through}
+.mission-desc{font-size:12.5px;color:var(--muted);font-weight:500;margin-top:2px}
+.mission-state{font-size:12px;font-weight:500;padding:0;border-radius:0;flex-shrink:0;background:none}
+.st-done{background:none;color:var(--ok)}
+.st-todo{background:none;color:var(--faint);border:none}
 /* ── Colis / timeline ───────────────────────────────────────────────────── */
-.ship{display:flex;flex-direction:column;gap:0;margin-top:4px}
-.ship-step{display:flex;gap:13px;position:relative;padding-bottom:17px}
+.ship{display:flex;flex-direction:column;gap:0;margin-top:2px}
+.ship-step{display:flex;gap:12px;position:relative;padding-bottom:14px}
 .ship-step:last-child{padding-bottom:0}
-.ship-step::before{content:'';position:absolute;left:9px;top:22px;bottom:0;width:2px;background:var(--line-2)}
+.ship-step::before{content:'';position:absolute;left:5px;top:16px;bottom:0;width:1px;background:var(--line)}
 .ship-step:last-child::before{display:none}
 .ship-step.done::before{background:var(--ok)}
+/* Repère de 11px, pas une pastille : l'étape se lit dans le texte. */
 .ship-dot{
-    width:20px;height:20px;border-radius:50%;flex-shrink:0;border:2px solid var(--line-2);
-    background:var(--surface);display:grid;place-items:center;position:relative;z-index:1;
+    width:11px;height:11px;margin-top:5px;border-radius:50%;flex-shrink:0;
+    border:1.5px solid var(--line-2);background:var(--surface);
+    display:grid;place-items:center;position:relative;z-index:1;overflow:hidden;
 }
+.ship-dot svg{display:none}
 .ship-step.done .ship-dot{background:var(--ok);border-color:var(--ok)}
-.ship-step.current .ship-dot{border-color:var(--accent);background:var(--accent);box-shadow:0 0 0 4px var(--accent-soft)}
-.ship-label{font-size:13px;font-weight:700;padding-top:1px}
+.ship-step.current .ship-dot{border-color:var(--accent);background:var(--accent);box-shadow:none}
+.ship-label{font-size:13.5px;font-weight:500;padding-top:0}
 .ship-step:not(.done):not(.current) .ship-label{color:var(--faint)}
 .ship-date{font-size:11.5px;color:var(--muted);font-weight:500}
-
 .track-box{
-    background:var(--surface-2);border:1px dashed var(--line-2);border-radius:var(--r);
-    padding:13px 15px;margin-top:16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+    background:none;border:none;border-radius:0;
+    padding:0;margin-top:18px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;
 }
-.track-num{font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:700;letter-spacing:.02em;flex:1;min-width:120px;word-break:break-all}
-
-/* ── Code promo ─────────────────────────────────────────────────────────── */
-.promo{
-    background:linear-gradient(140deg,#F5F3FF 0%,#EEF0FE 100%);
-    border:1px solid #DDD9FE;border-radius:var(--r-lg);padding:20px;text-align:center;
-}
-.promo-label{font-size:11px;font-weight:800;color:var(--accent);text-transform:uppercase;letter-spacing:.1em}
-.promo-code{
-    font-family:'JetBrains Mono',monospace;font-size:27px;font-weight:700;letter-spacing:.05em;
-    margin:9px 0 4px;color:var(--ink);
-}
-.promo-note{font-size:12px;color:var(--muted);font-weight:500}
-.promo-stats{display:grid;grid-template-columns:1fr 1fr;gap:11px;margin-top:16px}
-.promo-stat{background:rgba(255,255,255,.75);border-radius:var(--r-sm);padding:11px}
-.promo-stat-val{font-size:17px;font-weight:800;letter-spacing:-.02em}
-.promo-stat-lbl{font-size:10.5px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.04em;margin-top:1px}
-
+.track-num{font-family:'JetBrains Mono',monospace;font-size:12.5px;font-weight:500;color:var(--muted);letter-spacing:.02em;flex:1;min-width:120px;word-break:break-all}
 /* ── Boutons ────────────────────────────────────────────────────────────── */
 .btn{
     display:inline-flex;align-items:center;justify-content:center;gap:8px;
@@ -435,35 +278,32 @@ input,select{font-family:inherit}
     background:var(--accent-grad);color:#fff;box-shadow:var(--sh-accent);
     transition:transform .16s cubic-bezier(.2,.8,.2,1),box-shadow .16s;letter-spacing:-.01em;
 }
-.btn:hover{transform:translateY(-1.5px);box-shadow:0 12px 28px rgba(79,70,229,.3)}
-.btn:active{transform:translateY(0)}
+.btn:hover{opacity:.9}
+.btn:active{opacity:1}
+/* Action secondaire : un lien, pas un bouton dessiné. */
 .btn-ghost{
-    background:var(--surface);color:var(--ink);border:1px solid var(--line-2);box-shadow:var(--sh-xs);
-    padding:9px 15px;font-size:12.5px;border-radius:10px;font-weight:700;
-    display:inline-flex;align-items:center;gap:7px;transition:border-color .15s,transform .15s;
+    background:none;color:var(--muted);border:none;box-shadow:none;padding:0;
+    font-size:13px;border-radius:0;font-weight:600;
+    display:inline-flex;align-items:center;gap:6px;transition:color .15s;
 }
-.btn-ghost:hover{border-color:var(--muted);transform:translateY(-1px)}
+.btn-ghost:hover{color:var(--accent)}
 .btn-sm{padding:7px 13px;font-size:12px;border-radius:9px}
-
 /* ── Empty state ────────────────────────────────────────────────────────── */
 .empty{text-align:center;padding:30px 18px}
 .empty-ico{
-    width:46px;height:46px;border-radius:14px;background:var(--accent-soft);color:var(--accent);
-    display:grid;place-items:center;margin:0 auto 13px;
+    width:auto;height:auto;background:none;color:var(--faint);
+    display:grid;place-items:center;margin:0 auto 10px;
 }
-.empty-title{font-size:14px;font-weight:800;letter-spacing:-.015em}
+.empty-title{font-size:14px;font-weight:700;letter-spacing:-.015em}
 .empty-text{font-size:12.5px;color:var(--muted);font-weight:500;margin:5px auto 15px;max-width:280px;line-height:1.55}
-
 /* ── Divers ─────────────────────────────────────────────────────────────── */
-.badge{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:800;padding:4px 10px;border-radius:20px}
-.b-ok{background:var(--ok-soft);color:#0A7C58}
-.b-warn{background:var(--warn-soft);color:#A66A05}
-.b-info{background:var(--info-soft);color:#1D5FD0}
-.b-muted{background:#F2F4F8;color:var(--muted)}
-
+.badge{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:600;padding:0;border-radius:0;background:none!important}
+.b-ok{color:#0A7C58}
+.b-warn{color:#A66A05}
+.b-info{color:#1D5FD0}
+.b-muted{color:var(--faint)}
 .skeleton{background:linear-gradient(90deg,#EEF0F5 25%,#F6F7FA 50%,#EEF0F5 75%);background-size:200% 100%;animation:sk 1.4s infinite;border-radius:8px}
 @keyframes sk{0%{background-position:200% 0}100%{background-position:-200% 0}}
-
 .toast{
     position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(90px);
     background:var(--ink);color:#fff;padding:12px 20px;border-radius:100px;
@@ -471,14 +311,12 @@ input,select{font-family:inherit}
     transition:transform .32s cubic-bezier(.2,.8,.2,1);
 }
 .toast.show{transform:translateX(-50%) translateY(0)}
-
 .mob-nav{display:none}
-
 /* ── Formulaire profil ──────────────────────────────────────────────────── */
 .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
 .field{display:flex;flex-direction:column;gap:6px}
 .field.full{grid-column:1/-1}
-.field label{font-size:11.5px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.field label{font-size:12px;font-weight:600;color:var(--muted);text-transform:none;letter-spacing:0}
 .field input,.field select{
     background:var(--surface-2);border:1px solid var(--line-2);border-radius:11px;
     padding:11px 13px;font-size:13.5px;font-weight:500;color:var(--ink);width:100%;
@@ -488,14 +326,15 @@ input,select{font-family:inherit}
     box-shadow:0 0 0 3px rgba(79,70,229,.08)}
 .field input::placeholder{color:var(--faint)}
 .field-hint{font-size:11px;color:var(--faint);font-weight:500}
-
-.plat-block{border:1px solid var(--line);border-radius:var(--r);padding:14px;background:var(--surface-2);margin-bottom:11px}
+/* Le groupe par réseau n'a pas besoin d'un cadre : un filet suffit.
+   Les champs, eux, gardent leur bordure — elle est fonctionnelle. */
+.plat-block{border:none;border-radius:0;padding:20px 0;background:none;margin-bottom:0;border-bottom:1px solid var(--line)}
+.plat-block:last-of-type{border-bottom:none}
 .plat-head{display:flex;align-items:center;gap:9px;margin-bottom:11px}
-.plat-ico{width:28px;height:28px;border-radius:8px;display:grid;place-items:center;font-size:14px;flex-shrink:0}
-.plat-name{font-size:13.5px;font-weight:800}
+.plat-ico{width:20px;height:20px;border-radius:0;background:none!important;display:grid;place-items:center;font-size:15px;flex-shrink:0}
+.plat-name{font-size:14px;font-weight:600}
 .plat-fields{display:grid;grid-template-columns:1fr 1fr 1fr;gap:9px}
 @media(max-width:640px){.plat-fields{grid-template-columns:1fr}.form-grid{grid-template-columns:1fr}}
-
 /* ── Sélecteur de maillots ──────────────────────────────────────────────── */
 .pick-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px;flex-wrap:wrap}
 .pick-count{font-size:12.5px;font-weight:700;padding:6px 13px;border-radius:100px;background:var(--accent-soft);color:var(--accent)}
@@ -518,7 +357,6 @@ input,select{font-family:inherit}
 .jsize:hover{border-color:var(--accent)}
 .jsize.on{background:var(--accent);border-color:var(--accent);color:#fff}
 .jsize.out{opacity:.3;cursor:not-allowed;text-decoration:line-through}
-
 .picked{display:flex;gap:11px;flex-wrap:wrap;margin-bottom:14px}
 .picked-item{display:flex;align-items:center;gap:10px;background:var(--accent-soft);border:1px solid #DDD9FE;
              border-radius:var(--r);padding:8px 13px 8px 8px}
@@ -527,22 +365,17 @@ input,select{font-family:inherit}
 .picked-size{font-size:11px;color:var(--accent);font-weight:700}
 .picked-rm{color:var(--muted);font-size:15px;cursor:pointer;padding:0 3px}
 .picked-rm:hover{color:var(--danger)}
-
 .sticky-save{position:sticky;bottom:14px;margin-top:18px;display:flex;justify-content:center;z-index:20}
 .sticky-save .btn{box-shadow:var(--sh-lg)}
 @media(max-width:860px){.sticky-save{bottom:78px}}
-
 /* ── Responsive (mobile-first pour l'espace influenceur) ────────────────── */
 @media(max-width:1060px){
     .g-main{grid-template-columns:1fr}
-    .g-kpi{grid-template-columns:repeat(2,1fr)}
 }
 @media(max-width:860px){
     .side{display:none}
     .main{padding:18px 16px 90px}
     .hello h1{font-size:22px}
-    .prog-tier{font-size:25px}
-    .reqs{grid-template-columns:1fr}
     .g-2{grid-template-columns:1fr}
     .mob-nav{
         display:flex;position:fixed;bottom:0;left:0;right:0;background:var(--sidebar);
@@ -562,117 +395,55 @@ input,select{font-family:inherit}
 @media(min-width:861px){ .mob-head{display:none} }
 @media(max-width:420px){
     .g-kpi{grid-template-columns:1fr 1fr;gap:11px}
-    .kpi-value{font-size:21px}
     .card{padding:17px}
-    .prog-card{padding:20px}
 }
 /* ══════════════════════════════════════════════════════════════════════════
-   MOBILE — mise en page pensée pour le téléphone, pas un desktop rétréci.
-   Objectif : palier, gains, déblocage, action et chiffres tous atteignables
-   sans défiler. Placé en fin de feuille pour primer sur les règles au-dessus.
+   MOBILE — même page, échelle réduite. Aucun composant spécifique : la
+   densité vient de l'absence de cadres, pas d'un traitement séparé.
    ══════════════════════════════════════════════════════════════════════════ */
 @media(max-width:860px){
-    .main{padding:13px 13px 92px}
-
-    /* En-tête : une seule ligne d'identité, compacte. */
+    .main{padding:16px 20px 96px}
+    /* En-tête : une ligne d'identité sobre, sans surface sombre. */
     .mob-head{
-        margin-bottom:13px;padding:9px 12px;gap:10px;
-        border-radius:var(--r);
+        display:flex;align-items:center;gap:11px;background:none;color:var(--ink);
+        padding:0;margin-bottom:26px;border-radius:0;
     }
     .mob-head .brand-mark{width:30px;height:30px;font-size:13px;border-radius:9px}
-    #mobName{font-size:13.5px;line-height:1.25}
-    #mobTier{font-size:11px;line-height:1.25}
-
-    /* La salutation répète le prénom déjà affiché juste au-dessus. */
+    #mobName{font-size:14.5px;font-weight:700;letter-spacing:-.02em;line-height:1.2}
+    #mobTier{font-size:12px;font-weight:500;color:var(--muted);line-height:1.3}
+    /* Le prénom est déjà juste au-dessus. */
     .topline{display:none}
-
-    /* ── Panneau unique : palier + gains + déblocage ───────────────────── */
-    /* Le dégradé est porté par le conteneur, pas par chaque section : sans ça
-       il redémarre à chaque bloc et le panneau se lit comme trois bandes. */
-    .hero{
-        border-radius:var(--r-xl);overflow:hidden;position:relative;
-        box-shadow:0 16px 40px rgba(11,16,32,.18);
-        background:linear-gradient(168deg,#141A3D 0%,#232A5C 58%,#2E2472 100%);
+    .sec + .sec{margin-top:38px}
+    .rule{margin:22px 0}
+    .amount{font-size:42px;margin-top:11px}
+    .amount-note{font-size:13.5px;margin-top:8px}
+    .line-status{font-size:12.5px}
+    .unlock-need,.unlock-reward{font-size:13.5px}
+    .unlock-line{gap:12px}
+    .act{padding:15px 0;gap:12px}
+    .act-label{font-size:15px}
+    .act-desc{font-size:13px}
+    /* Trois chiffres restent lisibles côte à côte jusqu'à 360px. */
+    .stats-row{gap:16px}
+    .stat-k{font-size:11.5px}
+    .stat-v{font-size:19px;margin-top:5px}
+    /* Le filet vertical ne tient pas en une colonne : il devient horizontal. */
+    .minor{grid-template-columns:1fr;gap:30px}
+    .minor > div + div{
+        padding-left:0;border-left:none;margin-left:0;
+        padding-top:30px;border-top:1px solid var(--line);
     }
-    .hero::before{
-        content:'';position:absolute;inset:0;pointer-events:none;
-        background:radial-gradient(520px 260px at 92% -12%,rgba(124,58,237,.42),transparent 62%);
-    }
-    .hero > *{position:relative;z-index:1}
-    .hero .status{
-        background:transparent;border:none;box-shadow:none;border-radius:0;
-        flex-direction:column;align-items:stretch;gap:11px;
-        padding:15px 17px 13px;color:#fff;
-    }
-    .hero .status-id{gap:10px}
-    .hero .status-badge{width:32px;height:32px;font-size:15px;border-radius:9px}
-    .hero .status-tier{font-size:15px;color:#fff}
-    .hero .status-next{font-size:11.5px;color:#A5B4FC}
-    .hero .status-prog{min-width:0}
-    .hero .status-line{height:5px;background:rgba(255,255,255,.15)}
-    .hero .status-meta{margin-top:6px;font-size:11.5px;color:#98A2C0}
-    .hero .status-meta b{color:#fff}
-    /* La barre exprime déjà la proportion : le pourcentage chiffré fait doublon. */
-    .hero .status-meta span:last-child{display:none}
-    .hero .status-max{font-size:12px;color:#C3CAE8}
-
-    .hero .month{
-        margin-top:0;border-radius:0;box-shadow:none;background:none;
-        border-top:1px solid rgba(255,255,255,.09);
-    }
-    .hero .month::before{display:none}
-    .month-in{flex-direction:column}
-    .month-pay{padding:16px 17px 15px;min-width:0}
-    .month-eyebrow{font-size:10px;letter-spacing:.11em}
-    .month-amount{font-size:34px;margin-top:6px}
-    .month-basis{font-size:12px;margin-top:4px}
-    .month-rewards{
-        border-left:none;border-top:1px solid rgba(255,255,255,.09);
-        padding:14px 17px 16px;min-width:0;gap:12px;
-    }
-    .unlock-head{margin-bottom:8px;gap:10px}
-    .unlock-need{font-size:12.5px}
-    .unlock-reward{font-size:12.5px}
-    .unlock-bar{height:6px}
-    .unlock-foot{font-size:11px;margin-top:7px}
-    .got-chip{font-size:11.5px;padding:5px 10px}
-
-    /* ── Action suivante : compacte, mais zone tactile confortable ─────── */
-    .next-act{margin-top:13px;padding:13px 15px;gap:12px;border-radius:var(--r)}
-    .next-ico{width:34px;height:34px;border-radius:10px}
-    .next-eyebrow{font-size:9.5px}
-    .next-label{font-size:13.5px;margin-top:2px}
-    .next-desc{font-size:12px}
-
-    /* ── Chiffres : trois colonnes, lecture transversale ───────────────── */
-    .figures{
-        display:grid;grid-template-columns:repeat(3,1fr);
-        margin-top:13px;border-radius:var(--r);
-    }
-    .fig{padding:12px 10px}
-    .fig + .fig::before{top:12px;bottom:12px}
-    .fig-label{font-size:9.5px;letter-spacing:.04em}
-    .fig-value{font-size:19px;margin-top:4px}
-    .fig-note{display:none}
-
-    /* ── Secondaire : plus bas, plus discret ───────────────────────────── */
-    .aside-grid{gap:13px;margin-top:13px}
-    .soft{padding:15px;border-radius:var(--r)}
-    .soft-title{font-size:10.5px;margin-bottom:11px}
-    .code-big{font-size:23px}
-    .code-note{font-size:11.5px;margin-top:6px}
-    .soft .btn{margin-top:12px!important;min-height:44px}
+    .promo-code-l{font-size:26px}
+    .card + .card{margin-top:32px}
+    .card-title{font-size:16px}
 }
-
-/* Très petits écrans : on protège la lisibilité des chiffres. */
 @media(max-width:360px){
-    .main{padding:11px 11px 92px}
-    .month-amount{font-size:30px}
-    .fig-value{font-size:17px}
-    .fig-label{font-size:9px}
-    .unlock-need,.unlock-reward{font-size:12px}
+    .main{padding:16px 16px 96px}
+    .amount{font-size:37px}
+    .stats-row{gap:12px}
+    .stat-v{font-size:17px}
+    .stat-k{font-size:11px}
 }
-
 @media(prefers-reduced-motion:reduce){
     *{animation-duration:.01ms!important;transition-duration:.01ms!important}
 }
@@ -743,23 +514,24 @@ input,select{font-family:inherit}
 
     <!-- ══ CONTENU ══ -->
     <main class="main">
-        <!-- Header mobile -->
-        <div class="mob-head">
-            <div class="brand-mark">V</div>
-            <div style="flex:1;min-width:0">
-                <div style="font-size:14px;font-weight:800" id="mobName">Mon espace</div>
-                <div style="font-size:11px;color:var(--on-dark-dim);font-weight:600" id="mobTier"></div>
+        <div class="wrap">
+            <!-- Header mobile -->
+            <div class="mob-head">
+                <div class="brand-mark">V</div>
+                <div style="flex:1;min-width:0">
+                    <div id="mobName">Mon espace</div>
+                    <div id="mobTier"></div>
+                </div>
             </div>
-        </div>
 
-        <div class="topline">
-            <div class="hello">
-                <h1 id="greeting">Chargement…</h1>
-                <p id="subGreeting">On récupère tes informations</p>
+            <div class="topline">
+                <div class="hello">
+                    <h1 id="greeting">Chargement…</h1>
+                </div>
             </div>
-        </div>
 
-        <div id="view"></div>
+            <div id="view"></div>
+        </div>
     </main>
 </div>
 
@@ -825,7 +597,6 @@ async function load(){
                 <div class="empty-text">Ce lien n'est plus valide. Contacte l'équipe Volakits pour en recevoir un nouveau.</div>
             </div></div>`;
         document.getElementById('greeting').textContent = 'Oups';
-        document.getElementById('subGreeting').textContent = 'Ce lien ne mène à aucun espace';
     }
 }
 
@@ -841,7 +612,6 @@ function paintChrome(){
     document.getElementById('mobTier').textContent = `${t.icon} ${t.name}`;
 
     document.getElementById('greeting').innerHTML = `Salut ${esc(name)} 👋`;
-    document.getElementById('subGreeting').textContent = 'Voici ton espace ambassadeur Volakits';
 
     const todo = D.missions.filter(m=>!m.done).length;
     document.getElementById('navMissions').textContent = todo;
@@ -875,188 +645,127 @@ function animate(){
 function viewHome(){
     const nextMission = (D.missions || []).find(m => !m.done);
     return `
-    <div class="hero">
-        ${statusBar()}
-        ${monthPanel()}
-    </div>
-    ${nextAction(nextMission)}
-    ${figures()}
-    <div class="aside-grid">
-        ${softPromo()}
-        ${softColis()}
-    </div>`;
+    <div class="sec">${blockEarnings()}</div>
+    <div class="sec">${nextAction(nextMission)}</div>
+    <div class="sec">${figures()}</div>
+    <div class="sec">${minorInfo()}</div>`;
 }
 
-// ── 1. Bandeau de statut ────────────────────────────────────────────────
-// Où j'en suis, en une ligne. Une seule barre, une seule fois la donnée.
-function statusBar(){
+// ── Statut + rémunération + déblocage ───────────────────────────────────
+// Une seule zone typographique : palier en ligne d'entrée, montant en grand,
+// déblocage en pied. Aucun contenant, aucune surface colorée.
+function blockEarnings(){
     const t = D.tier, cur = t.current, next = t.next;
-    const col = cur.color || 'var(--accent)';
-    const id = `<div class="status-id">
-        <div class="status-badge" style="background:${col}1F">${cur.icon || ''}</div>
-        <div>
-            <div class="status-tier">${esc(cur.name)}</div>
-            <div class="status-next">${next ? `Prochain palier : ${esc(next.name)}` : 'Palier maximum'}</div>
-        </div>
-    </div>`;
-
-    if(!next){
-        return `<section class="status">${id}
-            <div class="status-max">Tu es au sommet du programme — merci pour ton engagement.</div>
-        </section>`;
-    }
-
-    // On affiche ce qu'il RESTE à faire : le total, lui, vit dans la bande de
-    // chiffres plus bas. Deux endroits, deux faits différents.
-    const d = (t.details && t.details[0]) || null;
-    const left = d ? Math.max(0, d.target - d.current) : 0;
-    return `<section class="status">${id}
-        <div class="status-prog">
-            <div class="status-line"><div class="status-fill" data-fill="${t.progress}"></div></div>
-            <div class="status-meta">
-                <span>${d ? `Encore <b>${fmt(left)}</b> vente${left > 1 ? 's' : ''}` : ''}</span>
-                <span><b>${t.progress}%</b></span>
-            </div>
-        </div>
-    </section>`;
-}
-
-// ── 2. Bloc « ce mois » ─────────────────────────────────────────────────
-// L'information principale : ce que je gagne, et ce qui se débloque ensuite.
-// Les récompenses qui tombent au même nombre de ventes sont fusionnées en une
-// seule ligne, pour ne jamais afficher deux fois « plus que X ventes ».
-function monthPanel(){
     const c = D.commission_month;
-    if(!c) return '';
     const g = D.gifting_month;
 
-    // Montant du mois — logique de lecture identique à l'existant.
-    const isFixed = c.type === 'fixed';
-    const title = isFixed ? 'Ta rémunération ce mois' : 'Ta commission ce mois';
-    let basis;
-    if(isFixed)            basis = `Fixe débloqué — ${fmt(c.sales_month)} ventes ce mois`;
-    else if(c.beats_fixed) basis = `${c.rate}% sur tes ventes — au-dessus de ton fixe`;
-    else                   basis = `${c.rate}% sur tes ventes du mois`;
+    const d = (t.details && t.details[0]) || null;
+    const toNext = d ? Math.max(0, d.target - d.current) : 0;
+    const status = `<div class="line-status">
+        <b>${esc(cur.name)}</b>
+        ${next ? `<span class="sep"></span><span>${esc(next.name)} dans ${fmt(toNext)} vente${toNext > 1 ? 's' : ''}</span>`
+               : `<span class="sep"></span><span>Palier maximum</span>`}
+    </div>`;
 
-    // Ce qui reste à débloquer, regroupé par seuil de ventes.
+    if(!c) return status;
+
+    // Base de calcul du montant — logique de lecture inchangée.
+    const isFixed = c.type === 'fixed';
+    let note;
+    if(isFixed)            note = `Fixe débloqué avec ${fmt(c.sales_month)} ventes ce mois`;
+    else if(c.beats_fixed) note = `${c.rate}% sur tes ventes, au-dessus de ton fixe`;
+    else                   note = `${c.rate}% sur tes ventes de ce mois`;
+
+    // Récompenses restantes, regroupées quand elles tombent au même seuil.
     const pending = [];
-    if(c.missing > 0 && c.next_gain && c.next_threshold){
+    if(c.missing > 0 && c.next_gain && c.next_threshold)
         pending.push({at: c.next_threshold, label: `${fmt(c.next_gain)}€ garantis`});
-    }
-    if(g && !g.unlocked && g.missing > 0){
+    if(g && !g.unlocked && g.missing > 0)
         pending.push({at: g.threshold, label: `${fmt(g.tier_jerseys)} maillots`});
-    }
 
     let unlock = '';
     if(pending.length){
         const byAt = {};
-        pending.forEach(p => { (byAt[p.at] = byAt[p.at] || []).push(p.label); });
+        pending.forEach(x => { (byAt[x.at] = byAt[x.at] || []).push(x.label); });
         const at = Math.min(...Object.keys(byAt).map(Number));
         const missing = Math.max(0, at - c.sales_month);
         const pct = at > 0 ? Math.min(100, Math.round(c.sales_month / at * 100)) : 0;
-        unlock = `<div>
-            <div class="unlock-head">
-                <span class="unlock-need">Plus que ${fmt(missing)} vente${missing > 1 ? 's' : ''}</span>
-                <span class="unlock-reward">${byAt[at].join(' + ')}</span>
-            </div>
-            <div class="unlock-bar"><div class="unlock-fill" data-fill="${pct}"></div></div>
-            <div class="unlock-foot">${fmt(c.sales_month)} / ${fmt(at)} ventes ce mois</div>
-        </div>`;
+        unlock = `<div class="rule"></div>
+        <div class="unlock-line">
+            <span class="unlock-need">Plus que ${fmt(missing)} vente${missing > 1 ? 's' : ''}</span>
+            <span class="unlock-reward">${byAt[at].join(' et ')}</span>
+        </div>
+        <div class="meter"><div class="meter-fill" data-fill="${pct}"></div></div>
+        <div class="unlock-foot">${fmt(c.sales_month)} sur ${fmt(at)} ventes ce mois</div>`;
+    } else if(g && g.unlocked){
+        unlock = `<div class="rule"></div>
+        <div class="unlock-done">${fmt(g.jerseys)} maillots débloqués ce mois</div>`;
     }
 
-    // Ce qui est déjà acquis. Le fixe n'y figure pas : le grand montant le dit déjà.
-    const got = [];
-    if(g && g.unlocked) got.push(`${fmt(g.jerseys)} maillots débloqués`);
-    const gotHtml = got.length
-        ? `<div class="got">${got.map(x => `<span class="got-chip">${ICO.checkS || ICO.check}${x}</span>`).join('')}</div>`
-        : '';
-
-    // Quand plus rien n'est à débloquer, les pastilles rejoignent la colonne
-    // de gauche : une seconde colonne pour une seule pastille sonnerait creux.
-    const hasColumn = Boolean(unlock);
-
-    return `<section class="month"><div class="month-in">
-        <div class="month-pay">
-            <div class="month-eyebrow">${title}</div>
-            <div class="month-amount">€${fmt(Math.round(c.amount))}</div>
-            <div class="month-basis">${basis}</div>
-            ${!hasColumn && gotHtml ? `<div style="margin-top:18px">${gotHtml}</div>` : ''}
-        </div>
-        ${hasColumn ? `<div class="month-rewards">${unlock}${gotHtml}</div>` : ''}
-    </div></section>`;
+    return `${status}
+        <div class="amount">€${fmt(Math.round(c.amount))}</div>
+        <div class="amount-note">${note}</div>
+        ${unlock}`;
 }
 
-// ── 3. L'action suivante ────────────────────────────────────────────────
-// Une seule, présentée comme une action. Le reste vit dans l'onglet Missions.
+// ── Action suivante ─────────────────────────────────────────────────────
 function nextAction(m){
     if(!m){
-        return `<div class="next-act next-done" data-goto="missions">
-            <div class="next-ico">${ICO.check}</div>
-            <div class="next-body">
-                <div class="next-eyebrow">Tout est fait</div>
-                <div class="next-label">Toutes tes missions sont terminées</div>
-                <div class="next-desc">Continue à publier, tes ventes font le reste.</div>
+        return `<div class="act is-done" data-goto="missions">
+            <div class="act-body">
+                <div class="act-kicker">Tout est fait</div>
+                <div class="act-label">Toutes tes missions sont terminées</div>
+                <div class="act-desc">Continue à publier, tes ventes font le reste.</div>
             </div>
-            <div class="next-go">${ICO.arrow}</div>
+            <div class="act-go">${ICO.arrow}</div>
         </div>`;
     }
-    return `<div class="next-act" data-goto="missions">
-        <div class="next-ico">${ICO.target}</div>
-        <div class="next-body">
-            <div class="next-eyebrow">À faire maintenant</div>
-            <div class="next-label">${esc(m.label)}</div>
-            <div class="next-desc">${esc(m.desc)}</div>
+    return `<div class="act" data-goto="missions">
+        <div class="act-body">
+            <div class="act-kicker">À faire maintenant</div>
+            <div class="act-label">${esc(m.label)}</div>
+            <div class="act-desc">${esc(m.desc)}</div>
         </div>
-        <div class="next-go">${ICO.arrow}</div>
+        <div class="act-go">${ICO.arrow}</div>
     </div>`;
 }
 
-// ── 4. Bande de chiffres ────────────────────────────────────────────────
-// Un seul contenant. Vues et vidéos restent masquées tant qu'elles ne sont
-// pas alimentées par de vraies données — un zéro permanent décrédibilise tout.
+// ── Chiffres ────────────────────────────────────────────────────────────
+// Vues et vidéos restent masquées tant qu'aucune donnée réelle ne les nourrit.
 function figures(){
     const s = D.stats;
     const items = [
-        {label:'Ventes',      val:fmt(s.sales),                          note:'Via ton code promo'},
-        {label:'CA généré',   val:'€'+fmt(Math.round(s.revenue || 0)),   note:'Depuis le début'},
-        {label:'Commissions', val:'€'+fmt(Math.round(s.commission || 0)),note:'Cumulé'},
+        {k:'Ventes',      v:fmt(s.sales)},
+        {k:'CA généré',   v:fmt(Math.round(s.revenue || 0)) + ' €'},
+        {k:'Commissions', v:fmt(Math.round(s.commission || 0)) + ' €'},
     ];
-    if(s.views  > 0) items.push({label:'Vues',   val:fmt(s.views),  note:'Toutes plateformes'});
-    if(s.videos > 0) items.push({label:'Vidéos', val:fmt(s.videos), note:'Publiées'});
+    if(s.views  > 0) items.push({k:'Vues',   v:fmt(s.views)});
+    if(s.videos > 0) items.push({k:'Vidéos', v:fmt(s.videos)});
 
-    return `<div class="figures">${items.map(i => `
-        <div class="fig">
-            <div class="fig-label">${i.label}</div>
-            <div class="fig-value">${i.val}</div>
-            <div class="fig-note">${i.note}</div>
+    return `<div class="stats-row">${items.map(i => `
+        <div>
+            <div class="stat-k">${i.k}</div>
+            <div class="stat-v">${i.v}</div>
         </div>`).join('')}</div>`;
 }
 
-// ── 5. Secondaire ───────────────────────────────────────────────────────
-// Informations de référence : traitement volontairement plus léger.
-// Les compteurs ventes/gains ne sont plus répétés ici, ils vivent au-dessus.
-function softPromo(){
+// ── Secondaire : code promo et colis ────────────────────────────────────
+function minorInfo(){
     const code = D.influencer.promo_code;
-    if(!code){
-        return `<div class="soft">
-            <div class="soft-title">Ton code promo</div>
-            <div style="font-size:13px;color:var(--muted);font-weight:600">
-                En préparation — il arrive avec ton colis.
-            </div>
-        </div>`;
-    }
-    return `<div class="soft">
-        <div class="soft-title">Ton code promo</div>
-        <div class="code-big">${esc(code)}</div>
-        <div class="code-note">−15 % pour ta communauté</div>
-        <button class="btn" style="margin-top:15px;width:100%" data-copy="${escAttr(code)}">Copier le code</button>
-    </div>`;
-}
+    const promo = code
+        ? `<button class="promo-code-l" data-copy="${escAttr(code)}" title="Copier">${esc(code)}</button>
+           <div class="promo-hint">−15 % pour ta communauté · touche pour copier</div>`
+        : `<div class="promo-hint" style="margin-top:0">En préparation, il arrive avec ton colis.</div>`;
 
-function softColis(){
-    return `<div class="soft">
-        <div class="soft-title">Ton colis</div>
-        ${shipTimelineCompact()}
+    return `<div class="minor">
+        <div>
+            <div class="minor-title">Ton code promo</div>
+            ${promo}
+        </div>
+        <div>
+            <div class="minor-title">Ton colis</div>
+            ${shipTimelineCompact()}
+        </div>
     </div>`;
 }
 
@@ -1154,11 +863,19 @@ function viewColis(){
 // ── Paliers ─────────────────────────────────────────────────────────────
 function viewPaliers(){
     const idx = D.tier.index;
-    return `<div class="grid g-main">
+    const t = D.tier, next = t.next;
+    const d = (t.details && t.details[0]) || null;
+    const toNext = d ? Math.max(0, d.target - d.current) : 0;
+    return `
+        <div class="line-status" style="margin-bottom:26px">
+            <b>${esc(t.current.name)}</b>
+            ${next ? `<span class="sep"></span><span>${esc(next.name)} dans ${fmt(toNext)} vente${toNext>1?'s':''}</span>`
+                   : `<span class="sep"></span><span>Palier maximum</span>`}
+        </div>
         <div class="card">
             <div class="card-head">
                 <div>
-                    <div class="card-title"><span class="ico-box">${ICO.trophy}</span>Le programme ambassadeur</div>
+                    <div class="card-title">Le programme ambassadeur</div>
                     <div class="card-sub" style="margin-top:5px">Progresse pour débloquer de nouveaux avantages</div>
                 </div>
             </div>
@@ -1177,9 +894,7 @@ function viewPaliers(){
                         </div>
                     </div>`).join('')}
             </div>
-        </div>
-        <div>${statusBar()}</div>
-    </div>`;
+        </div>`;
 }
 
 // ── Contenus ────────────────────────────────────────────────────────────
