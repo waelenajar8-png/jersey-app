@@ -3902,6 +3902,10 @@ def _espace_payload(inf):
             "revenue_month": float(stats.get("revenue_month", 0) or 0),
             "videos":        len(my_vids),
             "commission":    float(stats.get("commission", 0) or 0),
+            # Historique par mois (clé YYYY-MM), déjà alimenté à chaque synchro.
+            # Exposé en lecture seule : permet d'afficher l'évolution quand il
+            # y a assez de mois, sans rien calculer de nouveau.
+            "commission_history": stats.get("commission_history") or {},
         },
         "commission_month": _compute_monthly_commission(inf, stats),
         "gifting_month": _monthly_gifting(stats),
