@@ -365,6 +365,8 @@ select.inp{cursor:pointer}
                     <input type="text" id="q" placeholder="Rechercher" autocomplete="off">
                 </div>
                 <button class="btn" id="syncBtn" data-i="sync">Synchroniser</button>
+                <button class="btn" id="importBtn" data-i="upload">Importer</button>
+                <button class="btn" id="exportBtn" data-i="download">Export</button>
                 <button class="btn primary" id="addBtn" data-i="plus">Ajouter</button>
             </div>
         </div>
@@ -527,6 +529,39 @@ select.inp{cursor:pointer}
 </div>
 
 <!-- Ajout -->
+<!-- Import en masse -->
+<div class="scrim" id="impScrim">
+    <div class="sheet" style="max-width:720px" role="dialog" aria-modal="true">
+        <div class="sheet-head">
+            <div class="sheet-title">Importer<small id="impSub">Colle tes données, vérifie l'aperçu, valide</small></div>
+            <button class="x" onclick="closeImp()" aria-label="Fermer" data-i="x"></button>
+        </div>
+
+        <div style="display:flex;gap:6px;padding:14px 22px 0">
+            <button class="chip on" id="tabPeople" onclick="setImpMode('people')">Nouveaux influenceurs</button>
+            <button class="chip" id="tabBaseline" onclick="setImpMode('baseline')">Ventes de référence</button>
+        </div>
+
+        <div class="sheet-body">
+            <div class="fieldset" style="border:none;padding-bottom:0">
+                <div class="hint" id="impHelp" style="margin-bottom:10px"></div>
+                <textarea class="inp" id="impText" spellcheck="false"
+                    style="min-height:150px;font-family:'JetBrains Mono',monospace;font-size:12.5px;line-height:1.6"></textarea>
+                <div style="display:flex;gap:8px;margin-top:10px">
+                    <button class="btn sm" onclick="parseImp()" data-i="check">Analyser</button>
+                    <button class="btn ghost sm" onclick="document.getElementById('impText').value='';document.getElementById('impPreview').innerHTML=''">Effacer</button>
+                </div>
+            </div>
+            <div id="impPreview"></div>
+        </div>
+
+        <div class="sheet-foot" style="justify-content:flex-end">
+            <button class="btn ghost sm" onclick="closeImp()">Annuler</button>
+            <button class="btn primary sm" id="impApply" onclick="applyImp()" disabled data-i="check">Valider l'import</button>
+        </div>
+    </div>
+</div>
+
 <div class="scrim" id="addScrim">
     <div class="sheet" style="max-width:440px" role="dialog" aria-modal="true">
         <div class="sheet-head">
@@ -588,6 +623,8 @@ const I = {
   gem:'<path d="M6 3h12l4 6-10 12L2 9l4-6z"/><path d="M11 3L8 9l4 12 4-12-3-6M2 9h20"/>',
   crown:'<path d="M2 18h20l-2-9-5 4-3-7-3 7-5-4-2 9z"/>',
   inbox:'<path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"/>',
+  upload:'<path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/>',
+  download:'<path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/>',
 };
 function ico(n, cls){
   if(!I[n]) return '';
@@ -968,14 +1005,257 @@ async function triggerSync(){
     }
 }
 
+/* ── Import en masse ────────────────────────────────────────────────── */
+let impMode = 'people';
+let impParsed = null;
+
+const IMP_HELP = {
+  people: "Une ligne par influenceur. Sépare les champs par une tabulation, une virgule ou un point-virgule :<br><b>Pseudo · code promo (optionnel) · plateforme (optionnel)</b><br>Exemple : <code>Sofiane　SOFIANE15　TikTok</code>",
+  baseline: "Colle directement les lignes du rapport Shopify « Ventes par réduction » (sélectionne les lignes du tableau et copie).<br>On repère le <b>code promo</b>, le nombre de <b>commandes</b> et les <b>ventes nettes</b>, puis on les associe à tes influenceurs existants.<br><b>Filtre bien la période jusqu'à il y a 60 jours</b> pour ne pas compter deux fois les ventes que la synchro récupère déjà."
+};
+
+function openImp(){
+    document.getElementById('impText').value = '';
+    document.getElementById('impPreview').innerHTML = '';
+    document.getElementById('impApply').disabled = true;
+    impParsed = null;
+    setImpMode('people');
+    document.getElementById('impScrim').classList.add('open');
+}
+function closeImp(){ document.getElementById('impScrim').classList.remove('open'); }
+
+function setImpMode(m){
+    impMode = m;
+    document.getElementById('tabPeople').classList.toggle('on', m==='people');
+    document.getElementById('tabBaseline').classList.toggle('on', m==='baseline');
+    document.getElementById('impHelp').innerHTML = IMP_HELP[m];
+    document.getElementById('impText').placeholder = m==='people'
+        ? "Sofiane\tSOFIANE15\tTikTok\nKely\tKELY15\tTikTok"
+        : "SJD15\tCommande\t-231,82 €\t36\t1 546,03 €\t0,00 €\t1 314,21 €";
+    document.getElementById('impPreview').innerHTML = '';
+    document.getElementById('impApply').disabled = true;
+    impParsed = null;
+}
+
+// Nombres au format français : « 1 546,03 € » → 1546.03
+// (gère l'espace insécable et l'espace fine que Shopify insère)
+function frNum(s){
+    if(s == null) return NaN;
+    const cleaned = String(s)
+        .replace(/[\u00A0\u202F\u2009]/g, '')
+        .replace(/[€\s]/g, '')
+        .replace(/\./g, '')
+        .replace(',', '.');
+    const n = parseFloat(cleaned);
+    return isNaN(n) ? NaN : n;
+}
+
+function splitCells(line){
+    if(line.includes('\t')) return line.split('\t').map(c=>c.trim());
+    if(line.includes(';'))  return line.split(';').map(c=>c.trim());
+    if(line.includes(','))  return line.split(',').map(c=>c.trim());
+    return line.split(/\s{2,}/).map(c=>c.trim());
+}
+
+function parseImp(){
+    const raw = document.getElementById('impText').value.trim();
+    if(!raw){ toast('Colle des données avant d\'analyser', true); return; }
+    const lines = raw.split('\n').map(l=>l.trim()).filter(Boolean);
+    impMode === 'people' ? parsePeople(lines) : parseBaseline(lines);
+}
+
+/* — Nouveaux influenceurs — */
+function parsePeople(lines){
+    const rows = [];
+    const existing = new Set(influenceurs.map(i => (i.pseudo||'').toLowerCase()));
+    const seen = new Set();
+
+    lines.forEach(line => {
+        const c = splitCells(line).filter(Boolean);
+        if(!c.length) return;
+        const pseudo = c[0];
+        if(!pseudo) return;
+        // On ignore une éventuelle ligne d'en-tête copiée par erreur
+        if(/^(pseudo|nom|name)$/i.test(pseudo)) return;
+
+        let promo = '', platform = '';
+        c.slice(1).forEach(v => {
+            if(/^(tiktok|instagram|insta|snapchat|snap|youtube)$/i.test(v)){
+                platform = v.toLowerCase().startsWith('tik') ? 'TikTok'
+                         : v.toLowerCase().startsWith('ins') ? 'Instagram'
+                         : v.toLowerCase().startsWith('sna') ? 'Snapchat' : 'YouTube';
+            } else if(!promo && /^[A-Za-z0-9_-]{3,}$/.test(v)){
+                promo = v.toUpperCase();
+            }
+        });
+
+        const key = pseudo.toLowerCase();
+        const dupInApp = existing.has(key);
+        const dupInPaste = seen.has(key);
+        seen.add(key);
+        rows.push({pseudo, promo, platform, skip: dupInApp || dupInPaste,
+                   reason: dupInApp ? 'existe déjà' : dupInPaste ? 'doublon dans le collage' : ''});
+    });
+
+    if(!rows.length){ toast('Aucune ligne exploitable', true); return; }
+    impParsed = {mode:'people', rows};
+
+    const ok = rows.filter(r=>!r.skip).length;
+    renderImpPreview(
+        ['Pseudo','Code promo','Plateforme','État'],
+        rows.map(r => [
+            esc(r.pseudo),
+            r.promo ? `<span class="code" style="padding:2px 7px;display:inline-flex">${esc(r.promo)}</span>` : '<span style="color:var(--faint)">—</span>',
+            esc(r.platform || '—'),
+            r.skip ? `<span style="color:var(--warn)">ignoré · ${r.reason}</span>` : '<span style="color:var(--ok)">à créer</span>'
+        ]),
+        `${ok} influenceur${ok>1?'s':''} à créer · ${rows.length-ok} ignoré${rows.length-ok>1?'s':''}`
+    );
+    document.getElementById('impApply').disabled = ok === 0;
+}
+
+/* — Ventes de référence (rapport Shopify) — */
+function parseBaseline(lines){
+    const byCode = {};
+    influenceurs.forEach(i => { if(i.promo_code) byCode[i.promo_code.toUpperCase()] = i; });
+
+    const rows = [];
+    lines.forEach(line => {
+        const c = splitCells(line).filter(v => v !== '');
+        if(c.length < 3) return;
+        const code = (c[0]||'').toUpperCase();
+        if(!/^[A-Z0-9_-]{2,}$/.test(code)) return;      // ignore en-têtes et lignes de résumé
+        if(/^(RÉSUMÉ|RESUME|TOTAL|NOM)$/.test(code)) return;
+
+        // Toutes les valeurs numériques de la ligne, dans l'ordre.
+        const nums = c.slice(1).map(frNum).filter(n => !isNaN(n));
+        if(nums.length < 3) return;
+
+        // Format Shopify : réduction (négative), commandes (entier), ventes brutes,
+        // annulations, ventes nettes… On prend le premier entier positif comme
+        // nombre de commandes, et la plus grande valeur restante comme ventes nettes.
+        const ordersIdx = nums.findIndex(n => n > 0 && Number.isInteger(n));
+        const orders = ordersIdx >= 0 ? nums[ordersIdx] : NaN;
+        const after = nums.slice(ordersIdx + 1).filter(n => n > 0);
+        // Ventes nettes = la plus petite des grandes valeurs (brut > net)
+        const net = after.length >= 2 ? Math.min(...after.filter(n => n >= Math.max(...after) * 0.5)) : (after[0] ?? NaN);
+
+        if(isNaN(orders) || isNaN(net)) return;
+
+        const match = byCode[code];
+        rows.push({code, orders, net, match, name: match ? match.pseudo : null});
+    });
+
+    if(!rows.length){ toast("Aucune ligne reconnue — vérifie que tu as copié les lignes du tableau", true); return; }
+    impParsed = {mode:'baseline', rows};
+
+    const ok = rows.filter(r=>r.match).length;
+    renderImpPreview(
+        ['Code','Influenceur','Ventes','CA net','État'],
+        rows.map(r => [
+            `<span class="code" style="padding:2px 7px;display:inline-flex">${esc(r.code)}</span>`,
+            r.name ? esc(r.name) : '<span style="color:var(--faint)">—</span>',
+            `<b class="num">${r.orders}</b>`,
+            `<span class="num">${r.net.toLocaleString('fr-FR',{minimumFractionDigits:2})} €</span>`,
+            r.match ? '<span style="color:var(--ok)">sera appliqué</span>'
+                    : '<span style="color:var(--warn)">aucun influenceur avec ce code</span>'
+        ]),
+        `${ok} fiche${ok>1?'s':''} mise${ok>1?'s':''} à jour · ${rows.length-ok} sans correspondance`
+    );
+    document.getElementById('impApply').disabled = ok === 0;
+}
+
+function renderImpPreview(headers, rows, summary){
+    document.getElementById('impPreview').innerHTML = `
+    <div class="fieldset">
+        <div class="legend">Aperçu — rien n'est enregistré pour l'instant</div>
+        <div style="border:1px solid var(--line);border-radius:var(--r-xs);overflow:hidden">
+            <div style="max-height:280px;overflow:auto">
+                <table style="width:100%;border-collapse:collapse;font-size:12.5px">
+                    <thead><tr style="background:var(--surface-2)">
+                        ${headers.map(h=>`<th style="text-align:left;padding:9px 12px;font-size:10.5px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;position:sticky;top:0;background:var(--surface-2)">${esc(h)}</th>`).join('')}
+                    </tr></thead>
+                    <tbody>
+                        ${rows.map(cells=>`<tr style="border-top:1px solid var(--line)">
+                            ${cells.map(c=>`<td style="padding:9px 12px">${c}</td>`).join('')}
+                        </tr>`).join('')}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <div class="hint" style="margin-top:9px;font-weight:700;color:var(--ink-2)">${esc(summary)}</div>
+    </div>`;
+}
+
+function applyImp(){
+    if(!impParsed) return;
+    const now = new Date().toISOString();
+    let n = 0;
+
+    if(impParsed.mode === 'people'){
+        impParsed.rows.filter(r=>!r.skip).forEach(r => {
+            influenceurs.unshift(normalize({
+                pseudo: r.pseudo, promo_code: r.promo, platform: r.platform,
+                status: 0, addedAt: now, lastContact: now, lastModified: now
+            }));
+            n++;
+        });
+        toast(`${n} influenceur${n>1?'s':''} créé${n>1?'s':''}`);
+    } else {
+        impParsed.rows.filter(r=>r.match).forEach(r => {
+            r.match.baseline_sales   = r.orders;
+            r.match.baseline_revenue = r.net;
+            r.match.lastModified     = now;
+            n++;
+        });
+        toast(`${n} fiche${n>1?'s':''} mise${n>1?'s':''} à jour — lance une synchro`);
+    }
+
+    closeImp();
+    renderAll();
+    scheduleSave();
+}
+
+/* ── Export CSV ─────────────────────────────────────────────────────── */
+function csvCell(v){
+    const s = String(v ?? '');
+    return /[",;\n]/.test(s) ? '"' + s.replace(/"/g,'""') + '"' : s;
+}
+function exportCsv(){
+    if(!influenceurs.length){ toast('Rien à exporter', true); return; }
+    const head = ['Pseudo','Plateforme','Statut','Code promo','Début programme',
+                  'Ventes cumulées','Ventes ce mois','CA net','Commissions',
+                  'Palier','Relances','Profil','WhatsApp','Adresse','Notes'];
+    const lines = [head.join(';')];
+    influenceurs.slice().sort((a,b)=>(b.stats_sales||0)-(a.stats_sales||0)).forEach(i => {
+        lines.push([
+            i.pseudo, i.platform, STATUSES[i.status]||'', i.promo_code, i.program_start_date,
+            i.stats_sales||0, i.stats_sales_month||0,
+            (i.stats_revenue||0).toFixed(2), (i.stats_commission||0).toFixed(2),
+            tierOf(i.stats_sales||0).name, i.relances||0,
+            i.profil, i.whatsapp, i.address, (i.notes||'').replace(/\n/g,' ')
+        ].map(csvCell).join(';'));
+    });
+    const blob = new Blob(['\ufeff' + lines.join('\n')], {type:'text/csv;charset=utf-8;'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `volakits-ambassadeurs-${new Date().toISOString().slice(0,10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+    toast(`${influenceurs.length} ligne${influenceurs.length>1?'s':''} exportée${influenceurs.length>1?'s':''}`);
+}
+
 /* ── Init ───────────────────────────────────────────────────────────── */
 document.getElementById('q').addEventListener('input', renderGrid);
 document.getElementById('syncBtn').addEventListener('click', triggerSync);
 document.getElementById('addBtn').addEventListener('click', openAdd);
+document.getElementById('importBtn').addEventListener('click', openImp);
+document.getElementById('exportBtn').addEventListener('click', exportCsv);
+document.getElementById('impScrim').addEventListener('click', e => { if(e.target.id==='impScrim') closeImp(); });
 document.getElementById('scrim').addEventListener('click', e => { if(e.target.id==='scrim') closeSheet(); });
 document.getElementById('addScrim').addEventListener('click', e => { if(e.target.id==='addScrim') closeAdd(); });
 document.addEventListener('keydown', e => {
-    if(e.key === 'Escape'){ closeSheet(); closeAdd(); }
+    if(e.key === 'Escape'){ closeSheet(); closeAdd(); closeImp(); }
 });
 
 document.getElementById('grid').innerHTML = Array.from({length:3}, ()=>'<div class="skel"></div>').join('');
