@@ -29,10 +29,13 @@
     --on-dark-dim:#98A2C0;
 
     /* Accent */
-    --accent:#4F46E5;
-    --accent-2:#7C3AED;
-    --accent-soft:#EEF0FE;
-    --accent-grad:linear-gradient(135deg,#4F46E5 0%,#7C3AED 100%);
+    /* #2F50F1 : couleur signature Volakits. Une seule grande surface la porte,
+       ailleurs elle ne sert qu'aux accents, liens et actions. */
+    --accent:#2F50F1;
+    --accent-2:#2846DC;
+    --accent-soft:#EEF1FE;
+    --accent-ring:rgba(47,80,241,.16);
+    --accent-grad:linear-gradient(158deg,#3A5AF6 0%,#2F50F1 46%,#2846DC 100%);
 
     /* Statuts */
     --ok:#10B981;      --ok-soft:#E7F8F1;
@@ -77,7 +80,7 @@ input,select{font-family:inherit}
 .brand-mark{
     width:34px;height:34px;border-radius:9px;background:var(--accent-grad);
     display:grid;place-items:center;font-weight:800;font-size:15px;color:#fff;
-    box-shadow:0 4px 14px rgba(79,70,229,.4);flex-shrink:0;
+    box-shadow:0 4px 14px rgba(47,80,241,.4);flex-shrink:0;
 }
 .brand-name{font-size:15.5px;font-weight:800;letter-spacing:-.02em}
 .brand-sub{font-size:10.5px;color:var(--on-dark-dim);font-weight:600;letter-spacing:.08em;text-transform:uppercase}
@@ -112,7 +115,7 @@ input,select{font-family:inherit}
 .nav-item.active .nav-badge{background:rgba(255,255,255,.25)}
 .side-foot{margin-top:auto;padding:14px 10px 0;border-top:1px solid rgba(255,255,255,.07)}
 .side-help{font-size:11.5px;color:var(--on-dark-dim);line-height:1.6}
-.side-help a{color:#A5B4FC;font-weight:600}
+.side-help a{color:#A9BAFB;font-weight:600}
 /* ── Contenu ────────────────────────────────────────────────────────────── */
 .main{flex:1;min-width:0;padding:44px 40px 90px}
 .wrap{max-width:860px;margin:0 auto}
@@ -133,73 +136,134 @@ input,select{font-family:inherit}
 .grid{display:grid;gap:16px}
 .g-2{grid-template-columns:1fr 1fr}
 /* ══ Accueil ═══════════════════════════════════════════════════════════════
-   Page continue, sans carte ni ombre. La hiérarchie tient à trois choses :
-   l'échelle typographique, le rythme vertical, et un accent violet rare.
+   Une seule surface de marque porte les gains. Le reste est blanc, structuré
+   par la typographie et l'espace. Rien n'est affiché sans donnée réelle.
    ═════════════════════════════════════════════════════════════════════════ */
 
-/* Rythme : une seule valeur d'écart entre sections. */
-.sec + .sec{margin-top:52px}
-/* Filet employé seulement quand la séparation doit être explicite. */
-.rule{height:1px;background:var(--line);margin:28px 0}
-/* — Ligne de statut : une phrase, pas un bloc — */
-.line-status{
-    font-size:13px;font-weight:600;color:var(--muted);
-    display:flex;align-items:center;gap:9px;flex-wrap:wrap;
-}
+/* — Carte des gains — */
+.gains{position:relative;overflow:hidden;color:#fff;border-radius:24px;
+    padding:26px 26px 24px;background:var(--accent-grad)}
+.gains::after{content:'';position:absolute;inset:0;pointer-events:none;
+    background:radial-gradient(460px 220px at 100% -30%,rgba(255,255,255,.14),transparent 62%)}
+.gains > *{position:relative;z-index:1}
+.gains-k{font-size:11px;font-weight:700;letter-spacing:.13em;text-transform:uppercase;color:#A9B7FA}
+.gains-v{font-size:62px;font-weight:700;letter-spacing:-.055em;line-height:.92;margin-top:14px}
+.gains-sub{font-size:12.5px;color:#9EAEF8;font-weight:500;margin-top:10px}
+.gains-sep{height:1px;background:rgba(255,255,255,.14);margin:22px 0 15px}
+.gains-facts{display:flex;align-items:center;gap:10px;font-size:13.5px;font-weight:600;
+    color:#E4E9FE;flex-wrap:wrap}
+.gains-facts .d{width:3px;height:3px;border-radius:50%;background:rgba(255,255,255,.4)}
+
+/* — Objectif : la récompense d'abord, le décompte ensuite — */
+.goal{border:1px solid var(--line);border-radius:18px;padding:22px;margin-top:14px;
+    transition:border-color .2s ease}
+.goal:hover{border-color:var(--line-2)}
+.goal-head{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.goal-k{font-size:11px;font-weight:700;letter-spacing:.13em;text-transform:uppercase;color:var(--muted)}
+.goal-left{font-size:26px;font-weight:700;letter-spacing:-.04em;margin-top:12px;line-height:1.1}
+.goal-for{font-size:13.5px;color:var(--muted);font-weight:500;margin-top:5px}
+.rewards{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px}
+.rw{display:inline-flex;align-items:center;gap:7px;font-size:13.5px;font-weight:600;
+    background:var(--accent-soft);color:var(--accent);border-radius:100px;padding:8px 14px;
+    opacity:0;transform:translateY(6px);animation:rise .45s ease forwards}
+.rw svg{width:13px;height:13px;stroke-width:2.2;opacity:.75}
+.goal-bar{height:6px;background:#F0F2F7;border-radius:100px;overflow:hidden;margin-top:20px}
+.goal-fill{height:100%;border-radius:100px;background:var(--accent);width:0;transition:width 1.2s ease}
+.goal-foot{display:flex;align-items:center;justify-content:space-between;gap:14px;
+    margin-top:11px;flex-wrap:wrap}
+.goal-cnt{font-size:12.5px;color:var(--faint);font-weight:600}
+.goal-cta{display:inline-flex;align-items:center;gap:6px;font-size:13.5px;font-weight:600;
+    color:var(--accent);transition:gap .18s ease;cursor:pointer}
+.goal-cta:hover{gap:9px}
+.goal-cta svg{width:14px;height:14px;stroke-width:2.2}
+.goal-done{font-size:13.5px;font-weight:600;color:var(--ok);margin-top:14px}
+
+/* Rail des paliers : la position rendue tangible, sans donnée nouvelle. */
+.rail{display:flex;align-items:center;gap:5px;flex-shrink:0}
+.rail-s{width:16px;height:4px;border-radius:100px;background:#E7EAF1}
+.rail-s.done{background:var(--accent)}
+.rail-s.now{background:var(--accent);width:24px;box-shadow:0 0 0 3px var(--accent-ring)}
+.rail-l{font-size:11px;font-weight:700;color:var(--faint);margin-left:3px}
+
+/* — Sections — */
+.sec + .sec{margin-top:38px}
+.sec-k{font-size:11px;font-weight:700;letter-spacing:.13em;text-transform:uppercase;
+    color:var(--muted);margin-bottom:4px}
+.sec-t{font-size:18px;font-weight:700;letter-spacing:-.03em}
+
+/* — Missions présentées comme des gains — */
+.task{display:flex;align-items:center;gap:14px;width:100%;text-align:left;padding:16px 0;
+    border:none;border-bottom:1px solid var(--line);background:none;cursor:pointer;
+    transition:opacity .16s ease,transform .16s ease}
+.task:last-of-type{border-bottom:none}
+.task:hover{opacity:.62}
+.task:active{transform:scale(.994)}
+.task-e{width:40px;height:40px;border-radius:12px;background:var(--accent-soft);
+    display:grid;place-items:center;font-size:18px;flex-shrink:0}
+.task-e.ok{background:var(--ok-soft)}
+.task-b{flex:1;min-width:0}
+.task-t{font-size:15px;font-weight:600;letter-spacing:-.02em}
+.task-w{font-size:13px;color:var(--muted);font-weight:500;margin-top:2px}
+.task-go{color:var(--faint);flex-shrink:0;display:grid;place-items:center}
+.task-go svg{width:15px;height:15px;stroke-width:2.2}
+.task.is-done .task-t{color:var(--faint)}
+
+/* — Code promo — */
+.promo{display:flex;align-items:center;gap:14px;background:var(--surface-2);
+    border-radius:18px;padding:18px 20px}
+.promo-c{flex:1;min-width:0;font-family:'JetBrains Mono',ui-monospace,monospace;
+    font-size:24px;font-weight:700;letter-spacing:.06em;overflow:hidden;text-overflow:ellipsis}
+.copy-btn{display:inline-flex;align-items:center;gap:7px;background:var(--ink);color:#fff;
+    border:none;border-radius:100px;padding:10px 18px;font-size:13.5px;font-weight:600;
+    flex-shrink:0;cursor:pointer;transition:background .2s ease,transform .16s ease}
+.copy-btn:hover{transform:translateY(-1px)}
+.copy-btn:active{transform:scale(.97)}
+.copy-btn.done{background:var(--ok)}
+.copy-btn svg{width:14px;height:14px;stroke-width:2.4}
+.promo-meta{display:flex;align-items:center;gap:9px;margin-top:12px;font-size:13px;
+    color:var(--muted);font-weight:500;flex-wrap:wrap}
+.promo-meta b{color:var(--ink);font-weight:700}
+.promo-meta .d{width:3px;height:3px;border-radius:50%;background:#D3D7E0}
+
+/* — Évolution : vide tant qu'il n'y a pas deux mois d'historique — */
+.chart-empty{border:1px dashed var(--line-2);border-radius:18px;padding:34px 24px;text-align:center}
+.chart-empty-t{font-size:14.5px;font-weight:600}
+.chart-empty-d{font-size:13px;color:var(--muted);font-weight:500;margin-top:5px;
+    max-width:280px;margin-left:auto;margin-right:auto;line-height:1.55}
+.spark{display:block;width:100%;height:76px;margin-top:6px}
+.spark-x{display:flex;justify-content:space-between;font-size:12px;
+    color:var(--faint);font-weight:600;margin-top:4px}
+
+/* — Ligne simple — */
+.line{display:flex;align-items:center;gap:14px;padding:16px 0;width:100%;text-align:left;
+    background:none;border:none;cursor:pointer}
+.line-b{flex:1;min-width:0}
+.line-t{font-size:15px;font-weight:600;letter-spacing:-.02em}
+.line-d{font-size:13px;color:var(--muted);font-weight:500;margin-top:1px}
+.line-v{font-size:13px;color:var(--faint);font-weight:600;flex-shrink:0}
+
+/* — Classes partagées avec les autres vues — */
+.num{font-variant-numeric:tabular-nums}
+.line-status{display:flex;align-items:center;gap:9px;flex-wrap:wrap;
+    font-size:13px;color:var(--muted);font-weight:500}
 .line-status b{color:var(--ink);font-weight:700}
-.line-status .sep{width:3px;height:3px;border-radius:50%;background:var(--line-2);flex-shrink:0}
-/* — Le montant : seul élément volumineux de la page — */
-.amount{
-    font-size:56px;font-weight:700;letter-spacing:-.045em;line-height:1;
-    margin-top:14px;font-variant-numeric:tabular-nums;
+.sep{width:3px;height:3px;border-radius:50%;background:var(--line-2);flex-shrink:0}
+.kpi-label{font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--muted)}
+
+/* — Apparition — */
+.rise{opacity:0;transform:translateY(10px);animation:rise .5s ease forwards}
+@keyframes rise{to{opacity:1;transform:none}}
+
+@media(max-width:860px){
+    .gains{padding:24px 22px 22px;border-radius:22px}
+    .gains-v{font-size:46px}
+    .goal-left{font-size:24px}
+    /* Le décompte et le lien ne tiennent pas sur une ligne : on les empile. */
+    .goal-foot{flex-direction:column;align-items:flex-start;gap:13px}
+    .sec + .sec{margin-top:34px}
+    .promo-c{font-size:21px}
 }
-.amount-note{font-size:14px;color:var(--muted);font-weight:500;margin-top:10px}
-/* — Déblocage : une mesure, pas un objet graphique — */
-.unlock-line{display:flex;justify-content:space-between;align-items:baseline;gap:16px}
-.unlock-need{font-size:14px;font-weight:600}
-.unlock-reward{font-size:14px;font-weight:600;color:var(--accent);text-align:right}
-.meter{height:2px;background:var(--line-2);border-radius:2px;margin-top:20px;overflow:hidden}
-.meter-fill{
-    height:100%;background:var(--accent);border-radius:2px;width:0;
-    transition:width .9s cubic-bezier(.2,.8,.2,1);
-}
-.unlock-foot{font-size:12px;color:var(--faint);font-weight:500;margin-top:10px}
-.unlock-done{font-size:13.5px;color:var(--ok);font-weight:600}
-/* — Action suivante : une ligne cliquable, sans cadre — */
-.act{
-    display:flex;align-items:center;gap:16px;padding:16px 0;
-    cursor:pointer;border-top:1px solid var(--line);border-bottom:1px solid var(--line);
-    transition:opacity .15s;
-}
-.act:hover{opacity:.62}
-.act-body{flex:1;min-width:0}
-.act-kicker{font-size:12px;font-weight:600;color:var(--accent)}
-.act-label{font-size:16px;font-weight:700;letter-spacing:-.02em;margin-top:3px}
-.act-desc{font-size:13.5px;color:var(--muted);font-weight:500;margin-top:2px}
-.act-go{color:var(--faint);flex-shrink:0;display:grid;place-items:center}
-.act-go svg{width:16px;height:16px;stroke-width:2}
-.act.is-done .act-kicker{color:var(--ok)}
-/* — Chiffres : alignés sur une grille, sans contenant — */
-.stats-row{display:grid;grid-template-columns:repeat(3,1fr);gap:28px}
-.stat-k{font-size:12px;font-weight:600;color:var(--muted)}
-.stat-v{
-    font-size:22px;font-weight:700;letter-spacing:-.03em;margin-top:7px;
-    font-variant-numeric:tabular-nums;line-height:1.15;
-}
-/* — Secondaire : deux colonnes séparées par un filet — */
-.minor{display:grid;grid-template-columns:1fr 1fr;gap:48px}
-.minor > div + div{padding-left:48px;border-left:1px solid var(--line);margin-left:-24px}
-.minor-title{font-size:12px;font-weight:600;color:var(--muted);margin-bottom:14px}
-.promo-code-l{
-    font-family:'JetBrains Mono',ui-monospace,monospace;
-    font-size:23px;font-weight:700;letter-spacing:.05em;line-height:1;
-    background:none;border:none;padding:0;cursor:pointer;color:var(--ink);
-    transition:color .15s;
-}
-.promo-code-l:hover{color:var(--accent)}
-.promo-hint{font-size:12.5px;color:var(--faint);font-weight:500;margin-top:9px}
-.req.done .req-fill{background:#34D399}
-.req.done .req-val{color:#6EE7B7}
+
 /* ── Timeline paliers ───────────────────────────────────────────────────── */
 .ladder{display:flex;flex-direction:column;gap:0}
 .rung{display:flex;gap:14px;position:relative;padding-bottom:20px}
@@ -323,7 +387,7 @@ input,select{font-family:inherit}
     transition:border-color .15s,background .15s;
 }
 .field input:focus,.field select:focus{outline:none;border-color:var(--accent);background:#fff;
-    box-shadow:0 0 0 3px rgba(79,70,229,.08)}
+    box-shadow:0 0 0 3px rgba(47,80,241,.08)}
 .field input::placeholder{color:var(--faint)}
 .field-hint{font-size:11px;color:var(--faint);font-weight:500}
 /* Le groupe par réseau n'a pas besoin d'un cadre : un filet suffit.
@@ -343,7 +407,7 @@ input,select{font-family:inherit}
 .jcard{border:2px solid var(--line);border-radius:var(--r);overflow:hidden;background:var(--surface);
        cursor:pointer;transition:all .16s;position:relative}
 .jcard:hover{border-color:var(--line-2);transform:translateY(-2px);box-shadow:var(--sh-md)}
-.jcard.sel{border-color:var(--accent);box-shadow:0 0 0 3px rgba(79,70,229,.1),var(--sh-md)}
+.jcard.sel{border-color:var(--accent);box-shadow:0 0 0 3px rgba(47,80,241,.1),var(--sh-md)}
 .jcard-img{width:100%;aspect-ratio:1;object-fit:contain;background:#fff;display:block}
 .jcard-body{padding:10px 11px;border-top:1px solid var(--line)}
 .jcard-name{font-size:12.5px;font-weight:800;letter-spacing:-.015em;line-height:1.3}
@@ -491,11 +555,7 @@ input,select{font-family:inherit}
             <div class="nav-label">Progression</div>
             <button class="nav-item" data-tab="paliers">
                 <svg class="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M6 9H4.5a2.5 2.5 0 010-5H6M18 9h1.5a2.5 2.5 0 000-5H18M4 22h16M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22M18 2H6v7a6 6 0 0012 0V2z" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                Paliers & avantages
-            </button>
-            <button class="nav-item" data-tab="contenus">
-                <svg class="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M23 7l-7 5 7 5V7zM14 5H3a2 2 0 00-2 2v10a2 2 0 002 2h11a2 2 0 002-2V7a2 2 0 00-2-2z" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                Mes contenus
+                Avantages
             </button>
         </nav>
 
@@ -504,6 +564,10 @@ input,select{font-family:inherit}
             <button class="nav-item" data-tab="profil">
                 <svg class="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2M12 11a4 4 0 100-8 4 4 0 000 8z" stroke-linecap="round" stroke-linejoin="round"/></svg>
                 Mes informations
+            </button>
+            <button class="nav-item" data-tab="contenus">
+                <svg class="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M23 7l-7 5 7 5V7zM14 5H3a2 2 0 00-2 2v10a2 2 0 002 2h11a2 2 0 002-2V7a2 2 0 00-2-2z" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                Mes contenus
             </button>
         </nav>
 
@@ -550,7 +614,7 @@ input,select{font-family:inherit}
     </button>
     <button class="mob-item" data-tab="paliers">
         <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 2H6v7a6 6 0 0012 0V2zM4 22h16" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        Paliers
+        Avantages
     </button>
     <button class="mob-item" data-tab="profil">
         <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2M12 11a4 4 0 100-8 4 4 0 000 8z" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -639,134 +703,228 @@ function animate(){
     document.querySelectorAll('[data-fill]').forEach(el=>{
         el.style.width = el.getAttribute('data-fill') + '%';
     });
+    countUp();
+}
+
+// Le montant des gains monte jusqu'à sa valeur : le chiffre le plus important
+// de l'écran mérite d'attirer l'œil une seconde.
+function countUp(){
+    const el = document.getElementById('gainsV');
+    if(!el) return;
+    const c = D.commission_month;
+    const target = c ? Math.round(c.amount) : 0;
+    if(!target){ el.textContent = '€0'; return; }
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if(reduce){ el.textContent = '€' + fmt(target); return; }
+    let start = null;
+    requestAnimationFrame(function step(t){
+        if(!start) start = t;
+        const p = Math.min(1, (t - start) / 900);
+        const e = 1 - Math.pow(1 - p, 3);
+        el.textContent = '€' + fmt(Math.round(target * e));
+        if(p < 1) requestAnimationFrame(step);
+    });
 }
 
 // ── Vue : Tableau de bord ───────────────────────────────────────────────
 function viewHome(){
-    const nextMission = (D.missions || []).find(m => !m.done);
     return `
-    <div class="sec">${blockEarnings()}</div>
-    <div class="sec">${nextAction(nextMission)}</div>
-    <div class="sec">${figures()}</div>
-    <div class="sec">${minorInfo()}</div>`;
+    ${blockGains()}
+    ${blockGoal()}
+    ${blockTasks()}
+    ${blockPromo()}
+    ${blockEvolution()}
+    ${blockColis()}`;
 }
 
-// ── Statut + rémunération + déblocage ───────────────────────────────────
-// Une seule zone typographique : palier en ligne d'entrée, montant en grand,
-// déblocage en pied. Aucun contenant, aucune surface colorée.
-function blockEarnings(){
-    const t = D.tier, cur = t.current, next = t.next;
-    const c = D.commission_month;
-    const g = D.gifting_month;
+// ── Gains du mois : la surface de marque ────────────────────────────────
+function blockGains(){
+    const c = D.commission_month, s = D.stats;
+    const amount = c ? Math.round(c.amount) : 0;
+    // Base de calcul — libellé allégé, il ne doit pas concurrencer le montant.
+    let basis = '';
+    if(c){
+        if(c.type === 'fixed')      basis = `Fixe débloqué avec ${fmt(c.sales_month)} ventes`;
+        else if(c.beats_fixed)      basis = `Commission de ${c.rate} % — au-dessus de ton fixe`;
+        else                        basis = `Commission de ${c.rate} % sur tes ventes`;
+    }
+    return `<section class="gains rise">
+        <div class="gains-k">Tes gains ce mois</div>
+        <div class="gains-v num" id="gainsV">€0</div>
+        ${basis ? `<div class="gains-sub">${esc(basis)}</div>` : ''}
+        <div class="gains-sep"></div>
+        <div class="gains-facts">
+            <span class="num">${fmt(s.sales)} vente${s.sales > 1 ? 's' : ''}</span>
+            <span class="d"></span>
+            <span class="num">${fmt(Math.round(s.revenue || 0))} € générés</span>
+        </div>
+    </section>`;
+}
 
-    const d = (t.details && t.details[0]) || null;
-    const toNext = d ? Math.max(0, d.target - d.current) : 0;
-    const status = `<div class="line-status">
-        <b>${esc(cur.name)}</b>
-        ${next ? `<span class="sep"></span><span>${esc(next.name)} dans ${fmt(toNext)} vente${toNext > 1 ? 's' : ''}</span>`
-               : `<span class="sep"></span><span>Palier maximum</span>`}
-    </div>`;
-
-    if(!c) return status;
-
-    // Base de calcul du montant — logique de lecture inchangée.
-    const isFixed = c.type === 'fixed';
-    let note;
-    if(isFixed)            note = `Fixe débloqué avec ${fmt(c.sales_month)} ventes ce mois`;
-    else if(c.beats_fixed) note = `${c.rate}% sur tes ventes, au-dessus de ton fixe`;
-    else                   note = `${c.rate}% sur tes ventes de ce mois`;
+// ── Objectif : ce qu'il reste à faire, et ce que ça débloque ────────────
+function blockGoal(){
+    const c = D.commission_month, g = D.gifting_month, t = D.tier;
+    if(!c) return '';
 
     // Récompenses restantes, regroupées quand elles tombent au même seuil.
     const pending = [];
     if(c.missing > 0 && c.next_gain && c.next_threshold)
-        pending.push({at: c.next_threshold, label: `${fmt(c.next_gain)}€ garantis`});
+        pending.push({at:c.next_threshold, label:`${fmt(c.next_gain)} € garantis`});
     if(g && !g.unlocked && g.missing > 0)
-        pending.push({at: g.threshold, label: `${fmt(g.tier_jerseys)} maillots`});
+        pending.push({at:g.threshold, label:`${fmt(g.tier_jerseys)} maillots`});
 
-    let unlock = '';
-    if(pending.length){
-        const byAt = {};
-        pending.forEach(x => { (byAt[x.at] = byAt[x.at] || []).push(x.label); });
-        const at = Math.min(...Object.keys(byAt).map(Number));
-        const missing = Math.max(0, at - c.sales_month);
-        const pct = at > 0 ? Math.min(100, Math.round(c.sales_month / at * 100)) : 0;
-        unlock = `<div class="rule"></div>
-        <div class="unlock-line">
-            <span class="unlock-need">Plus que ${fmt(missing)} vente${missing > 1 ? 's' : ''}</span>
-            <span class="unlock-reward">${byAt[at].join(' et ')}</span>
-        </div>
-        <div class="meter"><div class="meter-fill" data-fill="${pct}"></div></div>
-        <div class="unlock-foot">${fmt(c.sales_month)} sur ${fmt(at)} ventes ce mois</div>`;
-    } else if(g && g.unlocked){
-        unlock = `<div class="rule"></div>
-        <div class="unlock-done">${fmt(g.jerseys)} maillots débloqués ce mois</div>`;
+    // Rail des paliers : position actuelle sur l'échelle complète.
+    const total = (t.all || []).length;
+    const rail = total ? `<div class="rail" title="${esc(t.current.name)}, palier ${t.index+1} sur ${total}">
+        ${t.all.map((_,i)=>`<span class="rail-s ${i < t.index ? 'done' : i === t.index ? 'now' : ''}"></span>`).join('')}
+        <span class="rail-l num">${t.index+1}/${total}</span>
+    </div>` : '';
+
+    const head = `<div class="goal-head"><div class="goal-k">Prochain objectif</div>${rail}</div>`;
+
+    if(!pending.length){
+        const got = g && g.unlocked
+            ? `Tout est débloqué ce mois : ${fmt(g.jerseys)} maillots et ta rémunération.`
+            : 'Tout est débloqué pour ce mois.';
+        return `<section class="goal rise" style="animation-delay:.06s">
+            ${head}<div class="goal-done">${esc(got)}</div>
+        </section>`;
     }
 
-    return `${status}
-        <div class="amount">€${fmt(Math.round(c.amount))}</div>
-        <div class="amount-note">${note}</div>
-        ${unlock}`;
+    const byAt = {};
+    pending.forEach(x => { (byAt[x.at] = byAt[x.at] || []).push(x.label); });
+    const at = Math.min(...Object.keys(byAt).map(Number));
+    const missing = Math.max(0, at - c.sales_month);
+    const pct = at > 0 ? Math.min(100, Math.round(c.sales_month / at * 100)) : 0;
+    const lock = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>`;
+
+    return `<section class="goal rise" style="animation-delay:.06s">
+        ${head}
+        <div class="goal-left">Plus que ${fmt(missing)} vente${missing > 1 ? 's' : ''}</div>
+        <div class="goal-for">pour débloquer ta récompense de ce mois</div>
+        <div class="rewards">
+            ${byAt[at].map((l,i)=>`<span class="rw" style="animation-delay:${.32 + i*.1}s">${lock}${esc(l)}</span>`).join('')}
+        </div>
+        <div class="goal-bar"><div class="goal-fill" data-fill="${pct}"></div></div>
+        <div class="goal-foot">
+            <span class="goal-cnt num">${fmt(c.sales_month)} sur ${fmt(at)} ventes ce mois</span>
+            <span class="goal-cta" data-goto="paliers">Comment débloquer
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+            </span>
+        </div>
+    </section>`;
 }
 
-// ── Action suivante ─────────────────────────────────────────────────────
-function nextAction(m){
-    if(!m){
-        return `<div class="act is-done" data-goto="missions">
-            <div class="act-body">
-                <div class="act-kicker">Tout est fait</div>
-                <div class="act-label">Toutes tes missions sont terminées</div>
-                <div class="act-desc">Continue à publier, tes ventes font le reste.</div>
+// ── Missions : formulées comme des bénéfices ────────────────────────────
+// Les libellés viennent du back ; on n'ajoute qu'un pictogramme par mission.
+const TASK_EMOJI = {profil:'📸', maillots:'👕', livraison:'📦', unboxing:'🎥', video1:'🎬', video2:'🎬'};
+// (les identifiants viennent de DEFAULT_MISSIONS côté serveur)
+function blockTasks(){
+    const todo = (D.missions || []).filter(m => !m.done).slice(0, 3);
+    if(!todo.length) return '';
+    return `<section class="sec rise" style="animation-delay:.12s">
+        <div class="sec-k">À faire maintenant</div>
+        <div class="sec-t">${fmt(todo.length)} action${todo.length > 1 ? 's' : ''} pour avancer</div>
+        <div style="margin-top:8px">
+            ${todo.map(m => `<button class="task" data-goto="missions">
+                <div class="task-e">${TASK_EMOJI[m.id] || '✨'}</div>
+                <div class="task-b">
+                    <div class="task-t">${esc(m.label)}</div>
+                    <div class="task-w">${esc(m.desc)}</div>
+                </div>
+                <div class="task-go"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></div>
+            </button>`).join('')}
+        </div>
+    </section>`;
+}
+
+// ── Code promo ──────────────────────────────────────────────────────────
+function blockPromo(){
+    const code = D.influencer.promo_code, s = D.stats;
+    if(!code){
+        return `<section class="sec rise" style="animation-delay:.18s">
+            <div class="sec-k">Ton code</div>
+            <div class="sec-t">En préparation</div>
+            <div class="promo-meta" style="margin-top:10px">Il arrive avec ton colis.</div>
+        </section>`;
+    }
+    return `<section class="sec rise" style="animation-delay:.18s">
+        <div class="sec-k">Ton code</div>
+        <div class="sec-t">Chaque partage peut te rapporter</div>
+        <div class="promo" style="margin-top:12px">
+            <div class="promo-c">${esc(code)}</div>
+            <button class="copy-btn" id="copyBtn" data-copy="${escAttr(code)}">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+                <span>Copier</span>
+            </button>
+        </div>
+        <div class="promo-meta">
+            <span>−15 % pour ta communauté</span>
+            ${s.sales > 0 ? `<span class="d"></span><span><b class="num">${fmt(s.sales)} vente${s.sales>1?'s':''}</b> générées</span>` : ''}
+        </div>
+    </section>`;
+}
+
+// ── Évolution : seulement si l'historique existe vraiment ───────────────
+function blockEvolution(){
+    const h = (D.stats && D.stats.commission_history) || {};
+    const months = Object.keys(h).sort();
+
+    if(months.length < 2){
+        return `<section class="sec rise" style="animation-delay:.24s">
+            <div class="sec-k">Évolution</div>
+            <div class="sec-t">Tes commissions mois par mois</div>
+            <div class="chart-empty" style="margin-top:12px">
+                <div class="chart-empty-t">Ton évolution apparaîtra ici</div>
+                <div class="chart-empty-d">Continue à partager ton code : dès le mois prochain, tu verras ta progression.</div>
             </div>
-            <div class="act-go">${ICO.arrow}</div>
-        </div>`;
+        </section>`;
     }
-    return `<div class="act" data-goto="missions">
-        <div class="act-body">
-            <div class="act-kicker">À faire maintenant</div>
-            <div class="act-label">${esc(m.label)}</div>
-            <div class="act-desc">${esc(m.desc)}</div>
+
+    const pts = months.slice(-6).map(m => Number(h[m]) || 0);
+    const W = 560, H = 76, max = Math.max(...pts, 1);
+    const xy = pts.map((v,i) => `${(i/(pts.length-1))*W},${H-6-(v/max)*(H-16)}`);
+    const lastY = H-6-(pts[pts.length-1]/max)*(H-16);
+    const label = m => {
+        const [y,mo] = m.split('-');
+        return ['janv.','févr.','mars','avr.','mai','juin','juil.','août','sept.','oct.','nov.','déc.'][Number(mo)-1] || m;
+    };
+    const shown = months.slice(-6);
+
+    return `<section class="sec rise" style="animation-delay:.24s">
+        <div class="sec-k">Évolution</div>
+        <div class="sec-t">Tes commissions mois par mois</div>
+        <div style="margin-top:12px">
+            <svg class="spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">
+                <polyline points="${xy.join(' ')}" fill="none" stroke="var(--accent)" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round"/>
+                <circle cx="${W}" cy="${lastY}" r="3.5" fill="var(--accent)"/>
+            </svg>
+            <div class="spark-x"><span>${esc(label(shown[0]))}</span><span>${esc(label(shown[shown.length-1]))}</span></div>
         </div>
-        <div class="act-go">${ICO.arrow}</div>
-    </div>`;
+    </section>`;
 }
 
-// ── Chiffres ────────────────────────────────────────────────────────────
-// Vues et vidéos restent masquées tant qu'aucune donnée réelle ne les nourrit.
-function figures(){
-    const s = D.stats;
-    const items = [
-        {k:'Ventes',      v:fmt(s.sales)},
-        {k:'CA généré',   v:fmt(Math.round(s.revenue || 0)) + ' €'},
-        {k:'Commissions', v:fmt(Math.round(s.commission || 0)) + ' €'},
-    ];
-    if(s.views  > 0) items.push({k:'Vues',   v:fmt(s.views)});
-    if(s.videos > 0) items.push({k:'Vidéos', v:fmt(s.videos)});
-
-    return `<div class="stats-row">${items.map(i => `
-        <div>
-            <div class="stat-k">${i.k}</div>
-            <div class="stat-v">${i.v}</div>
-        </div>`).join('')}</div>`;
-}
-
-// ── Secondaire : code promo et colis ────────────────────────────────────
-function minorInfo(){
-    const code = D.influencer.promo_code;
-    const promo = code
-        ? `<button class="promo-code-l" data-copy="${escAttr(code)}" title="Copier">${esc(code)}</button>
-           <div class="promo-hint">−15 % pour ta communauté · touche pour copier</div>`
-        : `<div class="promo-hint" style="margin-top:0">En préparation, il arrive avec ton colis.</div>`;
-
-    return `<div class="minor">
-        <div>
-            <div class="minor-title">Ton code promo</div>
-            ${promo}
-        </div>
-        <div>
-            <div class="minor-title">Ton colis</div>
-            ${shipTimelineCompact()}
-        </div>
-    </div>`;
+// ── Colis ───────────────────────────────────────────────────────────────
+function blockColis(){
+    const inf = D.influencer;
+    const st = inf.tracking_status || '';
+    const LABEL = {prepare:'En préparation', envoye:'Expédié', livre:'Livré', probleme:'Problème sur le colis'};
+    const title = LABEL[st] || 'Pas encore expédié';
+    const desc = inf.tracking ? esc(inf.tracking)
+               : st ? 'On te préviendra dès qu\'il bouge.'
+               : 'Ton colis partira dès que tes maillots seront choisis.';
+    return `<section class="sec rise" style="animation-delay:.3s">
+        <div class="sec-k">Ton colis</div>
+        <div class="sec-t">${esc(title)}</div>
+        <button class="line" style="padding-top:10px" data-goto="colis">
+            <div class="line-b">
+                <div class="line-t" style="font-family:'JetBrains Mono',ui-monospace,monospace;font-size:13.5px;font-weight:600">${desc}</div>
+                <div class="line-d">Voir le détail du suivi</div>
+            </div>
+            <div class="line-v" style="color:var(--accent)">Suivre</div>
+        </button>
+    </section>`;
 }
 
 // ── Missions ────────────────────────────────────────────────────────────
@@ -939,7 +1097,17 @@ function bindDynamic(){
     document.querySelectorAll('[data-copy]').forEach(b=>{
         b.onclick = ()=>{
             navigator.clipboard.writeText(b.getAttribute('data-copy'));
-            toast('Code copié');
+            // Retour visuel sur le bouton lui-même : plus direct qu'une notification.
+            const lbl = b.querySelector('span'), ico = b.querySelector('svg');
+            if(lbl && ico){
+                b.classList.add('done');
+                const t0 = lbl.textContent, i0 = ico.innerHTML;
+                lbl.textContent = 'Copié';
+                ico.innerHTML = '<path d="M20 6L9 17l-5-5"/>';
+                setTimeout(()=>{ b.classList.remove('done'); lbl.textContent = t0; ico.innerHTML = i0; }, 1800);
+            }else{
+                toast('Code copié');
+            }
         };
     });
     document.querySelectorAll('[data-goto]').forEach(b=>{
