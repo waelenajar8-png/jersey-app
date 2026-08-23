@@ -3606,9 +3606,12 @@ def api_influ_videos_delete():
 #
 # Coûts maillots (tarif dégressif) : 2 = 25,52€ | 4 = 44€ | 6 = 62€
 BASE_COMMISSION_PCT = 10  # commission plancher, tous paliers confondus
-GIFTING_MIN_SALES   = 10  # ventes minimum dans le mois pour déclencher l'envoi
-                          # des maillots : évite de payer 44€ ou 62€ de gifting
-                          # sur un mois où l'influenceur n'a rien produit.
+# Ventes minimum dans le mois pour déclencher l'envoi des maillots, indexées sur
+# la quantité envoyée : plus l'influenceur reçoit de matériel, plus il doit
+# produire. Sans ce garde-fou, un VIP à 10 ventes coûte 62€ de gifting pour
+# 114,80€ de marge — soit 2,80€ net une fois sa rémunération versée.
+GIFTING_THRESHOLD_BY_JERSEYS = {2: 10, 4: 20, 6: 30}
+GIFTING_MIN_SALES = 10  # repli si un palier a un nombre de maillots hors table
 
 INFLUENCER_TIERS = [
     {
@@ -3815,22 +3818,26 @@ def _compute_monthly_commission(inf, stats):
 
 def _monthly_gifting(stats):
     """
-    Gifting du mois : les maillots ne partent que si l'influenceur a été actif
-    (seuil GIFTING_MIN_SALES). Sans ce garde-fou, un palier haut coûte plus en
-    maillots qu'il ne rapporte pendant un mois creux.
-    Retourne : jerseys, cost, unlocked, missing, threshold.
+    Gifting du mois : les maillots ne partent que si l'influenceur a été actif.
+    Le seuil dépend de la quantité envoyée (2 → 10 ventes, 4 → 20, 6 → 30),
+    pour que le coût du matériel reste proportionné à ce qu'il produit.
+    Retourne : jerseys, cost, unlocked, missing, threshold, tier_jerseys.
     """
     tier_idx, _, _, _ = _compute_tier_progress(stats)
     tier = INFLUENCER_TIERS[tier_idx]
     sales_month = _safe_int(stats.get("sales_month", 0))
-    unlocked = sales_month >= GIFTING_MIN_SALES
+
+    jerseys   = tier["monthly_jerseys"]
+    threshold = GIFTING_THRESHOLD_BY_JERSEYS.get(jerseys, GIFTING_MIN_SALES)
+    unlocked  = sales_month >= threshold
+
     return {
-        "jerseys":   tier["monthly_jerseys"] if unlocked else 0,
-        "cost":      tier["jersey_cost"] if unlocked else 0.0,
-        "unlocked":  unlocked,
-        "missing":   max(0, GIFTING_MIN_SALES - sales_month),
-        "threshold": GIFTING_MIN_SALES,
-        "tier_jerseys": tier["monthly_jerseys"],
+        "jerseys":      jerseys if unlocked else 0,
+        "cost":         tier["jersey_cost"] if unlocked else 0.0,
+        "unlocked":     unlocked,
+        "missing":      max(0, threshold - sales_month),
+        "threshold":    threshold,
+        "tier_jerseys": jerseys,
     }
 
 
