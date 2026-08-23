@@ -228,6 +228,60 @@ h1{font-size:27px;font-weight:800;letter-spacing:-.035em;line-height:1.1}
     grid-column:1/-1;text-align:center;padding:70px 24px;color:var(--muted);
     background:var(--surface);border:1px dashed var(--line-2);border-radius:var(--r-lg);
 }
+
+/* ── Vidéos ──────────────────────────────────────────────────────────── */
+.nav-count{
+    margin-left:auto;font-size:10.5px;font-weight:800;background:rgba(255,255,255,.12);
+    border-radius:100px;padding:1.5px 7px;min-width:20px;text-align:center;
+}
+.nav-item.active .nav-count{background:rgba(255,255,255,.24)}
+.vgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(258px,1fr));gap:15px}
+.vcard{
+    background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);
+    box-shadow:var(--sh-xs);overflow:hidden;display:flex;flex-direction:column;
+    transition:transform .22s var(--ease),box-shadow .22s var(--ease);
+    animation:cardIn .42s var(--ease) both;
+}
+.vcard:hover{transform:translateY(-3px);box-shadow:var(--sh-md)}
+.vcard video{
+    width:100%;aspect-ratio:9/16;max-height:330px;object-fit:cover;
+    background:#0B1020;display:block;cursor:pointer;
+}
+.vcard-body{padding:13px 14px;display:flex;flex-direction:column;gap:9px;flex:1}
+.vcard-top{display:flex;align-items:center;gap:8px;min-width:0}
+.vcard-name{font-size:13.5px;font-weight:800;letter-spacing:-.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1}
+.vtag{
+    display:inline-flex;align-items:center;gap:4px;font-size:10.5px;font-weight:800;
+    padding:3px 8px;border-radius:100px;flex-shrink:0;letter-spacing:-.005em;
+}
+.vtag.unboxing{background:#FEF0E4;color:#96590A}
+.vtag.playback{background:var(--accent-soft);color:var(--accent)}
+.vtag.ads-todo{background:#FEF4E4;color:#96590A}
+.vtag.ads-used{background:var(--ok-soft);color:#046B4F}
+.vcard-meta{font-size:11px;color:var(--muted);font-weight:600}
+.vcard-actions{display:flex;gap:6px;margin-top:auto;padding-top:4px}
+.vcard select{
+    flex:1;height:32px;padding:0 9px;border-radius:var(--r-xs);border:1.5px solid var(--line);
+    font-size:12px;font-weight:600;background:var(--surface);outline:none;cursor:pointer;
+}
+.vcard select:focus{border-color:var(--accent)}
+.icon-btn{
+    width:32px;height:32px;border-radius:var(--r-xs);border:1.5px solid var(--line);
+    display:grid;place-items:center;color:var(--muted);flex-shrink:0;
+    transition:border-color .16s var(--ease),color .16s var(--ease),background .16s var(--ease);
+}
+.icon-btn svg{width:14px;height:14px;stroke-width:2.1}
+.icon-btn:hover{border-color:var(--danger);color:var(--danger);background:var(--danger-soft)}
+.drop{
+    border:2px dashed var(--line-2);border-radius:var(--r);padding:26px 18px;text-align:center;
+    cursor:pointer;transition:border-color .18s var(--ease),background .18s var(--ease);
+}
+.drop:hover,.drop.over{border-color:var(--accent);background:var(--accent-soft)}
+.drop svg{width:24px;height:24px;color:var(--faint);stroke-width:1.8;margin-bottom:8px}
+.drop-t{font-size:13.5px;font-weight:700;color:var(--ink-2)}
+.drop-s{font-size:11.5px;color:var(--muted);margin-top:3px}
+.bar{height:6px;background:var(--line);border-radius:100px;overflow:hidden;margin-top:12px}
+.bar-fill{height:100%;background:var(--accent-grad);border-radius:100px;width:0;transition:width .25s var(--ease)}
 .empty svg{width:30px;height:30px;color:var(--faint);stroke-width:1.7;margin-bottom:12px}
 .empty-t{font-size:15px;font-weight:800;color:var(--ink-2);margin-bottom:4px;letter-spacing:-.02em}
 .empty-s{font-size:13px}
@@ -323,6 +377,7 @@ select.inp{cursor:pointer}
     .filters::-webkit-scrollbar{display:none}
     .chip{flex-shrink:0}
     .grid{grid-template-columns:1fr}
+    .vgrid{grid-template-columns:1fr}
     .fields{grid-template-columns:1fr}
     .topline{align-items:stretch}
     .search{width:100%}
@@ -345,55 +400,98 @@ select.inp{cursor:pointer}
                 <div class="brand-sub">Console</div>
             </div>
         </div>
-        <button class="nav-item active" data-i="users">Ambassadeurs</button>
+        <button class="nav-item active" id="navPeople" onclick="setView('people')" data-i="users">Ambassadeurs</button>
+        <button class="nav-item" id="navVideos" onclick="setView('videos')" data-i="film">Vidéos<span class="nav-count" id="navVidCount"></span></button>
         <div class="nav-label">Outils</div>
-        <a href="/influenceurs" class="nav-item" data-i="film">Vidéos &amp; export</a>
+        <a href="/influenceurs" class="nav-item" data-i="ext">Ancien back-office</a>
         <div class="side-foot">
             <a href="/influenceurs/logout" class="nav-item" data-i="out">Déconnexion</a>
         </div>
     </nav>
 
     <main class="main">
-        <div class="topline">
-            <div>
-                <h1>Ambassadeurs</h1>
-                <p class="subtitle">Classés par ventes cumulées. Ouvre une fiche pour tout gérer.</p>
-            </div>
-            <div class="toolbar">
-                <div class="search">
-                    <span data-i="search"></span>
-                    <input type="text" id="q" placeholder="Rechercher" autocomplete="off">
+        <!-- ══ Vue Ambassadeurs ══ -->
+        <section id="viewPeople">
+            <div class="topline">
+                <div>
+                    <h1>Ambassadeurs</h1>
+                    <p class="subtitle">Classés par ventes cumulées. Ouvre une fiche pour tout gérer.</p>
                 </div>
-                <button class="btn" id="syncBtn" data-i="sync">Synchroniser</button>
-                <button class="btn" id="importBtn" data-i="upload">Importer</button>
-                <button class="btn" id="exportBtn" data-i="download">Export</button>
-                <button class="btn primary" id="addBtn" data-i="plus">Ajouter</button>
+                <div class="toolbar">
+                    <div class="search">
+                        <span data-i="search"></span>
+                        <input type="text" id="q" placeholder="Rechercher" autocomplete="off">
+                    </div>
+                    <button class="btn" id="syncBtn" data-i="sync">Synchroniser</button>
+                    <button class="btn" id="importBtn" data-i="upload">Importer</button>
+                    <button class="btn" id="exportBtn" data-i="download">Export</button>
+                    <button class="btn primary" id="addBtn" data-i="plus">Ajouter</button>
+                </div>
             </div>
-        </div>
 
-        <div class="banner" id="banner"></div>
+            <div class="banner" id="banner"></div>
 
-        <div class="board">
-            <div class="board-cell">
-                <div class="board-label">Ambassadeurs</div>
-                <div class="board-value num" id="bCount">—</div>
+            <div class="board">
+                <div class="board-cell">
+                    <div class="board-label">Ambassadeurs</div>
+                    <div class="board-value num" id="bCount">—</div>
+                </div>
+                <div class="board-cell">
+                    <div class="board-label">Ventes cumulées</div>
+                    <div class="board-value num" id="bSales">—</div>
+                </div>
+                <div class="board-cell">
+                    <div class="board-label">Ventes ce mois</div>
+                    <div class="board-value num" id="bMonth">—</div>
+                </div>
+                <div class="board-cell">
+                    <div class="board-label">Commissions versées</div>
+                    <div class="board-value num" id="bCom">—</div>
+                </div>
             </div>
-            <div class="board-cell">
-                <div class="board-label">Ventes cumulées</div>
-                <div class="board-value num" id="bSales">—</div>
-            </div>
-            <div class="board-cell">
-                <div class="board-label">Ventes ce mois</div>
-                <div class="board-value num" id="bMonth">—</div>
-            </div>
-            <div class="board-cell">
-                <div class="board-label">Commissions versées</div>
-                <div class="board-value num" id="bCom">—</div>
-            </div>
-        </div>
 
-        <div class="filters" id="filters"></div>
-        <div class="grid" id="grid"></div>
+            <div class="filters" id="filters"></div>
+            <div class="grid" id="grid"></div>
+        </section>
+
+        <!-- ══ Vue Vidéos ══ -->
+        <section id="viewVideos" hidden>
+            <div class="topline">
+                <div>
+                    <h1>Vidéos</h1>
+                    <p class="subtitle">Tous les contenus reçus. Marque celles à passer en publicité.</p>
+                </div>
+                <div class="toolbar">
+                    <div class="search">
+                        <span data-i="search"></span>
+                        <input type="text" id="vq" placeholder="Rechercher" autocomplete="off">
+                    </div>
+                    <button class="btn primary" id="vidAddBtn" data-i="plus">Ajouter une vidéo</button>
+                </div>
+            </div>
+
+            <div class="board">
+                <div class="board-cell">
+                    <div class="board-label">Vidéos</div>
+                    <div class="board-value num" id="vTotal">—</div>
+                </div>
+                <div class="board-cell">
+                    <div class="board-label">Unboxing</div>
+                    <div class="board-value num" id="vUnbox">—</div>
+                </div>
+                <div class="board-cell">
+                    <div class="board-label">À utiliser en ads</div>
+                    <div class="board-value num" id="vTodo">—</div>
+                </div>
+                <div class="board-cell">
+                    <div class="board-label">Déjà utilisées</div>
+                    <div class="board-value num" id="vUsed">—</div>
+                </div>
+            </div>
+
+            <div class="filters" id="vFilters"></div>
+            <div class="vgrid" id="vgrid"></div>
+        </section>
     </main>
 </div>
 
@@ -529,6 +627,59 @@ select.inp{cursor:pointer}
 </div>
 
 <!-- Ajout -->
+<!-- Ajout vidéo -->
+<div class="scrim" id="vidScrim">
+    <div class="sheet" style="max-width:460px" role="dialog" aria-modal="true">
+        <div class="sheet-head">
+            <div class="sheet-title">Ajouter une vidéo<small>Elle sera stockée et rattachée à l'influenceur</small></div>
+            <button class="x" onclick="closeVidUpload()" aria-label="Fermer" data-i="x"></button>
+        </div>
+        <div class="sheet-body">
+            <div class="fieldset" style="border:none">
+                <div class="fields">
+                    <div class="wide">
+                        <label for="vInflu">Influenceur</label>
+                        <select class="inp" id="vInflu"></select>
+                    </div>
+                    <div>
+                        <label for="vType">Type</label>
+                        <select class="inp" id="vType">
+                            <option value="unboxing">Unboxing</option>
+                            <option value="playback">Playback</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="vAds">Statut ads</label>
+                        <select class="inp" id="vAds">
+                            <option value="">—</option>
+                            <option value="a_utiliser">À utiliser</option>
+                            <option value="utilise">Déjà utilisée</option>
+                        </select>
+                    </div>
+                    <div class="wide">
+                        <label for="vLink">Lien d'origine</label>
+                        <input class="inp" id="vLink" placeholder="tiktok.com/… (optionnel)" autocomplete="off">
+                    </div>
+                    <div class="wide">
+                        <label>Fichier vidéo</label>
+                        <div class="drop" id="vDrop">
+                            <span data-i="upload"></span>
+                            <div class="drop-t" id="vDropT">Choisir un fichier</div>
+                            <div class="drop-s">MP4, MOV, WEBM — 100 Mo maximum</div>
+                        </div>
+                        <input type="file" id="vFile" accept="video/*" hidden>
+                        <div class="bar" id="vBar" hidden><div class="bar-fill" id="vBarFill"></div></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="sheet-foot" style="justify-content:flex-end">
+            <button class="btn ghost sm" onclick="closeVidUpload()">Annuler</button>
+            <button class="btn primary sm" id="vUploadBtn" onclick="doVidUpload()" disabled data-i="check">Envoyer</button>
+        </div>
+    </div>
+</div>
+
 <!-- Import en masse -->
 <div class="scrim" id="impScrim">
     <div class="sheet" style="max-width:720px" role="dialog" aria-modal="true">
@@ -1005,6 +1156,238 @@ async function triggerSync(){
     }
 }
 
+/* ── Vues ───────────────────────────────────────────────────────────── */
+let VIEW = 'people';
+function setView(v){
+    VIEW = v;
+    document.getElementById('viewPeople').hidden = v !== 'people';
+    document.getElementById('viewVideos').hidden = v !== 'videos';
+    document.getElementById('navPeople').classList.toggle('active', v==='people');
+    document.getElementById('navVideos').classList.toggle('active', v==='videos');
+    // Les vidéos sont préchargées au démarrage pour le compteur : si c'est déjà
+    // fait, il suffit d'afficher, sinon on va les chercher.
+    if(v === 'videos') videosLoaded ? renderVideos() : loadVideos();
+}
+
+/* ── Vidéos ─────────────────────────────────────────────────────────── */
+let allVideos = [], videosLoaded = false;
+let vFilterType = '', vFilterAds = '', vFilterInflu = '';
+
+const ADS_LABEL = {a_utiliser:'À utiliser', utilise:'Utilisée'};
+
+function fmtSize(b){
+    if(!b) return '';
+    return b >= 1048576 ? (b/1048576).toFixed(1)+' Mo' : Math.round(b/1024)+' Ko';
+}
+function fmtDay(iso){
+    const d = new Date(iso);
+    return isNaN(d) ? '' : d.toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit',year:'2-digit'});
+}
+
+async function loadVideos(){
+    document.getElementById('vgrid').innerHTML =
+        Array.from({length:3},()=>'<div class="skel" style="height:400px"></div>').join('');
+    try{
+        const r = await fetch('/api/influenceurs/videos');
+        const d = await r.json();
+        allVideos = d.videos || [];
+        videosLoaded = true;
+    }catch(e){
+        allVideos = [];
+        toast('Chargement des vidéos impossible', true);
+    }
+    renderVideos();
+}
+
+function renderVideos(){
+    const total = allVideos.length;
+    const unbox = allVideos.filter(v=>v.type==='unboxing').length;
+    const todo  = allVideos.filter(v=>v.ads_status==='a_utiliser').length;
+    const used  = allVideos.filter(v=>v.ads_status==='utilise').length;
+    document.getElementById('vTotal').textContent = total;
+    document.getElementById('vUnbox').textContent = unbox;
+    document.getElementById('vTodo').textContent  = todo;
+    document.getElementById('vUsed').textContent  = used;
+    document.getElementById('navVidCount').textContent = total || '';
+
+    // Filtres
+    const counts = {
+        all: total, unboxing: unbox, playback: allVideos.filter(v=>v.type==='playback').length,
+        a_utiliser: todo, utilise: used, none: allVideos.filter(v=>!v.ads_status).length,
+    };
+    const chip = (on, label, n, fn) =>
+        `<button class="chip ${on?'on':''} ${n===0?'zero':''}" onclick="${fn}">${label} <span class="n num">${n}</span></button>`;
+    document.getElementById('vFilters').innerHTML =
+        chip(!vFilterType && !vFilterAds, 'Toutes', counts.all, "vClear()") +
+        chip(vFilterType==='unboxing','Unboxing',counts.unboxing,"vSetType('unboxing')") +
+        chip(vFilterType==='playback','Playback',counts.playback,"vSetType('playback')") +
+        chip(vFilterAds==='a_utiliser','À utiliser en ads',counts.a_utiliser,"vSetAds('a_utiliser')") +
+        chip(vFilterAds==='utilise','Déjà utilisées',counts.utilise,"vSetAds('utilise')") +
+        chip(vFilterAds==='none','Sans statut',counts.none,"vSetAds('none')");
+
+    // Liste filtrée
+    const q = (document.getElementById('vq').value||'').toLowerCase().trim();
+    let list = allVideos.slice();
+    if(vFilterType) list = list.filter(v=>v.type===vFilterType);
+    if(vFilterAds==='none') list = list.filter(v=>!v.ads_status);
+    else if(vFilterAds) list = list.filter(v=>v.ads_status===vFilterAds);
+    if(q) list = list.filter(v => (v.influ_name||'').toLowerCase().includes(q));
+
+    const grid = document.getElementById('vgrid');
+    if(!list.length){
+        grid.innerHTML = `<div class="empty">${ico('film')}
+            <div class="empty-t">${total ? 'Aucune vidéo pour ce filtre' : 'Aucune vidéo'}</div>
+            <div class="empty-s">${total ? 'Change de filtre pour voir les autres.' : 'Ajoute une vidéo pour commencer.'}</div>
+        </div>`;
+        return;
+    }
+    grid.innerHTML = list.map(vcardHtml).join('');
+    paintIcons(grid);
+}
+
+function vClear(){ vFilterType=''; vFilterAds=''; renderVideos(); }
+function vSetType(t){ vFilterType = vFilterType===t?'':t; vFilterAds=''; renderVideos(); }
+function vSetAds(a){ vFilterAds = vFilterAds===a?'':a; vFilterType=''; renderVideos(); }
+
+function vcardHtml(v){
+    const ads = v.ads_status ? `<span class="vtag ${v.ads_status==='utilise'?'ads-used':'ads-todo'}">${ADS_LABEL[v.ads_status]}</span>` : '';
+    return `
+    <article class="vcard">
+        <video src="${esc(v.url||'')}" preload="metadata" controls playsinline></video>
+        <div class="vcard-body">
+            <div class="vcard-top">
+                <span class="vcard-name">${esc(v.influ_name || v.influ_id || '—')}</span>
+                <span class="vtag ${esc(v.type)}">${v.type==='unboxing'?'Unboxing':'Playback'}</span>
+            </div>
+            ${ads ? `<div>${ads}</div>` : ''}
+            <div class="vcard-meta">${fmtDay(v.uploaded_at)}${v.size?' · '+fmtSize(v.size):''}</div>
+            ${v.orig_link ? `<a class="vcard-meta" href="${esc(v.orig_link)}" target="_blank" style="color:var(--accent);font-weight:700">Voir la publication</a>` : ''}
+            <div class="vcard-actions">
+                <select onchange="setVideoAds('${esc(v.id)}',this.value)">
+                    <option value="" ${!v.ads_status?'selected':''}>Statut ads —</option>
+                    <option value="a_utiliser" ${v.ads_status==='a_utiliser'?'selected':''}>À utiliser</option>
+                    <option value="utilise" ${v.ads_status==='utilise'?'selected':''}>Déjà utilisée</option>
+                </select>
+                <button class="icon-btn" onclick="deleteVideo('${esc(v.id)}')" title="Supprimer" data-i="trash"></button>
+            </div>
+        </div>
+    </article>`;
+}
+
+async function setVideoAds(id, val){
+    const v = allVideos.find(x=>x.id===id);
+    const prev = v ? v.ads_status : '';
+    if(v) v.ads_status = val;
+    renderVideos();
+    try{
+        const r = await fetch('/api/influenceurs/videos/update',{
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({id, ads_status: val})
+        });
+        const d = await r.json();
+        if(!d.success) throw new Error();
+        toast(val ? `Marquée « ${ADS_LABEL[val]} »` : 'Statut retiré');
+    }catch(e){
+        if(v) v.ads_status = prev;   // on remet l'état d'avant
+        renderVideos();
+        toast('Mise à jour impossible', true);
+    }
+}
+
+async function deleteVideo(id){
+    const v = allVideos.find(x=>x.id===id);
+    const who = v ? (v.influ_name||'cette vidéo') : 'cette vidéo';
+    if(!confirm(`Supprimer la vidéo de ${who} ? Cette action est définitive.`)) return;
+    try{
+        const r = await fetch('/api/influenceurs/videos/delete',{
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({id})
+        });
+        const d = await r.json();
+        if(!d.success) throw new Error();
+        allVideos = allVideos.filter(x=>x.id!==id);
+        renderVideos();
+        toast('Vidéo supprimée');
+    }catch(e){
+        toast('Suppression impossible', true);
+    }
+}
+
+/* — Upload — */
+let vPendingFile = null;
+
+function openVidUpload(){
+    if(!influenceurs.length){ toast("Ajoute d'abord un influenceur", true); return; }
+    document.getElementById('vInflu').innerHTML = influenceurs
+        .slice().sort((a,b)=>(a.pseudo||'').localeCompare(b.pseudo||''))
+        .map(i=>`<option value="${esc(i.id)}">${esc(i.pseudo||'Sans nom')}</option>`).join('');
+    document.getElementById('vType').value = 'unboxing';
+    document.getElementById('vAds').value = '';
+    document.getElementById('vLink').value = '';
+    document.getElementById('vFile').value = '';
+    document.getElementById('vDropT').textContent = 'Choisir un fichier';
+    document.getElementById('vBar').hidden = true;
+    document.getElementById('vBarFill').style.width = '0%';
+    document.getElementById('vUploadBtn').disabled = true;
+    vPendingFile = null;
+    document.getElementById('vidScrim').classList.add('open');
+}
+function closeVidUpload(){ document.getElementById('vidScrim').classList.remove('open'); }
+
+function vPickFile(f){
+    if(!f) return;
+    if(f.size > 100*1024*1024){ toast('Fichier trop lourd (100 Mo maximum)', true); return; }
+    vPendingFile = f;
+    document.getElementById('vDropT').textContent = `${f.name} · ${fmtSize(f.size)}`;
+    document.getElementById('vUploadBtn').disabled = false;
+}
+
+function doVidUpload(){
+    if(!vPendingFile) return;
+    const influId = document.getElementById('vInflu').value;
+    const inf = find(influId);
+    const btn = document.getElementById('vUploadBtn');
+    btn.disabled = true;
+    document.getElementById('vBar').hidden = false;
+
+    const fd = new FormData();
+    fd.append('video', vPendingFile);
+    fd.append('influ_id', influId);
+    fd.append('influ_name', inf ? (inf.pseudo||'') : '');
+    fd.append('type', document.getElementById('vType').value);
+    fd.append('ads_status', document.getElementById('vAds').value);
+    fd.append('orig_link', document.getElementById('vLink').value.trim());
+
+    // XHR plutôt que fetch : on veut la progression réelle de l'envoi.
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', '/api/influenceurs/videos/upload');
+    xhr.upload.onprogress = e => {
+        if(e.lengthComputable){
+            document.getElementById('vBarFill').style.width = Math.round(e.loaded/e.total*100) + '%';
+        }
+    };
+    xhr.onload = () => {
+        btn.disabled = false;
+        let d = {};
+        try{ d = JSON.parse(xhr.responseText); }catch(e){}
+        if(xhr.status === 200 && d.success){
+            allVideos.unshift(d.video);
+            closeVidUpload();
+            renderVideos();
+            toast('Vidéo ajoutée');
+        }else{
+            toast(d.error || "Envoi impossible", true);
+            document.getElementById('vBar').hidden = true;
+        }
+    };
+    xhr.onerror = () => {
+        btn.disabled = false;
+        document.getElementById('vBar').hidden = true;
+        toast('Connexion perdue pendant l\'envoi', true);
+    };
+    xhr.send(fd);
+}
+
 /* ── Import en masse ────────────────────────────────────────────────── */
 let impMode = 'people';
 let impParsed = null;
@@ -1251,16 +1634,34 @@ document.getElementById('syncBtn').addEventListener('click', triggerSync);
 document.getElementById('addBtn').addEventListener('click', openAdd);
 document.getElementById('importBtn').addEventListener('click', openImp);
 document.getElementById('exportBtn').addEventListener('click', exportCsv);
+document.getElementById('vq').addEventListener('input', renderVideos);
+document.getElementById('vidAddBtn').addEventListener('click', openVidUpload);
+document.getElementById('vidScrim').addEventListener('click', e => { if(e.target.id==='vidScrim') closeVidUpload(); });
+document.getElementById('vDrop').addEventListener('click', () => document.getElementById('vFile').click());
+document.getElementById('vFile').addEventListener('change', e => vPickFile(e.target.files[0]));
+['dragenter','dragover'].forEach(ev => document.getElementById('vDrop').addEventListener(ev, e => {
+    e.preventDefault(); document.getElementById('vDrop').classList.add('over');
+}));
+['dragleave','drop'].forEach(ev => document.getElementById('vDrop').addEventListener(ev, e => {
+    e.preventDefault(); document.getElementById('vDrop').classList.remove('over');
+}));
+document.getElementById('vDrop').addEventListener('drop', e => vPickFile(e.dataTransfer.files[0]));
 document.getElementById('impScrim').addEventListener('click', e => { if(e.target.id==='impScrim') closeImp(); });
 document.getElementById('scrim').addEventListener('click', e => { if(e.target.id==='scrim') closeSheet(); });
 document.getElementById('addScrim').addEventListener('click', e => { if(e.target.id==='addScrim') closeAdd(); });
 document.addEventListener('keydown', e => {
-    if(e.key === 'Escape'){ closeSheet(); closeAdd(); closeImp(); }
+    if(e.key === 'Escape'){ closeSheet(); closeAdd(); closeImp(); closeVidUpload(); }
 });
 
 document.getElementById('grid').innerHTML = Array.from({length:3}, ()=>'<div class="skel"></div>').join('');
 paintIcons();
 load();
+// Compteur vidéos dans la barre latérale, sans attendre l'ouverture de la vue.
+fetch('/api/influenceurs/videos')
+    .then(r => r.json())
+    .then(d => { allVideos = d.videos || []; videosLoaded = true;
+                 document.getElementById('navVidCount').textContent = allVideos.length || ''; })
+    .catch(() => {});
 </script>
 </body>
 </html>
