@@ -462,6 +462,11 @@ select.inp{cursor:pointer}
 .inp[readonly]{background:var(--surface-2);color:var(--muted);border-color:var(--line);cursor:default}
 .inp.mono{font-family:'JetBrains Mono',monospace;font-weight:700;letter-spacing:.02em;text-transform:uppercase}
 .hint{font-size:11px;color:var(--muted);margin-top:6px;line-height:1.5}
+/* Code d'accès : le code lui-même porte la valeur, les actions restent en retrait. */
+.pinrow{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.pinval{font-family:'JetBrains Mono',monospace;font-size:19px;font-weight:700;
+    letter-spacing:.24em;text-indent:.24em;color:var(--ink);min-width:86px}
+.pinval.none{font-size:13px;letter-spacing:0;text-indent:0;color:var(--muted);font-weight:600}
 .plats{display:flex;flex-wrap:wrap;gap:7px}
 .plat{
     display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 14px;
@@ -821,6 +826,15 @@ select.inp{cursor:pointer}
                         <label for="fAddress">Adresse de livraison</label>
                         <input class="inp" id="fAddress" placeholder="Adresse complète">
                     </div>
+                    <div class="wide">
+                        <label>Code d'accès à l'espace</label>
+                        <div class="pinrow">
+                            <span class="pinval" id="fPinVal">—</span>
+                            <button type="button" class="btn ghost sm" id="fPinGen">Générer</button>
+                            <button type="button" class="btn ghost sm" id="fPinClear">Retirer</button>
+                        </div>
+                        <div class="hint">Sans code, quiconque détient le lien peut réécrire l'adresse de livraison. Transmets-le toi-même à l'influenceur : il ne lui sera demandé qu'au moment de modifier sa livraison, jamais pour consulter son espace.</div>
+                    </div>
                 </div>
             </div>
 
@@ -1063,6 +1077,7 @@ function normalize(i){
         missions_done: i.missions_done || {},
         jerseys_shipped: !!i.jerseys_shipped,
         _espace_url: i._espace_url||'', program_start_date: i.program_start_date||'',
+        espace_pin: i.espace_pin||'',
         last_synced_at: i.last_synced_at||''
     };
 }
@@ -1277,6 +1292,7 @@ function openSheet(id){
         : "Aucun code promo : ces chiffres restent tels que tu les saisis.";
     renderSheetMissions(inf);
     renderSheetJerseys(inf);
+    renderSheetPin(inf);
 
     const n = inf.relances || 0;
     document.getElementById('relInfo').textContent = n ? `${n} relance${n>1?'s':''}` : 'Jamais relancé';
@@ -1284,6 +1300,43 @@ function openSheet(id){
 
     document.getElementById('scrim').classList.add('open');
 }
+
+/* ── Code d'accès à l'espace ─────────────────────────────────────────────
+   Le code n'est jamais envoyé par saveSheet : il a sa propre route, pour
+   qu'un enregistrement de fiche parti d'un onglet resté ouvert ne puisse pas
+   réécrire un code régénéré entre-temps. */
+function renderSheetPin(inf){
+    const el = document.getElementById('fPinVal');
+    const pin = (inf.espace_pin || '').trim();
+    el.textContent = pin || 'Aucun code';
+    el.classList.toggle('none', !pin);
+    document.getElementById('fPinClear').disabled = !pin;
+}
+
+async function setPin(action){
+    const inf = find(currentId);
+    if(!inf) return;
+    if(action === 'clear' && !confirm("Retirer le code ? L'adresse de livraison redeviendra modifiable par toute personne ayant le lien.")) return;
+
+    const gen = document.getElementById('fPinGen');
+    const clr = document.getElementById('fPinClear');
+    gen.disabled = clr.disabled = true;
+    try{
+        const r = await fetch('/api/espace/pin',{
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({id: currentId, action})
+        });
+        const d = await r.json();
+        if(!d.success) return toast('Erreur : ' + (d.error || ''));
+        inf.espace_pin = d.pin || '';
+        renderSheetPin(inf);
+        toast(d.pin ? `Code défini : ${d.pin}` : 'Code retiré');
+    }catch(e){ toast('Erreur réseau'); }
+    finally{ gen.disabled = false; }
+}
+
+document.getElementById('fPinGen').addEventListener('click', ()=> setPin('generate'));
+document.getElementById('fPinClear').addEventListener('click', ()=> setPin('clear'));
 // Missions : l'admin peut forcer l'état de chacune.
 const MISSION_LABELS = {
     profil:'Compléter son profil', maillots:'Choisir ses 2 maillots',
@@ -1482,9 +1535,14 @@ function scheduleSave(){
 }
 async function doSave(force){
     try{
+        // Le code d'accès ne part jamais d'ici : il a sa propre route. L'omettre
+        // le laisse intact côté serveur (la fusion conserve les champs absents),
+        // et évite qu'un onglet ouvert depuis une heure ne réécrive un code
+        // régénéré entre-temps.
+        const payload = influenceurs.map(({espace_pin, ...rest}) => rest);
         const r = await fetch('/api/influenceurs', {
             method:'POST', headers:{'Content-Type':'application/json'},
-            body: JSON.stringify({influenceurs, base_version: dataVersion, force: !!force})
+            body: JSON.stringify({influenceurs: payload, base_version: dataVersion, force: !!force})
         });
         if(r.status === 409){
             const d = await r.json();
