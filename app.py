@@ -3,6 +3,8 @@ import base64
 import json
 import time
 import uuid
+import hmac
+import secrets
 import threading
 import requests
 import boto3
@@ -3097,12 +3099,20 @@ def _aggregate_orders(orders):
     """
     Agrège une liste de commandes en stats : ventes/CA cumulés (hors annulées)
     + ventes/CA du mois calendaire courant.
+
+    Retourne aussi `by_month` : {"YYYY-MM": {"sales": n, "revenue": x}}.
+    Ce découpage permet de recalculer la commission de CHAQUE mois couvert par
+    les commandes, et pas seulement celle du mois courant. Sans lui, les ventes
+    tombant entre la dernière synchro d'un mois et minuit ne sont jamais
+    rémunérées : l'entrée d'historique du mois se fige au dernier passage et
+    plus rien ne la reprend une fois la clé de mois basculée.
     """
     now = datetime.now(timezone.utc)
     month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 
     sales = revenue = 0
     sales_month = revenue_month = 0
+    by_month = {}
 
     for o in orders:
         if o.get("cancelled"):
@@ -3115,13 +3125,21 @@ def _aggregate_orders(orders):
             created = datetime.fromisoformat((o["created_at"] or "").replace("Z", "+00:00"))
         except Exception:
             created = None
+        if created:
+            bucket = by_month.setdefault(created.strftime("%Y-%m"), {"sales": 0, "revenue": 0.0})
+            bucket["sales"]   += 1
+            bucket["revenue"] += amount
         if created and created >= month_start:
             sales_month += 1
             revenue_month += amount
 
+    for bucket in by_month.values():
+        bucket["revenue"] = round(bucket["revenue"], 2)
+
     return {
         "sales": sales, "revenue": round(revenue, 2),
         "sales_month": sales_month, "revenue_month": round(revenue_month, 2),
+        "by_month": by_month,
     }
 
 
@@ -3170,17 +3188,37 @@ def sync_influencer_stats(force=False):
                         s["sales_month"]   = agg["sales_month"]      # jamais affecté par le baseline
                         s["revenue_month"] = agg["revenue_month"]    # (toujours dans les 60j accessibles)
 
-                        # Ledger mensuel de commission : on calcule la commission du mois
-                        # en cours avec les stats fraîches, et on l'enregistre dans un
-                        # historique par mois (clé YYYY-MM). On ÉCRASE l'entrée du mois
-                        # en cours à chaque sync (pas d'addition) pour éviter tout
-                        # double-comptage — la commission cumulée = somme de l'historique.
-                        month_key = datetime.now(timezone.utc).strftime("%Y-%m")
-                        history = s.get("commission_history") or {}
-                        month_commission = _compute_monthly_commission(inf, s)
-                        history[month_key] = month_commission.get("amount", 0)
+                        # Ledger mensuel de commission : on recalcule l'entrée de CHAQUE
+                        # mois couvert par les commandes récupérées (clé YYYY-MM), pas
+                        # seulement celle du mois courant. Recalculer plutôt qu'additionner
+                        # évite tout double-comptage, et repasser sur les mois antérieurs
+                        # rattrape les ventes tombées après la dernière synchro d'un mois.
+                        #
+                        # Règle de sécurité : on n'écrase JAMAIS une entrée existante par
+                        # une valeur nulle. Shopify ne rend accessibles que les commandes
+                        # récentes ; sans ce garde-fou, un mois sorti de la fenêtre de
+                        # rétention verrait sa commission remise à zéro à la synchro
+                        # suivante — donc effacée définitivement.
+                        history = dict(s.get("commission_history") or {})
+                        for month_key, bucket in (agg.get("by_month") or {}).items():
+                            amount = _compute_monthly_commission(inf, {
+                                "sales_month":   bucket["sales"],
+                                "revenue_month": bucket["revenue"],
+                            }).get("amount", 0)
+                            if amount or month_key not in history:
+                                history[month_key] = amount
+
+                        # Le mois courant est toujours écrit, même à zéro : tant qu'il est
+                        # en cours, sa valeur doit pouvoir redescendre (commande annulée).
+                        current_key = datetime.now(timezone.utc).strftime("%Y-%m")
+                        history[current_key] = _compute_monthly_commission(inf, s).get("amount", 0)
+
                         s["commission_history"] = history
-                        s["commission"] = round(sum(history.values()), 2)
+                        # La commission cumulée intègre le baseline : sans lui, un
+                        # influenceur dont l'historique a été importé affiche un CA
+                        # cumulé cohérent mais une commission qui repart de zéro.
+                        baseline_commission = _safe_float(inf.get("baseline_commission", 0))
+                        s["commission"] = round(baseline_commission + sum(history.values()), 2)
 
                         inf["stats"] = s
                         inf["last_synced_at"] = datetime.now(timezone.utc).isoformat()
@@ -3914,7 +3952,7 @@ INFLUENCER_TIERS = [
         "id": "partenaire",
         "name": "Partenaire",
         "icon": "🔥",
-        "color": "#6366F1",
+        "color": "#2F50F1",
         "requirements": {"sales": 10},   # 10 ventes cumulées pour entrer
         "monthly_threshold": 10,         # 10 ventes dans le mois → fixe
         "monthly_fixed": 50,
@@ -3948,7 +3986,7 @@ INFLUENCER_TIERS = [
         "id": "vip",
         "name": "VIP",
         "icon": "👑",
-        "color": "#F59E0B",
+        "color": "#0B1020",
         "requirements": {"sales": 60},
         "monthly_threshold": 60,
         "monthly_fixed": 350,
@@ -4120,6 +4158,91 @@ def _monthly_gifting(stats):
     }
 
 
+def _month_clock(now=None):
+    """
+    Temps restant dans le mois calendaire courant.
+
+    Sert à passer l'objectif du mois en état d'urgence quand il reste peu de
+    jours : c'est précisément le moment où un influenceur à une vente du seuil
+    peut encore basculer, et où l'information a une valeur.
+    Retourne : days_left (jours entiers restants, 0 le dernier jour), total_days.
+    """
+    now = now or datetime.now(timezone.utc)
+    if now.month == 12:
+        next_month = now.replace(year=now.year + 1, month=1, day=1,
+                                 hour=0, minute=0, second=0, microsecond=0)
+    else:
+        next_month = now.replace(month=now.month + 1, day=1,
+                                 hour=0, minute=0, second=0, microsecond=0)
+    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    total_days  = (next_month - month_start).days
+    days_left   = max(0, (next_month - now).days)
+    return {"days_left": days_left, "total_days": total_days}
+
+
+def _espace_rank(inf, influenceurs=None):
+    """
+    Rang de l'influenceur sur les ventes du mois, parmi ceux qui ont un code
+    promo actif. Aucune donnée d'autrui n'est exposée : on ne renvoie qu'une
+    position et un effectif, jamais un nom ni un chiffre voisin.
+
+    Retourne None si le classement n'a pas de sens (moins de 3 participants,
+    ou aucune vente enregistrée ce mois-ci sur tout le programme).
+    """
+    try:
+        if influenceurs is None:
+            data = r2_get_json(INFLUENCEURS_R2_KEY) or {}
+            influenceurs = data.get("influenceurs", []) or []
+
+        pool = [i for i in influenceurs
+                if isinstance(i, dict) and (i.get("promo_code") or "").strip()]
+        if len(pool) < 3:
+            return None
+
+        def month_sales(x):
+            return _safe_int((x.get("stats") or {}).get("sales_month", 0))
+
+        if not any(month_sales(x) > 0 for x in pool):
+            return None
+
+        mine = month_sales(inf)
+        # Rang sportif : à égalité de ventes, tout le monde partage la place.
+        position = 1 + sum(1 for x in pool if month_sales(x) > mine)
+        return {
+            "position": position,
+            "total":    len(pool),
+            "sales":    mine,
+            # Le podium se mérite : il faut un vrai peloton derrière, sinon
+            # « 3e sur 4 » se mettrait en avant comme une performance.
+            "podium":   position <= 3 and mine > 0 and len(pool) >= 6,
+        }
+    except Exception as e:
+        print(f"[ESPACE] Classement indisponible: {e}")
+        return None
+
+
+# ── Code d'accès de l'espace ────────────────────────────────────────────────
+# L'URL publique est le seul secret protégeant la fiche, et elle circule :
+# capture d'écran, partage à un proche, historique de navigateur. Sans second
+# facteur, quiconque la détient peut réécrire l'adresse de livraison et
+# détourner le colis. Un code court, communiqué une fois par l'admin, suffit à
+# fermer cette porte sans alourdir la consultation : seule l'écriture des
+# champs sensibles le réclame, la lecture reste libre.
+ESPACE_PIN_FIELDS = {"shipping"}   # champs exigeant le code
+
+
+def _espace_pin(inf):
+    """Code d'accès configuré pour cet influenceur, ou '' si aucun."""
+    return str(inf.get("espace_pin") or "").strip()
+
+
+def _espace_pin_ok(inf, slug):
+    """Le visiteur a-t-il déjà présenté le bon code dans cette session ?"""
+    if not _espace_pin(inf):
+        return True                      # aucun code configuré : rien à vérifier
+    return bool(session.get(f"espace_pin_{slug}"))
+
+
 def _espace_payload(inf):
     """Construit toutes les données affichées dans l'espace influenceur."""
     stats = dict(inf.get("stats") or {})
@@ -4188,6 +4311,17 @@ def _espace_payload(inf):
         },
         "commission_month": _compute_monthly_commission(inf, stats),
         "gifting_month": _monthly_gifting(stats),
+        # Temps restant dans le mois : permet à l'interface de hiérarchiser
+        # l'objectif quand l'échéance approche.
+        "month_clock": _month_clock(),
+        # Classement anonymisé (position seule, jamais les chiffres des autres).
+        "rank": _espace_rank(inf),
+        # État du code d'accès : l'interface sait ainsi s'il faut le demander
+        # avant de laisser modifier l'adresse de livraison.
+        "access": {
+            "pin_required": bool(_espace_pin(inf)),
+            "pin_verified": _espace_pin_ok(inf, _public_slug(inf)),
+        },
         "tier": {
             "current": current_tier,
             "next": next_tier,
@@ -4232,6 +4366,17 @@ def api_espace_update(slug):
     if not updates:
         return jsonify({"success": False, "error": "aucun champ modifiable"}), 400
 
+    # Les champs sensibles (adresse de livraison) exigent le code d'accès.
+    # On vérifie ici, côté serveur : masquer le formulaire ne protège de rien.
+    if ESPACE_PIN_FIELDS & set(updates):
+        guard = _get_influencer_by_slug(slug)
+        if not guard:
+            return jsonify({"success": False, "error": "introuvable"}), 404
+        if not _espace_pin_ok(guard, slug):
+            return jsonify({
+                "success": False, "error": "code requis", "pin_required": True,
+            }), 403
+
     with _influenceurs_lock:
         data = r2_get_json(INFLUENCEURS_R2_KEY) or {}
         influenceurs = data.get("influenceurs", [])
@@ -4257,6 +4402,51 @@ def api_espace_update(slug):
         r2_put_json(INFLUENCEURS_R2_KEY, data)
 
     return jsonify({"success": True})
+
+@app.route("/api/espace/<slug>/verify", methods=["POST"])
+def api_espace_verify(slug):
+    """
+    Vérifie le code d'accès et ouvre la session pour les champs sensibles.
+
+    Le comptage des tentatives vit dans la session signée : un code à 4 chiffres
+    se force en quelques milliers d'essais, donc on ferme la porte au bout de
+    cinq. Le blocage n'est pas une sécurité absolue — vider ses cookies le
+    réinitialise — mais il transforme une attaque triviale en attaque bruyante,
+    ce qui suffit face au risque réel (un curieux qui a vu passer le lien).
+    """
+    inf = _get_influencer_by_slug(slug)
+    if not inf:
+        return jsonify({"success": False, "error": "introuvable"}), 404
+
+    expected = _espace_pin(inf)
+    if not expected:
+        return jsonify({"success": True, "pin_required": False})
+
+    tries_key = f"espace_try_{slug}"
+    tries = int(session.get(tries_key, 0) or 0)
+    if tries >= 5:
+        return jsonify({
+            "success": False,
+            "error": "Trop de tentatives. Contacte l'équipe Volakits.",
+            "locked": True,
+        }), 429
+
+    given = str((request.json or {}).get("pin") or "").strip()
+    # Comparaison à temps constant : un code court ne doit pas se déduire
+    # de la durée de la réponse.
+    if given and hmac.compare_digest(given, expected):
+        session[tries_key] = 0
+        session[f"espace_pin_{slug}"] = True
+        session.permanent = True
+        return jsonify({"success": True, "pin_required": True})
+
+    session[tries_key] = tries + 1
+    return jsonify({
+        "success": False,
+        "error": "Code incorrect.",
+        "remaining": max(0, 5 - (tries + 1)),
+    }), 401
+
 
 @app.route("/api/espace/<slug>/video", methods=["POST"])
 def api_espace_add_video(slug):
@@ -4290,6 +4480,46 @@ def api_espace_add_video(slug):
         videos.append(meta)
         _save_influ_videos(videos)
     return jsonify({"success": True, "video": meta})
+
+@app.route("/api/espace/pin", methods=["POST"])
+@_require_admin_api
+def api_espace_set_pin():
+    """
+    Génère, remplace ou retire le code d'accès d'un influenceur (côté admin).
+
+    Le code est transmis à l'influenceur par l'admin, de la main à la main :
+    c'est volontairement hors ligne, ça évite d'ouvrir un canal d'envoi pour
+    quatre chiffres. Body : {id, action: "generate"|"clear"}.
+    """
+    payload = request.json or {}
+    inf_id  = payload.get("id")
+    action  = payload.get("action") or "generate"
+    if not inf_id:
+        return jsonify({"success": False, "error": "id manquant"}), 400
+
+    with _influenceurs_lock:
+        data = r2_get_json(INFLUENCEURS_R2_KEY) or {}
+        influenceurs = data.get("influenceurs", [])
+        target = next((i for i in influenceurs
+                       if isinstance(i, dict) and i.get("id") == inf_id), None)
+        if not target:
+            return jsonify({"success": False, "error": "introuvable"}), 404
+
+        if action == "clear":
+            target["espace_pin"] = ""
+            new_pin = ""
+        else:
+            # secrets, pas random : ce code garde une adresse postale.
+            new_pin = f"{secrets.randbelow(10000):04d}"
+            target["espace_pin"] = new_pin
+
+        data["influenceurs"] = influenceurs
+        data["version"] = data.get("version", 0) + 1
+        data["updated_at"] = datetime.now(timezone.utc).isoformat()
+        r2_put_json(INFLUENCEURS_R2_KEY, data)
+
+    return jsonify({"success": True, "pin": new_pin})
+
 
 @app.route("/api/espace/<slug>/link")
 def api_espace_link(slug):
