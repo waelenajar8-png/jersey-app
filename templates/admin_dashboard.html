@@ -50,7 +50,7 @@ input,select,textarea{font-family:inherit;color:inherit}
 
 /* ── Barre de navigation mobile de la console ─────────────────────────── */
 .mbar{
-    display:none;align-items:center;gap:8px;margin-bottom:18px;
+    display:none;align-items:center;gap:8px;margin-bottom:18px;min-width:0;
     padding-bottom:14px;border-bottom:1px solid var(--line);
 }
 .mbar-mark{
@@ -58,16 +58,18 @@ input,select,textarea{font-family:inherit;color:inherit}
     display:grid;place-items:center;font-weight:800;font-size:12.5px;color:#fff;flex-shrink:0;
 }
 .mseg{display:flex;gap:4px;background:var(--surface-2);border:1px solid var(--line);
-    border-radius:100px;padding:3px;margin-left:4px}
+    border-radius:100px;padding:3px;margin-left:4px;min-width:0;overflow-x:auto;
+    scrollbar-width:none}
+.mseg::-webkit-scrollbar{display:none}
 .mseg button{
-    display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 13px;border-radius:100px;
+    display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 12px;border-radius:100px;flex-shrink:0;
     font-size:12.5px;font-weight:600;color:var(--muted);white-space:nowrap;
     transition:background .16s var(--ease),color .16s var(--ease);
 }
 .mseg button.on{background:var(--surface);color:var(--ink);box-shadow:var(--sh-xs)}
 .mseg .n{font-size:10px;font-weight:800;background:var(--line);border-radius:20px;padding:1px 6px}
 .mbar-out{margin-left:auto;color:var(--muted);display:grid;place-items:center;
-    width:34px;height:34px;border-radius:10px;flex-shrink:0}
+    width:32px;height:32px;border-radius:10px;flex-shrink:0}
 .mbar-out svg{width:17px;height:17px;stroke-width:1.9}
 .mbar-out:hover{background:var(--surface-2);color:var(--danger)}
 
@@ -238,6 +240,49 @@ h1{font-size:27px;font-weight:800;letter-spacing:-.035em;line-height:1.1}
 
 .card-foot{display:flex;gap:8px;padding:15px 18px 17px;margin-top:auto}
 .card-foot .btn{flex:1}
+
+/* ── Maillots dans la fiche ──────────────────────────────────────────── */
+.jchips{display:flex;flex-wrap:wrap;gap:8px}
+.jchip{
+    display:inline-flex;align-items:center;gap:8px;padding:6px 12px 6px 6px;
+    border-radius:100px;background:var(--surface-2);border:1px solid var(--line);
+    font-size:13px;font-weight:600;
+}
+.jchip img{width:26px;height:26px;border-radius:50%;object-fit:cover;flex-shrink:0}
+.jchip b{
+    font-size:11.5px;font-weight:800;background:var(--accent-soft);color:var(--accent);
+    border-radius:100px;padding:2px 8px;
+}
+.jchip-tag{display:block;font-size:11.5px;color:var(--muted);font-weight:500;margin-top:10px}
+.jchip-tag.ok{color:var(--ok);font-weight:600}
+
+/* ── Stock maillots ──────────────────────────────────────────────────── */
+.jrow{
+    display:flex;gap:18px;padding:18px 0;border-bottom:1px solid var(--line);
+}
+.jrow:last-child{border-bottom:none}
+.jimg{
+    width:64px;height:64px;border-radius:12px;background:var(--surface-2);
+    border:1px solid var(--line);object-fit:cover;flex-shrink:0;
+}
+.jimg-none{display:grid;place-items:center;color:var(--faint)}
+.jimg-none svg{width:20px;height:20px;stroke-width:1.8}
+.jinfo{flex:1;min-width:0}
+.jname{font-size:15px;font-weight:800;letter-spacing:-.02em}
+.jsub{font-size:12.5px;color:var(--muted);font-weight:500;margin-top:1px}
+.jtot{font-size:12px;color:var(--faint);font-weight:600;margin-top:5px}
+.jsizes{display:flex;flex-wrap:wrap;gap:7px;margin-top:11px}
+.sz{
+    display:inline-flex;align-items:baseline;gap:7px;padding:6px 11px;border-radius:10px;
+    background:var(--surface-2);border:1px solid var(--line);font-size:12.5px;font-weight:600;
+}
+.sz b{font-size:13.5px;font-weight:800;letter-spacing:-.02em}
+.sz .r{color:var(--warn);font-weight:700}
+.sz.out{background:var(--danger-soft);border-color:transparent;color:var(--danger)}
+.sz.low{border-color:#F5D9A8}
+.sz-who{font-size:11.5px;color:var(--muted);font-weight:500;margin-top:7px;line-height:1.5}
+.sz-who b{color:var(--ink-2);font-weight:700}
+.jinactive{opacity:.5}
 
 /* ── Squelette de chargement ─────────────────────────────────────────── */
 .skel{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);height:290px;overflow:hidden;position:relative}
@@ -452,6 +497,7 @@ select.inp{cursor:pointer}
             </div>
         </div>
         <button class="nav-item active" id="navPeople" onclick="setView('people')" data-i="users">Ambassadeurs</button>
+        <button class="nav-item" id="navStock" onclick="setView('stock')" data-i="tag">Stock maillots<span class="nav-count" id="navStockCount"></span></button>
         <button class="nav-item" id="navVideos" onclick="setView('videos')" data-i="film">Vidéos<span class="nav-count" id="navVidCount"></span></button>
         <div class="nav-label">Outils</div>
         <a href="/influenceurs" class="nav-item" data-i="ext">Ancien back-office</a>
@@ -465,6 +511,7 @@ select.inp{cursor:pointer}
             <div class="mbar-mark">V</div>
             <div class="mseg">
                 <button data-mseg="people" onclick="setView('people')">Ambassadeurs</button>
+                <button data-mseg="stock" onclick="setView('stock')">Stock</button>
                 <button data-mseg="videos" onclick="setView('videos')">Vidéos<span class="n num" id="mVidCount"></span></button>
             </div>
             <a href="/influenceurs/logout" class="mbar-out" title="Déconnexion" data-i="out"></a>
@@ -512,6 +559,33 @@ select.inp{cursor:pointer}
 
             <div class="filters" id="filters"></div>
             <div class="grid" id="grid"></div>
+        </section>
+
+        <!-- ══ Vue Stock ══ -->
+        <section id="viewStock" hidden>
+            <div class="topline">
+                <div>
+                    <h1>Stock maillots</h1>
+                    <p class="subtitle">Le stock physique se décrémente au passage à « Colis envoyé ».</p>
+                </div>
+                <div class="toolbar">
+                    <div class="search"><span data-i="search"></span>
+                        <input type="text" id="sq" placeholder="Rechercher" autocomplete="off"></div>
+                    <button class="btn" id="stockRefresh" data-i="sync">Actualiser</button>
+                    <a class="btn" href="/catalogue" target="_blank" data-i="ext">Modifier le catalogue</a>
+                </div>
+            </div>
+
+            <div class="banner" id="stockBanner"></div>
+
+            <div class="board">
+                <div class="board-cell"><div class="board-label">Modèles</div><div class="board-value num" id="sModels">—</div></div>
+                <div class="board-cell"><div class="board-label">En stock</div><div class="board-value num" id="sPhys">—</div></div>
+                <div class="board-cell"><div class="board-label">Réservés</div><div class="board-value num" id="sRes">—</div></div>
+                <div class="board-cell"><div class="board-label">Disponibles</div><div class="board-value num" id="sDispo">—</div></div>
+            </div>
+
+            <div id="stockList"></div>
         </section>
 
         <!-- ══ Vue Vidéos ══ -->
@@ -655,6 +729,11 @@ select.inp{cursor:pointer}
                         <input class="inp" type="date" id="fDeadline">
                     </div>
                 </div>
+            </div>
+
+            <div class="fieldset">
+                <div class="legend">Maillots choisis</div>
+                <div id="fJerseys"></div>
             </div>
 
             <div class="fieldset">
@@ -916,6 +995,8 @@ function normalize(i){
         stats_revenue: i.stats_revenue||0, stats_revenue_month: i.stats_revenue_month||0,
         stats_commission: (i.stats && i.stats.commission) || 0,
         baseline_sales: i.baseline_sales||0, baseline_revenue: i.baseline_revenue||0,
+        jerseys: Array.isArray(i.jerseys) ? i.jerseys : [],
+        jerseys_shipped: !!i.jerseys_shipped,
         _espace_url: i._espace_url||'', program_start_date: i.program_start_date||'',
         last_synced_at: i.last_synced_at||''
     };
@@ -1121,6 +1202,7 @@ function openSheet(id){
     document.getElementById('fTrackStatus').value = inf.trackingStatus || '';
     document.getElementById('fAddress').value   = inf.address || '';
     document.getElementById('fNotes').value     = inf.notes || '';
+    renderSheetJerseys(inf);
 
     const n = inf.relances || 0;
     document.getElementById('relInfo').textContent = n ? `${n} relance${n>1?'s':''}` : 'Jamais relancé';
@@ -1128,6 +1210,27 @@ function openSheet(id){
 
     document.getElementById('scrim').classList.add('open');
 }
+// Maillots sélectionnés par l'influenceur, avec leur taille.
+function renderSheetJerseys(inf){
+    const box = document.getElementById('fJerseys');
+    const list = inf.jerseys || [];
+    if(!list.length){
+        box.innerHTML = `<div class="hint" style="margin-top:0">Aucun maillot choisi pour l'instant.
+            Il les sélectionne depuis son espace.</div>`;
+        return;
+    }
+    const state = inf.jerseys_shipped
+        ? `<span class="jchip-tag ok">Sorti du stock</span>`
+        : `<span class="jchip-tag">Réservé — sortira du stock au passage à « Colis envoyé »</span>`;
+    box.innerHTML = `<div class="jchips">
+        ${list.map(j => `<span class="jchip">
+            ${j.image ? `<img src="${escAttr(j.image)}" alt="">` : ''}
+            <span>${esc(j.name || 'Maillot')}</span>
+            <b>${esc(j.size || '?')}</b>
+        </span>`).join('')}
+    </div>${state}`;
+}
+
 function closeSheet(){ document.getElementById('scrim').classList.remove('open'); currentId = null; }
 
 function saveSheet(){
@@ -1286,12 +1389,15 @@ function setView(v){
     VIEW = v;
     document.getElementById('viewPeople').hidden = v !== 'people';
     document.getElementById('viewVideos').hidden = v !== 'videos';
+    document.getElementById('viewStock').hidden  = v !== 'stock';
     document.getElementById('navPeople').classList.toggle('active', v==='people');
     document.getElementById('navVideos').classList.toggle('active', v==='videos');
+    document.getElementById('navStock').classList.toggle('active', v==='stock');
     document.querySelectorAll('[data-mseg]').forEach(b => b.classList.toggle('on', b.dataset.mseg === v));
     // Les vidéos sont préchargées au démarrage pour le compteur : si c'est déjà
     // fait, il suffit d'afficher, sinon on va les chercher.
     if(v === 'videos') videosLoaded ? renderVideos() : loadVideos();
+    if(v === 'stock')  stockData ? renderStock() : loadStock();
 }
 
 /* ── Vidéos ─────────────────────────────────────────────────────────── */
@@ -1544,6 +1650,86 @@ function doVidUpload(){
     xhr.send(fd);
 }
 
+/* ── Stock maillots ─────────────────────────────────────────────────── */
+let stockData = null;
+
+async function loadStock(){
+    document.getElementById('stockList').innerHTML =
+        Array.from({length:3},()=>'<div class="skel" style="height:104px;margin-bottom:14px"></div>').join('');
+    try{
+        const r = await fetch('/api/stock');
+        stockData = await r.json();
+    }catch(e){
+        stockData = null;
+        toast('Chargement du stock impossible', true);
+    }
+    renderStock();
+}
+
+function renderStock(){
+    if(!stockData) return;
+    const t = stockData.totals || {};
+    document.getElementById('sModels').textContent = t.models ?? 0;
+    document.getElementById('sPhys').textContent   = t.physical ?? 0;
+    document.getElementById('sRes').textContent    = t.reserved ?? 0;
+    document.getElementById('sDispo').textContent  = t.available ?? 0;
+    const nsc = document.getElementById('navStockCount');
+    if(nsc) nsc.textContent = t.available ?? '';
+
+    // Alerte : des maillots choisis n'existent plus au catalogue
+    const b = document.getElementById('stockBanner');
+    if(stockData.orphans && stockData.orphans.length){
+        b.className = 'banner show';
+        b.style.background = 'var(--warn-soft)'; b.style.color = '#96590A';
+        b.innerHTML = ico('alert') + `<span>Choisis par un influenceur mais absents du catalogue : ${esc(stockData.orphans.join(', '))}</span>`;
+    }else{
+        b.className = 'banner';
+    }
+
+    const q = (document.getElementById('sq').value || '').toLowerCase().trim();
+    let list = (stockData.jerseys || []);
+    if(q) list = list.filter(j => (j.name||'').toLowerCase().includes(q) || (j.sub||'').toLowerCase().includes(q));
+
+    const box = document.getElementById('stockList');
+    if(!list.length){
+        box.innerHTML = `<div class="empty">${ico('tag')}
+            <div class="empty-t">${stockData.jerseys.length ? 'Aucun modèle trouvé' : 'Catalogue vide'}</div>
+            <div class="empty-s">${stockData.jerseys.length ? 'Essaie un autre terme.' : 'Ajoute des maillots depuis le catalogue.'}</div></div>`;
+        paintIcons(box);
+        return;
+    }
+
+    box.innerHTML = list.map(j => `
+        <div class="jrow ${j.active ? '' : 'jinactive'}">
+            ${j.image ? `<img class="jimg" src="${escAttr(j.image)}" alt="">`
+                      : `<div class="jimg jimg-none">${ico('tag')}</div>`}
+            <div class="jinfo">
+                <div class="jname">${esc(j.name || '—')}${j.active ? '' : ' · inactif'}</div>
+                ${j.sub ? `<div class="jsub">${esc(j.sub)}</div>` : ''}
+                <div class="jtot num">${j.physical} en stock · ${j.reserved} réservé${j.reserved>1?'s':''} · <b>${j.available} disponible${j.available>1?'s':''}</b></div>
+                <div class="jsizes">
+                    ${j.sizes.map(x => `
+                        <span class="sz ${x.available<=0 ? 'out' : x.available<=1 ? 'low' : ''}" title="${x.physical} en stock, ${x.reserved} réservé(s)">
+                            ${esc(x.size)} <b class="num">${x.available}</b>
+                            ${x.reserved ? `<span class="r num">−${x.reserved}</span>` : ''}
+                        </span>`).join('')}
+                </div>
+                ${renderHolders(j)}
+            </div>
+        </div>`).join('');
+    paintIcons(box);
+}
+
+// Qui retient quoi : utile pour savoir à qui réclamer un envoi.
+function renderHolders(j){
+    const parts = [];
+    j.sizes.forEach(x => {
+        if(x.holders && x.holders.length)
+            parts.push(`<b>${esc(x.size)}</b> ${esc(x.holders.join(', '))}`);
+    });
+    return parts.length ? `<div class="sz-who">Réservé par — ${parts.join(' · ')}</div>` : '';
+}
+
 /* ── Import en masse ────────────────────────────────────────────────── */
 let impMode = 'people';
 let impParsed = null;
@@ -1792,6 +1978,8 @@ document.getElementById('addBtn').addEventListener('click', openAdd);
 document.getElementById('importBtn').addEventListener('click', openImp);
 document.getElementById('exportBtn').addEventListener('click', exportCsv);
 document.getElementById('vq').addEventListener('input', renderVideos);
+document.getElementById('sq').addEventListener('input', renderStock);
+document.getElementById('stockRefresh').addEventListener('click', loadStock);
 document.getElementById('vidAddBtn').addEventListener('click', openVidUpload);
 document.getElementById('vidScrim').addEventListener('click', e => { if(e.target.id==='vidScrim') closeVidUpload(); });
 document.getElementById('vDrop').addEventListener('click', () => document.getElementById('vFile').click());
