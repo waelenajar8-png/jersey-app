@@ -131,10 +131,12 @@ h1{font-size:24px;margin:0;font-weight:800;letter-spacing:-0.02em}
 .st-1{background:rgba(96,165,250,.15);color:#60a5fa}
 .st-2{background:rgba(167,139,250,.15);color:#a78bfa}
 .st-3{background:var(--accent-dim);color:var(--accent)}
-.st-4{background:rgba(251,191,36,.15);color:var(--warn)}
+.st-4{background:rgba(251,146,60,.16);color:#fb923c}
 .st-5{background:rgba(34,211,238,.15);color:#22d3ee}
-.st-6{background:rgba(244,114,182,.15);color:#f472b6}
-.st-7{background:var(--ok-dim);color:var(--ok)}
+.st-6{background:rgba(34,197,94,.15);color:#4ade80}
+.st-7{background:rgba(148,163,184,.16);color:#94a3b8}
+.st-8{background:rgba(244,114,182,.15);color:#f472b6}
+.st-9{background:var(--ok-dim);color:var(--ok)}
 
 .days-badge{font-size:12px;font-weight:600;padding:3px 9px;border-radius:7px;background:var(--panel-hover);color:var(--text-dim)}
 .days-badge.late{background:var(--danger-dim);color:var(--danger)}
@@ -392,20 +394,25 @@ h1{font-size:24px;margin:0;font-weight:800;letter-spacing:-0.02em}
 // Suivi Influenceurs — V1.1 (12 améliorations, sans API externe)
 // ══════════════════════════════════════════════════════════════════════════
 
+// Échelle 2, identique à /admin. Les données existantes sont remappées
+// côté serveur (voir _migrate_status_scale dans app.py).
 const STATUSES = [
-    "À contacter", "Contacté", "En négociation", "Accord",
-    "Colis envoyé", "Livré", "Contenu en cours", "Terminé"
+    "À contacter", "Contacté", "En négociation", "Accord", "Colis à envoyer",
+    "Colis envoyé", "Livré", "En attente de contenu", "Contenu en cours", "Terminé"
 ];
+const STATUS_LAST = STATUSES.length - 1;
 
 // Seuils (en jours) par statut → passe en "urgent" au-delà.
 // AMÉLIORATION #3 : ajout des cas Accord(3) sans colis et Colis envoyé(4) sans livraison.
 const RELANCE_THRESHOLD = {
     1: 4,   // Contacté → relancer après 4j sans réponse
     2: 5,   // En négociation → 5j
-    3: 3,   // Accord conclu → colis à envoyer sous 3j
-    4: 7,   // Colis envoyé → devrait être livré/marqué livré sous 7j
-    5: 7,   // Livré → contenu attendu sous 7j
-    6: 10,  // Contenu en cours → 10j
+    3: 3,   // Accord conclu → préparer le colis sous 3j
+    4: 3,   // Colis à envoyer → expédier sous 3j
+    5: 7,   // Colis envoyé → devrait être livré sous 7j
+    6: 7,   // Livré → contenu attendu sous 7j
+    7: 7,   // En attente de contenu → relancer après 7j
+    8: 10,  // Contenu en cours → 10j
 };
 
 let influenceurs = [];
@@ -442,7 +449,7 @@ function normalize(i){
         profil: i.profil||'',
         whatsapp: i.whatsapp||'',
         platform: i.platform||'',
-        status: (typeof i.status==='number' && i.status>=0 && i.status<=7) ? i.status : 0,
+        status: (typeof i.status==='number' && i.status>=0 && i.status<=STATUS_LAST) ? i.status : 0,
         // lastContact = base du calcul d'urgence (contact/relance/statut uniquement)
         lastContact: i.lastContact || i.lastAction || nowIso,
         // lastModified = dernière modif quelconque (info seulement)
@@ -639,7 +646,7 @@ function daysSince(iso){
 }
 
 function urgencyLevel(inf){
-    if(inf.status===7) return 'ok';           // terminé
+    if(inf.status===STATUS_LAST) return 'ok';           // terminé
     // AMÉLIORATION #3 : incohérence tracking = problème → urgent
     if(inf.trackingStatus==='probleme') return 'urgent';
     // AMÉLIORATION #5 (deadline) : contenu en retard sur deadline sans quota complet
@@ -648,7 +655,7 @@ function urgencyLevel(inf){
         if(!isNaN(dl) && Date.now() > dl){
             const posted = (typeof allVideos!=='undefined')?allVideos.filter(v=>v.influ_id===inf.id).length:0;
             // s'il reste du contenu à poster et deadline passée
-            if(inf.status>=4 && inf.status<7 && posted===0) return 'urgent';
+            if(inf.status>=5 && inf.status<STATUS_LAST && posted===0) return 'urgent';
         }
     }
     const threshold = RELANCE_THRESHOLD[inf.status];
@@ -764,7 +771,7 @@ function cardHtml(inf){
                 ${histLine}
                 <!-- AMÉLIORATION #1bis : actions fréquentes SANS déplier -->
                 <div class="quick-actions">
-                    ${inf.status<7?`<button class="quick-btn primary" data-act="advance" data-id="${eid}">→ ${esc(STATUSES[inf.status+1])}</button>`:''}
+                    ${inf.status<STATUS_LAST?`<button class="quick-btn primary" data-act="advance" data-id="${eid}">→ ${esc(STATUSES[inf.status+1])}</button>`:''}
                     <button class="quick-btn" data-act="relancer" data-id="${eid}">🔄 Relancer${inf.relances?' ('+inf.relances+')':''}</button>
                 </div>
             </div>
@@ -1020,7 +1027,7 @@ function setField(id,field,val){
 // Changement de statut = action de contact → met à jour lastContact + re-render
 function setStatus(id,val){
     const inf=find(id); if(!inf) return;
-    if(isNaN(val)||val<0||val>7) return;
+    if(isNaN(val)||val<0||val>STATUS_LAST) return;
     inf.status=val;
     inf.lastContact=new Date().toISOString();
     inf.lastModified=inf.lastContact;
@@ -1029,7 +1036,7 @@ function setStatus(id,val){
 
 function advance(id){
     const inf=find(id); if(!inf) return;
-    if(inf.status<7){
+    if(inf.status<STATUS_LAST){
         inf.status++;
         inf.lastContact=new Date().toISOString();
         inf.lastModified=inf.lastContact;
