@@ -3318,6 +3318,10 @@ def api_get_influenceurs():
             inf.setdefault("stats_sales_month",   _safe_int(s.get("sales_month", 0)))
             inf.setdefault("stats_revenue",       _safe_float(s.get("revenue", 0)))
             inf.setdefault("stats_revenue_month", _safe_float(s.get("revenue_month", 0)))
+            # Images signées des maillots choisis, pour l'aperçu dans la fiche.
+            for j in (inf.get("jerseys") or []):
+                if not j.get("image") and j.get("r2_key"):
+                    j["image"] = r2_presigned(j["r2_key"], expires=604800)
 
         return jsonify({
             "influenceurs": influenceurs,
@@ -3327,6 +3331,161 @@ def api_get_influenceurs():
     except Exception as e:
         print(f"[INFLU] Erreur lecture: {e}")
         return jsonify({"influenceurs": [], "version": 0, "updated_at": ""})
+
+def _merge_influenceurs(stored, incoming):
+    """
+    Fusionne la liste reçue du back-office avec celle déjà en base.
+
+    Le front ne renvoie que les champs qu'il affiche : tout ce qu'il ignore
+    (adresse de livraison, maillots choisis, réseaux, missions accomplies,
+    historique des commissions…) doit être conservé tel quel. Les suppressions
+    restent possibles : un influenceur absent de la liste reçue est retiré.
+    """
+    by_id = {i.get("id"): i for i in stored if isinstance(i, dict) and i.get("id")}
+    out = []
+    for inf in incoming:
+        if not isinstance(inf, dict):
+            continue
+        base = by_id.get(inf.get("id"))
+        if not base:
+            out.append(inf)          # nouvel influenceur
+            continue
+        merged = dict(base)          # on part de ce qui existe
+        for k, v in inf.items():
+            if k == "stats":
+                # Les stats se fusionnent clé par clé : le front n'en renvoie
+                # que quelques-unes, les autres (commission, historique) restent.
+                st = dict(base.get("stats") or {})
+                st.update(v or {})
+                merged["stats"] = st
+            else:
+                merged[k] = v
+        out.append(merged)
+    return out
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# SUIVI DES MAILLOTS
+#
+# Trois compteurs par taille :
+#   - physique   : ce qui est réellement en stock (champ « sizes » du catalogue)
+#   - réservé    : choisi par un influenceur dont le colis n'est pas encore parti
+#   - disponible : physique − réservé, ce qui reste promettable
+#
+# Le stock physique est décrémenté au passage à « Colis envoyé » (statut 5),
+# moment où le maillot quitte vraiment le stock. La déduction est marquée sur
+# la fiche (jerseys_shipped) pour ne jamais être appliquée deux fois.
+# ══════════════════════════════════════════════════════════════════════════════
+STATUS_COLIS_ENVOYE = 5
+
+
+def _reserved_map(influenceurs):
+    """Maillots choisis mais pas encore expédiés → {(jersey_id, taille): qté}."""
+    res = {}
+    for inf in influenceurs:
+        if not isinstance(inf, dict):
+            continue
+        if inf.get("jerseys_shipped"):
+            continue                      # déjà sorti du stock physique
+        for j in (inf.get("jerseys") or []):
+            jid, size = j.get("id"), (j.get("size") or "").strip()
+            if jid and size:
+                res[(jid, size)] = res.get((jid, size), 0) + 1
+    return res
+
+
+def _apply_shipment(inf, cat):
+    """
+    Décrémente le stock physique des maillots d'un influenceur qui vient de
+    passer à « Colis envoyé ». Idempotent : ne s'applique qu'une fois.
+    Retourne la liste des manques éventuels (taille déjà à zéro).
+    """
+    if inf.get("jerseys_shipped"):
+        return []
+    shortages = []
+    by_id = {j.get("id"): j for j in cat.get("jerseys", [])}
+    for pick in (inf.get("jerseys") or []):
+        jid, size = pick.get("id"), (pick.get("size") or "").strip()
+        if not jid or not size:
+            continue
+        j = by_id.get(jid)
+        if not j:
+            shortages.append(f"{pick.get('name','?')} ({size}) — maillot absent du catalogue")
+            continue
+        sizes = j.setdefault("sizes", {})
+        left = _safe_int(sizes.get(size, 0))
+        if left <= 0:
+            shortages.append(f"{j.get('name','?')} taille {size} — stock déjà à zéro")
+            sizes[size] = 0
+        else:
+            sizes[size] = left - 1
+    inf["jerseys_shipped"] = True
+    inf["jerseys_shipped_at"] = datetime.now(timezone.utc).isoformat()
+    return shortages
+
+
+@app.route("/api/stock", methods=["GET"])
+@_require_admin_api
+def api_stock():
+    """État du stock par maillot et par taille, croisé avec les réservations."""
+    try:
+        cat  = _load_gifting_catalog()
+        data = r2_get_json(INFLUENCEURS_R2_KEY) or {}
+        influenceurs = data.get("influenceurs", []) or []
+        reserved = _reserved_map(influenceurs)
+
+        # Qui a réservé quoi — pour afficher les noms en face de chaque taille.
+        holders = {}
+        for inf in influenceurs:
+            if not isinstance(inf, dict) or inf.get("jerseys_shipped"):
+                continue
+            for j in (inf.get("jerseys") or []):
+                jid, size = j.get("id"), (j.get("size") or "").strip()
+                if jid and size:
+                    holders.setdefault((jid, size), []).append(inf.get("pseudo") or "—")
+
+        out, tot_phys, tot_res = [], 0, 0
+        for j in cat.get("jerseys", []):
+            sizes = j.get("sizes") or {}
+            rows = []
+            for size in sorted(sizes.keys()):
+                phys = _safe_int(sizes.get(size, 0))
+                rsv  = reserved.get((j.get("id"), size), 0)
+                tot_phys += phys
+                tot_res  += rsv
+                rows.append({
+                    "size": size, "physical": phys, "reserved": rsv,
+                    "available": phys - rsv,
+                    "holders": holders.get((j.get("id"), size), []),
+                })
+            out.append({
+                "id": j.get("id"), "name": j.get("name", ""), "sub": j.get("sub", ""),
+                "active": bool(j.get("active", True)),
+                "image": r2_presigned(j["r2_key"], expires=604800) if j.get("r2_key") else "",
+                "sizes": rows,
+                "physical": sum(r["physical"] for r in rows),
+                "reserved": sum(r["reserved"] for r in rows),
+                "available": sum(r["available"] for r in rows),
+            })
+
+        # Maillots choisis dont le modèle n'existe plus au catalogue
+        known = {j.get("id") for j in cat.get("jerseys", [])}
+        orphans = sorted({
+            (j.get("name") or "?") for inf in influenceurs
+            for j in (inf.get("jerseys") or []) if j.get("id") not in known
+        })
+
+        return jsonify({
+            "jerseys": out,
+            "totals": {"physical": tot_phys, "reserved": tot_res,
+                       "available": tot_phys - tot_res, "models": len(out)},
+            "orphans": orphans,
+        })
+    except Exception as e:
+        print(f"[STOCK] Erreur: {e}")
+        return jsonify({"jerseys": [], "totals": {"physical":0,"reserved":0,"available":0,"models":0},
+                        "orphans": [], "error": str(e)}), 500
+
 
 @app.route("/api/influenceurs", methods=["POST"])
 @_require_admin_api
@@ -3364,8 +3523,9 @@ def api_save_influenceurs():
             if "stats_revenue_month" in inf:
                 s["revenue_month"] = _safe_float(inf.pop("stats_revenue_month"))
             inf["stats"] = s
-            # Nettoyer champ virtuel non persisté
+            # Nettoyer champs virtuels non persistés
             inf.pop("_espace_url", None)
+            inf.pop("stats_commission", None)
 
         with _influenceurs_lock:
             current = r2_get_json(INFLUENCEURS_R2_KEY) or {}
@@ -3382,6 +3542,34 @@ def api_save_influenceurs():
                     "server_influenceurs": current.get("influenceurs", []),
                     "server_updated_at": current.get("updated_at", ""),
                 }), 409
+
+            # ── Fusion plutôt que remplacement ──────────────────────────
+            # Le back-office ne connaît qu'une partie des champs : ceux remplis
+            # par l'influenceur lui-même (adresse, maillots choisis, réseaux,
+            # missions accomplies, historique des commissions) n'y figurent pas.
+            # Un remplacement brut les effacerait à chaque enregistrement.
+            stored_list = current.get("influenceurs", [])
+            prev_status = {i.get("id"): i.get("status") for i in stored_list if isinstance(i, dict)}
+            influenceurs = _merge_influenceurs(stored_list, influenceurs)
+
+            # ── Sortie de stock automatique ─────────────────────────────
+            # Au passage à « Colis envoyé », les maillots choisis quittent le
+            # stock physique. Marqué sur la fiche pour ne jamais compter deux fois.
+            cat, cat_dirty, shortages = None, False, []
+            for inf in influenceurs:
+                was = prev_status.get(inf.get("id"))
+                now = inf.get("status")
+                if now == STATUS_COLIS_ENVOYE and was != STATUS_COLIS_ENVOYE and not inf.get("jerseys_shipped"):
+                    if cat is None:
+                        cat = _load_gifting_catalog()
+                    miss = _apply_shipment(inf, cat)
+                    cat_dirty = True
+                    if miss:
+                        shortages.extend([f"{inf.get('pseudo','?')} : {m}" for m in miss])
+            if cat_dirty and cat is not None:
+                _save_gifting_catalog(cat)
+                if shortages:
+                    print(f"[STOCK] Manques signalés: {shortages}")
 
             new_version = server_version + 1
             now_iso = datetime.now(timezone.utc).isoformat()
@@ -3407,7 +3595,8 @@ def api_save_influenceurs():
             if not ok:
                 return jsonify({"success": False, "error": "écriture R2 échouée"}), 500
 
-        return jsonify({"success": True, "count": len(influenceurs), "version": new_version, "updated_at": now_iso})
+        return jsonify({"success": True, "count": len(influenceurs), "version": new_version,
+                        "updated_at": now_iso, "stock_warnings": shortages})
     except Exception as e:
         print(f"[INFLU] Erreur sauvegarde: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
