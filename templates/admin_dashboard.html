@@ -242,6 +242,21 @@ h1{font-size:27px;font-weight:800;letter-spacing:-.035em;line-height:1.1}
 .card-foot .btn{flex:1}
 
 /* ── Maillots dans la fiche ──────────────────────────────────────────── */
+.mlist{display:flex;flex-direction:column;gap:6px}
+.mrow{
+    display:flex;align-items:center;gap:11px;padding:9px 11px;border-radius:10px;
+    border:1px solid var(--line);background:var(--surface);font-size:13.5px;font-weight:500;
+    color:var(--ink-2);text-align:left;cursor:pointer;width:100%;
+    transition:border-color .16s var(--ease),background .16s var(--ease);
+}
+.mrow:hover{border-color:var(--line-2)}
+.mrow.on{background:var(--ok-soft);border-color:transparent;color:#046B4F;font-weight:600}
+.mbox{
+    width:19px;height:19px;border-radius:6px;border:1.5px solid var(--line-2);
+    display:grid;place-items:center;font-size:11px;font-weight:800;flex-shrink:0;
+    background:var(--surface);color:#fff;
+}
+.mrow.on .mbox{background:var(--ok);border-color:var(--ok)}
 .jchips{display:flex;flex-wrap:wrap;gap:8px}
 .jchip{
     display:inline-flex;align-items:center;gap:8px;padding:6px 12px 6px 6px;
@@ -253,6 +268,15 @@ h1{font-size:27px;font-weight:800;letter-spacing:-.035em;line-height:1.1}
     font-size:11.5px;font-weight:800;background:var(--accent-soft);color:var(--accent);
     border-radius:100px;padding:2px 8px;
 }
+.jchip-x{
+    width:18px;height:18px;border-radius:50%;display:grid;place-items:center;
+    font-size:11px;color:var(--muted);background:none;border:none;cursor:pointer;flex-shrink:0;
+    transition:background .15s var(--ease),color .15s var(--ease);
+}
+.jchip-x:hover{background:var(--danger-soft);color:var(--danger)}
+.jadd{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap}
+.jadd .inp{flex:1;min-width:132px;height:38px}
+.jadd .btn{height:38px;flex-shrink:0}
 .jchip-tag{display:block;font-size:11.5px;color:var(--muted);font-weight:500;margin-top:10px}
 .jchip-tag.ok{color:var(--ok);font-weight:600}
 
@@ -276,6 +300,14 @@ h1{font-size:27px;font-weight:800;letter-spacing:-.035em;line-height:1.1}
     display:inline-flex;align-items:baseline;gap:7px;padding:6px 11px;border-radius:10px;
     background:var(--surface-2);border:1px solid var(--line);font-size:12.5px;font-weight:600;
 }
+.sz-in{
+    width:46px;height:26px;padding:0 6px;border-radius:7px;border:1px solid var(--line-2);
+    background:var(--surface);font-size:13px;font-weight:800;text-align:center;
+    font-family:inherit;color:var(--ink);outline:none;
+}
+.sz-in:focus{border-color:var(--accent);box-shadow:0 0 0 2.5px var(--accent-ring)}
+.sz-in::-webkit-outer-spin-button,.sz-in::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.sz-av{font-size:11.5px;color:var(--muted);font-weight:700}
 .sz b{font-size:13.5px;font-weight:800;letter-spacing:-.02em}
 .sz .r{color:var(--warn);font-weight:700}
 .sz.out{background:var(--danger-soft);border-color:transparent;color:var(--danger)}
@@ -732,6 +764,38 @@ select.inp{cursor:pointer}
             </div>
 
             <div class="fieldset">
+                <div class="legend">Chiffres — modifiables</div>
+                <div class="fields">
+                    <div>
+                        <label for="fSalesM">Ventes ce mois</label>
+                        <input class="inp num" type="number" min="0" id="fSalesM">
+                    </div>
+                    <div>
+                        <label for="fRevM">CA net ce mois (€)</label>
+                        <input class="inp num" type="number" min="0" step="0.01" id="fRevM">
+                    </div>
+                    <div>
+                        <label for="fSalesT">Ventes totales</label>
+                        <input class="inp num" type="number" min="0" id="fSalesT">
+                    </div>
+                    <div>
+                        <label for="fRevT">CA net total (€)</label>
+                        <input class="inp num" type="number" min="0" step="0.01" id="fRevT">
+                    </div>
+                    <div class="wide">
+                        <label for="fCom">Commissions cumulées (€)</label>
+                        <input class="inp num" type="number" min="0" step="0.01" id="fCom">
+                        <div class="hint" id="fStatsHint"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="fieldset">
+                <div class="legend">Missions</div>
+                <div id="fMissions"></div>
+            </div>
+
+            <div class="fieldset">
                 <div class="legend">Maillots choisis</div>
                 <div id="fJerseys"></div>
             </div>
@@ -996,6 +1060,7 @@ function normalize(i){
         stats_commission: (i.stats && i.stats.commission) || 0,
         baseline_sales: i.baseline_sales||0, baseline_revenue: i.baseline_revenue||0,
         jerseys: Array.isArray(i.jerseys) ? i.jerseys : [],
+        missions_done: i.missions_done || {},
         jerseys_shipped: !!i.jerseys_shipped,
         _espace_url: i._espace_url||'', program_start_date: i.program_start_date||'',
         last_synced_at: i.last_synced_at||''
@@ -1202,6 +1267,15 @@ function openSheet(id){
     document.getElementById('fTrackStatus').value = inf.trackingStatus || '';
     document.getElementById('fAddress').value   = inf.address || '';
     document.getElementById('fNotes').value     = inf.notes || '';
+    document.getElementById('fSalesM').value = inf.stats_sales_month || 0;
+    document.getElementById('fRevM').value   = inf.stats_revenue_month || 0;
+    document.getElementById('fSalesT').value = inf.stats_sales || 0;
+    document.getElementById('fRevT').value   = inf.stats_revenue || 0;
+    document.getElementById('fCom').value    = inf.stats_commission || 0;
+    document.getElementById('fStatsHint').textContent = inf.promo_code
+        ? "Un code promo est renseigné : la prochaine synchro Shopify écrasera ventes et CA. Les commissions, elles, sont recalculées."
+        : "Aucun code promo : ces chiffres restent tels que tu les saisis.";
+    renderSheetMissions(inf);
     renderSheetJerseys(inf);
 
     const n = inf.relances || 0;
@@ -1210,25 +1284,121 @@ function openSheet(id){
 
     document.getElementById('scrim').classList.add('open');
 }
+// Missions : l'admin peut forcer l'état de chacune.
+const MISSION_LABELS = {
+    profil:'Compléter son profil', maillots:'Choisir ses 2 maillots',
+    livraison:'Renseigner son adresse', unboxing:'Publier son unboxing',
+    video1:'Publier sa 1ʳᵉ vidéo', video2:'Publier sa 2ᵉ vidéo',
+};
+function renderSheetMissions(inf){
+    const box = document.getElementById('fMissions');
+    const done = inf.missions_done || {};
+    box.innerHTML = `<div class="mlist">${Object.keys(MISSION_LABELS).map(k => `
+        <button type="button" class="mrow ${done[k] ? 'on' : ''}" data-mk="${esc(k)}">
+            <span class="mbox">${done[k] ? '✓' : ''}</span>
+            <span>${esc(MISSION_LABELS[k])}</span>
+        </button>`).join('')}</div>
+        <div class="hint">Certaines se cochent seules quand l'influenceur agit depuis son espace.</div>`;
+    box.querySelectorAll('[data-mk]').forEach(b => {
+        b.onclick = () => {
+            const cur = find(currentId);
+            if(!cur) return;
+            const k = b.getAttribute('data-mk');
+            cur.missions_done = Object.assign({}, cur.missions_done || {});
+            if(cur.missions_done[k]) delete cur.missions_done[k];
+            else cur.missions_done[k] = true;
+            renderSheetMissions(cur);
+            scheduleSave();
+        };
+    });
+}
+
 // Maillots sélectionnés par l'influenceur, avec leur taille.
 function renderSheetJerseys(inf){
     const box = document.getElementById('fJerseys');
     const list = inf.jerseys || [];
-    if(!list.length){
-        box.innerHTML = `<div class="hint" style="margin-top:0">Aucun maillot choisi pour l'instant.
-            Il les sélectionne depuis son espace.</div>`;
-        return;
-    }
-    const state = inf.jerseys_shipped
-        ? `<span class="jchip-tag ok">Sorti du stock</span>`
-        : `<span class="jchip-tag">Réservé — sortira du stock au passage à « Colis envoyé »</span>`;
-    box.innerHTML = `<div class="jchips">
-        ${list.map(j => `<span class="jchip">
-            ${j.image ? `<img src="${escAttr(j.image)}" alt="">` : ''}
+
+    const chips = list.length ? `<div class="jchips">
+        ${list.map((j,i) => `<span class="jchip">
+            ${j.image ? `<img src="${esc(j.image)}" alt="">` : ''}
             <span>${esc(j.name || 'Maillot')}</span>
             <b>${esc(j.size || '?')}</b>
+            ${inf.jerseys_shipped ? '' : `<button class="jchip-x" data-jrm="${i}" title="Retirer">✕</button>`}
         </span>`).join('')}
-    </div>${state}`;
+    </div>` : `<div class="hint" style="margin-top:0">Aucun maillot attribué pour l'instant.</div>`;
+
+    const state = !list.length ? ''
+        : inf.jerseys_shipped
+        ? `<span class="jchip-tag ok">Sorti du stock</span>`
+        : `<span class="jchip-tag">Réservé — sortira du stock au passage à « Colis envoyé »</span>`;
+
+    // Une fois le colis parti, on n'ajoute plus : le stock a déjà été décrémenté.
+    const adder = inf.jerseys_shipped ? '' : `
+        <div class="jadd">
+            <select class="inp" id="jPick"><option value="">Choisir un modèle…</option></select>
+            <select class="inp" id="jSize" disabled><option value="">Taille</option></select>
+            <button class="btn sm" id="jAdd" disabled>Attribuer</button>
+        </div>`;
+
+    box.innerHTML = chips + state + adder;
+
+    box.querySelectorAll('[data-jrm]').forEach(b => {
+        b.onclick = () => {
+            const i = parseInt(b.getAttribute('data-jrm'));
+            const cur = find(currentId);
+            if(!cur) return;
+            cur.jerseys = (cur.jerseys || []).filter((_, k) => k !== i);
+            renderSheetJerseys(cur);
+            scheduleSave();
+            toast('Maillot retiré');
+        };
+    });
+
+    if(!inf.jerseys_shipped) bindJerseyAdder(inf);
+}
+
+// Sélecteur modèle → taille, avec le disponible réel affiché.
+async function bindJerseyAdder(inf){
+    const pick = document.getElementById('jPick');
+    const size = document.getElementById('jSize');
+    const add  = document.getElementById('jAdd');
+    if(!pick) return;
+
+    const [cat] = await Promise.all([ensureCatalog(), ensureStock()]);
+    if(!cat.length){
+        pick.innerHTML = '<option value="">Catalogue vide</option>';
+        return;
+    }
+    pick.innerHTML = '<option value="">Choisir un modèle…</option>' +
+        cat.map(j => `<option value="${esc(j.id)}">${esc(j.name)}${j.sub ? ' · '+esc(j.sub) : ''}</option>`).join('');
+
+    pick.onchange = () => {
+        const j = cat.find(x => x.id === pick.value);
+        if(!j){ size.disabled = true; size.innerHTML = '<option value="">Taille</option>'; add.disabled = true; return; }
+        const sizes = Object.keys(j.sizes || {}).sort();
+        size.innerHTML = '<option value="">Taille</option>' + sizes.map(sz => {
+            const a = availFor(j.id, sz);
+            const label = a === null ? sz : `${sz} — ${a} dispo`;
+            return `<option value="${esc(sz)}" ${a !== null && a <= 0 ? 'disabled' : ''}>${esc(label)}</option>`;
+        }).join('');
+        size.disabled = false;
+        add.disabled = true;
+    };
+    size.onchange = () => { add.disabled = !size.value; };
+
+    add.onclick = () => {
+        const cur = find(currentId);
+        const j = cat.find(x => x.id === pick.value);
+        if(!cur || !j || !size.value) return;
+        cur.jerseys = (cur.jerseys || []).concat({
+            id: j.id, name: j.name, sub: j.sub || '', size: size.value, image: j.image || ''
+        });
+        renderSheetJerseys(cur);
+        scheduleSave();
+        // Le stock affiché doit refléter la nouvelle réservation.
+        stockData = null;
+        toast(`${j.name} · ${size.value} attribué`);
+    };
 }
 
 function closeSheet(){ document.getElementById('scrim').classList.remove('open'); currentId = null; }
@@ -1247,6 +1417,11 @@ function saveSheet(){
     inf.platform          = PLATS_SEL[0] || '';   // la première reste la principale
     inf.promo_code        = document.getElementById('fPromo').value.trim().toUpperCase();
     inf.program_start_date= document.getElementById('fStart').value;
+    inf.stats_sales_month   = parseInt(document.getElementById('fSalesM').value) || 0;
+    inf.stats_revenue_month = parseFloat(document.getElementById('fRevM').value) || 0;
+    inf.stats_sales         = parseInt(document.getElementById('fSalesT').value) || 0;
+    inf.stats_revenue       = parseFloat(document.getElementById('fRevT').value) || 0;
+    inf.stats_commission    = parseFloat(document.getElementById('fCom').value) || 0;
     inf.baseline_sales    = parseInt(document.getElementById('fBaseSales').value) || 0;
     inf.baseline_revenue  = parseFloat(document.getElementById('fBaseRev').value) || 0;
     inf.deal              = document.getElementById('fDeal').value;
@@ -1652,6 +1827,37 @@ function doVidUpload(){
 
 /* ── Stock maillots ─────────────────────────────────────────────────── */
 let stockData = null;
+let catalog = null;          // modèles disponibles, chargés à la demande
+
+async function ensureCatalog(){
+    if(catalog) return catalog;
+    try{
+        const r = await fetch('/api/gifting/catalog');
+        const d = await r.json();
+        catalog = (d.jerseys || []).filter(j => j.active !== false);
+    }catch(e){ catalog = []; }
+    return catalog;
+}
+
+// Récupère l'état du stock sans toucher à l'affichage, pour connaître les
+// disponibilités même si la page Stock n'a jamais été ouverte.
+async function ensureStock(){
+    if(stockData) return stockData;
+    try{
+        const r = await fetch('/api/stock');
+        stockData = await r.json();
+    }catch(e){ stockData = null; }
+    return stockData;
+}
+
+// Ce qu'il reste réellement disponible, réservations déduites.
+function availFor(jid, size){
+    if(!stockData) return null;
+    const j = (stockData.jerseys || []).find(x => x.id === jid);
+    if(!j) return null;
+    const row = (j.sizes || []).find(x => x.size === size);
+    return row ? row.available : null;
+}
 
 async function loadStock(){
     document.getElementById('stockList').innerHTML =
@@ -1701,7 +1907,7 @@ function renderStock(){
 
     box.innerHTML = list.map(j => `
         <div class="jrow ${j.active ? '' : 'jinactive'}">
-            ${j.image ? `<img class="jimg" src="${escAttr(j.image)}" alt="">`
+            ${j.image ? `<img class="jimg" src="${esc(j.image)}" alt="">`
                       : `<div class="jimg jimg-none">${ico('tag')}</div>`}
             <div class="jinfo">
                 <div class="jname">${esc(j.name || '—')}${j.active ? '' : ' · inactif'}</div>
@@ -1709,15 +1915,44 @@ function renderStock(){
                 <div class="jtot num">${j.physical} en stock · ${j.reserved} réservé${j.reserved>1?'s':''} · <b>${j.available} disponible${j.available>1?'s':''}</b></div>
                 <div class="jsizes">
                     ${j.sizes.map(x => `
-                        <span class="sz ${x.available<=0 ? 'out' : x.available<=1 ? 'low' : ''}" title="${x.physical} en stock, ${x.reserved} réservé(s)">
-                            ${esc(x.size)} <b class="num">${x.available}</b>
+                        <span class="sz ${x.available<=0 ? 'out' : x.available<=1 ? 'low' : ''}" title="Physique ${x.physical} · réservé ${x.reserved} · disponible ${x.available}">
+                            ${esc(x.size)}
+                            <input class="sz-in num" type="number" min="0" value="${x.physical}"
+                                   data-jid="${esc(j.id)}" data-size="${esc(x.size)}" title="Stock physique — modifiable">
                             ${x.reserved ? `<span class="r num">−${x.reserved}</span>` : ''}
+                            <span class="sz-av num">= ${x.available}</span>
                         </span>`).join('')}
                 </div>
                 ${renderHolders(j)}
             </div>
         </div>`).join('');
     paintIcons(box);
+    bindStockInputs();
+}
+
+// Le stock physique se corrige directement depuis la pastille.
+function bindStockInputs(){
+    document.querySelectorAll('.sz-in').forEach(inp => {
+        inp.onchange = async () => {
+            const jid = inp.dataset.jid, size = inp.dataset.size;
+            const qty = Math.max(0, parseInt(inp.value) || 0);
+            inp.value = qty;
+            try{
+                const r = await fetch('/api/stock/set', {
+                    method:'POST', headers:{'Content-Type':'application/json'},
+                    body: JSON.stringify({jersey_id: jid, size, qty})
+                });
+                const d = await r.json();
+                if(!d.success) throw new Error(d.error || '');
+                stockData = null; catalog = null;      // forcer une relecture
+                await loadStock();
+                toast(`${size} → ${qty} en stock`);
+            }catch(e){
+                toast('Mise à jour du stock impossible', true);
+                await loadStock();
+            }
+        };
+    });
 }
 
 // Qui retient quoi : utile pour savoir à qui réclamer un envoi.
