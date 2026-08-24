@@ -80,7 +80,7 @@ input,select{font-family:inherit}
 .brand-mark{
     width:34px;height:34px;border-radius:9px;background:var(--accent-grad);
     display:grid;place-items:center;font-weight:800;font-size:15px;color:#fff;
-    box-shadow:0 4px 14px rgba(47,80,241,.4);flex-shrink:0;
+    flex-shrink:0;
 }
 .brand-name{font-size:15.5px;font-weight:800;letter-spacing:-.02em}
 .brand-sub{font-size:10.5px;color:var(--on-dark-dim);font-weight:600;letter-spacing:.08em;text-transform:uppercase}
@@ -177,6 +177,37 @@ input,select{font-family:inherit}
 .goal-cta:hover{gap:9px}
 .goal-cta svg{width:14px;height:14px;stroke-width:2.2}
 .goal-done{font-size:13.5px;font-weight:600;color:var(--ok);margin-top:14px}
+
+/* Fin de mois : l'urgence passe par la couleur du trait et une ligne de
+   date, pas par un bandeau ni un badge. Le bloc garde exactement sa forme. */
+.goal.urgent{border-color:#F3DFB4}
+.goal-dl{display:inline-flex;align-items:center;gap:7px;margin-top:12px;
+    font-size:12.5px;font-weight:700;color:#A66A05;letter-spacing:-.01em}
+.goal-dl::before{content:"";width:6px;height:6px;border-radius:100px;background:var(--warn)}
+.goal.urgent .goal-fill{background:var(--warn)}
+
+/* Classement : même graisse que les autres faits, jamais mis en avant —
+   sauf sur le podium, réellement tenu, où l'accent de marque le signale. */
+.rank{color:inherit}
+.rank-top{color:var(--accent)}
+
+/* — Code d'accès — */
+.pin-back{position:fixed;inset:0;z-index:200;background:rgba(11,16,32,.42);
+    display:grid;place-items:center;padding:20px;animation:pinIn .18s ease}
+.pin-box{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-xl);
+    padding:28px;width:100%;max-width:380px}
+.pin-t{font-size:19px;font-weight:700;letter-spacing:-.03em}
+.pin-d{font-size:13.5px;color:var(--muted);font-weight:500;margin-top:7px;line-height:1.55}
+.pin-in{width:100%;margin-top:20px;padding:14px 16px;border:1px solid var(--line-2);
+    border-radius:var(--r);font-size:26px;font-weight:700;text-align:center;
+    letter-spacing:.42em;text-indent:.42em;background:var(--surface-2);color:var(--ink);
+    outline:none;transition:border-color .16s ease}
+.pin-in:focus{border-color:var(--accent);background:var(--surface)}
+.pin-err{min-height:18px;margin-top:9px;font-size:12.5px;font-weight:600;color:var(--danger)}
+.pin-acts{display:flex;align-items:center;justify-content:flex-end;gap:10px;margin-top:10px}
+.pin-ghost{font-size:13.5px;font-weight:600;color:var(--muted);padding:10px 14px;border-radius:100px}
+.pin-ghost:hover{color:var(--ink)}
+@keyframes pinIn{from{opacity:0}to{opacity:1}}
 
 /* Rail des paliers : la position rendue tangible, sans donnée nouvelle. */
 .rail{display:flex;align-items:center;gap:5px;flex-shrink:0}
@@ -441,15 +472,20 @@ input,select{font-family:inherit}
     .main{padding:18px 16px 90px}
     .hello h1{font-size:22px}
     .g-2{grid-template-columns:1fr}
+    /* Six onglets : la barre est plus dense, mais Contenus doit y figurer —
+       c'est sur téléphone que les vidéos se déclarent. Le filet remplace
+       l'ombre portée : il sépare aussi nettement, sans halo. */
     .mob-nav{
         display:flex;position:fixed;bottom:0;left:0;right:0;background:var(--sidebar);
-        padding:9px 6px calc(9px + env(safe-area-inset-bottom));z-index:50;
-        box-shadow:0 -4px 20px rgba(11,16,32,.16);
+        padding:8px 3px calc(8px + env(safe-area-inset-bottom));z-index:50;
+        border-top:1px solid rgba(255,255,255,.07);
     }
     .mob-item{
-        flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:6px 2px;
-        color:var(--on-dark-dim);font-size:10px;font-weight:700;border-radius:9px;
+        flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;gap:3px;
+        padding:6px 1px;color:var(--on-dark-dim);font-size:9.5px;font-weight:700;
+        border-radius:9px;letter-spacing:-.01em;
     }
+    .mob-item svg{width:18px;height:18px}
     .mob-item.active{color:#fff;background:rgba(255,255,255,.09)}
     .mob-head{
         display:flex;align-items:center;gap:11px;margin-bottom:18px;
@@ -616,6 +652,10 @@ input,select{font-family:inherit}
         <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 2H6v7a6 6 0 0012 0V2zM4 22h16" stroke-linecap="round" stroke-linejoin="round"/></svg>
         Avantages
     </button>
+    <button class="mob-item" data-tab="contenus">
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 10l4.55-2.28A1 1 0 0121 8.62v6.76a1 1 0 01-1.45.9L15 14M3 8a2 2 0 012-2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Vidéos
+    </button>
     <button class="mob-item" data-tab="profil">
         <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2M12 11a4 4 0 100-8 4 4 0 000 8z" stroke-linecap="round" stroke-linejoin="round"/></svg>
         Profil
@@ -757,8 +797,20 @@ function blockGains(){
             <span class="num">${fmt(s.sales)} vente${s.sales > 1 ? 's' : ''}</span>
             <span class="d"></span>
             <span class="num">${fmt(Math.round(s.revenue || 0))} € générés</span>
+            ${rankFact()}
         </div>
     </section>`;
+}
+
+// ── Classement ──────────────────────────────────────────────────────────
+// Une position, rien d'autre : ni nom, ni chiffre d'un tiers. Elle prend
+// place dans la ligne de faits existante plutôt que dans un bloc à elle —
+// c'est une donnée de contexte, pas un écran.
+function rankFact(){
+    const r = D.rank;
+    if(!r || !r.position) return '';
+    const ord = r.position === 1 ? '1ᵉʳ' : r.position + 'ᵉ';
+    return `<span class="d"></span><span class="num rank${r.podium ? ' rank-top' : ''}">${ord} sur ${fmt(r.total)}</span>`;
 }
 
 // ── Objectif : ce qu'il reste à faire, et ce que ça débloque ────────────
@@ -798,10 +850,22 @@ function blockGoal(){
     const pct = at > 0 ? Math.min(100, Math.round(c.sales_month / at * 100)) : 0;
     const lock = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>`;
 
-    return `<section class="goal rise" style="animation-delay:.06s">
+    // Fin de mois : le compte à rebours ne s'affiche que quand il change
+    // quelque chose — objectif encore atteignable, échéance proche.
+    const clk = D.month_clock || {};
+    const days = Number(clk.days_left);
+    const urgent = Number.isFinite(days) && days <= 5 && missing > 0;
+    const deadline = urgent
+        ? `<div class="goal-dl">${days <= 0
+            ? 'Dernier jour du mois'
+            : `Il reste ${fmt(days)} jour${days > 1 ? 's' : ''}`}</div>`
+        : '';
+
+    return `<section class="goal rise${urgent ? ' urgent' : ''}" style="animation-delay:.06s">
         ${head}
         <div class="goal-left">Plus que ${fmt(missing)} vente${missing > 1 ? 's' : ''}</div>
         <div class="goal-for">pour débloquer ta récompense de ce mois</div>
+        ${deadline}
         <div class="rewards">
             ${byAt[at].map((l,i)=>`<span class="rw" style="animation-delay:${.32 + i*.1}s">${lock}${esc(l)}</span>`).join('')}
         </div>
@@ -1343,11 +1407,87 @@ async function saveProfil(){
             method:'POST', headers:{'Content-Type':'application/json'},
             body: JSON.stringify({platforms, shipping, jerseys:PICKS})
         });
-        const d = await r.json();
+        let d = await r.json();
+
+        // L'adresse de livraison est protégée par un code : si le serveur le
+        // réclame, on le demande puis on rejoue l'enregistrement tel quel.
+        // L'influenceur ne perd pas sa saisie.
+        if(r.status === 403 && d.pin_required){
+            const ok = await askPin();
+            if(!ok){
+                btn.disabled=false; btn.textContent='Enregistrer mes informations';
+                return;
+            }
+            const r2 = await fetch(`/api/espace/${SLUG}/update`,{
+                method:'POST', headers:{'Content-Type':'application/json'},
+                body: JSON.stringify({platforms, shipping, jerseys:PICKS})
+            });
+            d = await r2.json();
+        }
+
         if(d.success){ toast('Informations enregistrées ✓'); await load(); setTab('profil'); }
         else toast('Erreur : ' + (d.error||''));
     }catch(e){ toast('Erreur réseau'); }
     finally{ btn.disabled=false; btn.textContent='Enregistrer mes informations'; }
+}
+
+// ── Code d'accès ────────────────────────────────────────────────────────
+// Demandé uniquement pour écrire l'adresse de livraison. La consultation de
+// l'espace reste libre : ajouter une porte à l'entrée ferait fuir, alors que
+// le risque réel se limite au détournement du colis.
+function askPin(){
+    return new Promise(resolve=>{
+        const wrap = document.createElement('div');
+        wrap.className = 'pin-back';
+        wrap.innerHTML = `
+            <div class="pin-box" role="dialog" aria-modal="true" aria-label="Code d'accès">
+                <div class="pin-t">Confirme ton code</div>
+                <div class="pin-d">Pour modifier ton adresse de livraison, saisis le code à 4 chiffres transmis par l'équipe Volakits.</div>
+                <input class="pin-in num" id="pinIn" inputmode="numeric" autocomplete="one-time-code"
+                       maxlength="4" placeholder="0000" aria-label="Code à 4 chiffres">
+                <div class="pin-err" id="pinErr"></div>
+                <div class="pin-acts">
+                    <button class="pin-ghost" id="pinCancel">Annuler</button>
+                    <button class="btn" id="pinOk">Confirmer</button>
+                </div>
+            </div>`;
+        document.body.appendChild(wrap);
+
+        const input  = wrap.querySelector('#pinIn');
+        const errEl  = wrap.querySelector('#pinErr');
+        const okBtn  = wrap.querySelector('#pinOk');
+        setTimeout(()=>input.focus(), 40);
+
+        const close = v => { wrap.remove(); document.removeEventListener('keydown', onKey); resolve(v); };
+        const onKey = e => { if(e.key === 'Escape') close(false); };
+        document.addEventListener('keydown', onKey);
+
+        input.addEventListener('input', ()=>{
+            input.value = input.value.replace(/\D/g,'').slice(0,4);
+            errEl.textContent = '';
+        });
+        input.addEventListener('keydown', e=>{ if(e.key === 'Enter') okBtn.click(); });
+        wrap.querySelector('#pinCancel').addEventListener('click', ()=> close(false));
+        wrap.addEventListener('click', e=>{ if(e.target === wrap) close(false); });
+
+        okBtn.addEventListener('click', async ()=>{
+            const pin = input.value.trim();
+            if(pin.length !== 4){ errEl.textContent = 'Le code fait 4 chiffres.'; return; }
+            okBtn.disabled = true; okBtn.textContent = 'Vérification…';
+            try{
+                const r = await fetch(`/api/espace/${SLUG}/verify`,{
+                    method:'POST', headers:{'Content-Type':'application/json'},
+                    body: JSON.stringify({pin})
+                });
+                const d = await r.json();
+                if(d.success) return close(true);
+                errEl.textContent = d.error || 'Code incorrect.';
+                if(d.locked) return setTimeout(()=> close(false), 1600);
+                input.value = ''; input.focus();
+            }catch(e){ errEl.textContent = 'Erreur réseau.'; }
+            finally{ okBtn.disabled = false; okBtn.textContent = 'Confirmer'; }
+        });
+    });
 }
 
 // ── Utils ───────────────────────────────────────────────────────────────
