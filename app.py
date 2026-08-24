@@ -3258,6 +3258,30 @@ def api_sync_shopify_status():
 @_require_admin_page
 def influenceurs_page(): return render_template("influenceurs.html")
 
+# ── Échelle des statuts ────────────────────────────────────────────────────
+# Deux étapes ont été insérées au milieu de la liste (« Colis à envoyer » après
+# Accord, « En attente de contenu » après Livré). Comme le statut est stocké
+# sous forme d'index, l'insertion décale tout ce qui suit : sans remappage, une
+# fiche « Livré » deviendrait « Colis envoyé ». La migration ci-dessous corrige
+# les données une fois pour toutes et se marque comme faite (status_scale).
+STATUS_SCALE = 2
+_STATUS_REMAP_V1_TO_V2 = {0:0, 1:1, 2:2, 3:3, 4:5, 5:6, 6:8, 7:9}
+
+
+def _migrate_status_scale(influenceurs):
+    """Remappe les statuts de l'ancienne échelle. Retourne True si modifié."""
+    changed = False
+    for inf in influenceurs:
+        if int(inf.get("status_scale", 1) or 1) >= STATUS_SCALE:
+            continue
+        old = inf.get("status")
+        if isinstance(old, int) and old in _STATUS_REMAP_V1_TO_V2:
+            inf["status"] = _STATUS_REMAP_V1_TO_V2[old]
+        inf["status_scale"] = STATUS_SCALE
+        changed = True
+    return changed
+
+
 @app.route("/api/influenceurs", methods=["GET"])
 @_require_admin_api
 def api_get_influenceurs():
@@ -3267,6 +3291,18 @@ def api_get_influenceurs():
         influenceurs = data.get("influenceurs", [])
         if not isinstance(influenceurs, list):
             influenceurs = []
+
+        # Migration de l'échelle des statuts, une seule fois, puis persistée.
+        if _migrate_status_scale(influenceurs):
+            try:
+                with _influenceurs_lock:
+                    data["influenceurs"] = influenceurs
+                    data["version"] = data.get("version", 0) + 1
+                    data["updated_at"] = datetime.now(timezone.utc).isoformat()
+                    r2_put_json(INFLUENCEURS_R2_KEY, data)
+                print("[INFLU] Statuts migrés vers l'échelle 2")
+            except Exception as e:
+                print(f"[INFLU] Migration des statuts non persistée: {e}")
 
         # Enrichissement côté serveur : ajouter _espace_url + mapper stats depuis sous-objet
         base_url = request.host_url.rstrip("/")
