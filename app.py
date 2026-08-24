@@ -3424,6 +3424,51 @@ def _apply_shipment(inf, cat):
     return shortages
 
 
+def _undo_shipment(inf, cat):
+    """
+    Remet en stock les maillots d'un influenceur qu'on repasse avant
+    « Colis envoyé ». Symétrique de _apply_shipment : sans cela, une erreur de
+    statut décrémenterait le stock définitivement.
+    """
+    if not inf.get("jerseys_shipped"):
+        return
+    by_id = {j.get("id"): j for j in cat.get("jerseys", [])}
+    for pick in (inf.get("jerseys") or []):
+        jid, size = pick.get("id"), (pick.get("size") or "").strip()
+        j = by_id.get(jid)
+        if not j or not size:
+            continue
+        sizes = j.setdefault("sizes", {})
+        sizes[size] = _safe_int(sizes.get(size, 0)) + 1
+    inf["jerseys_shipped"] = False
+    inf.pop("jerseys_shipped_at", None)
+
+
+@app.route("/api/stock/set", methods=["POST"])
+@_require_admin_api
+def api_stock_set():
+    """Fixe directement la quantité physique d'une taille (contrôle total admin)."""
+    try:
+        d = request.json or {}
+        jid, size = d.get("jersey_id"), (d.get("size") or "").strip()
+        qty = max(0, _safe_int(d.get("qty"), 0))
+        if not jid or not size:
+            return jsonify({"success": False, "error": "maillot ou taille manquant"}), 400
+
+        cat = _load_gifting_catalog()
+        target = next((j for j in cat.get("jerseys", []) if j.get("id") == jid), None)
+        if not target:
+            return jsonify({"success": False, "error": "maillot introuvable"}), 404
+
+        target.setdefault("sizes", {})[size] = qty
+        if not _save_gifting_catalog(cat):
+            return jsonify({"success": False, "error": "écriture catalogue échouée"}), 500
+        return jsonify({"success": True, "qty": qty})
+    except Exception as e:
+        print(f"[STOCK] Erreur mise à jour: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
 @app.route("/api/stock", methods=["GET"])
 @_require_admin_api
 def api_stock():
@@ -3522,10 +3567,12 @@ def api_save_influenceurs():
                 s["revenue"]       = _safe_float(inf.pop("stats_revenue"))
             if "stats_revenue_month" in inf:
                 s["revenue_month"] = _safe_float(inf.pop("stats_revenue_month"))
+            if "stats_commission" in inf:
+                # L'admin peut corriger le cumul à la main ; la synchro Shopify
+                # le recalcule ensuite à partir de l'historique mensuel.
+                s["commission"] = _safe_float(inf.pop("stats_commission"))
             inf["stats"] = s
-            # Nettoyer champs virtuels non persistés
             inf.pop("_espace_url", None)
-            inf.pop("stats_commission", None)
 
         with _influenceurs_lock:
             current = r2_get_json(INFLUENCEURS_R2_KEY) or {}
@@ -3559,13 +3606,20 @@ def api_save_influenceurs():
             for inf in influenceurs:
                 was = prev_status.get(inf.get("id"))
                 now = inf.get("status")
-                if now == STATUS_COLIS_ENVOYE and was != STATUS_COLIS_ENVOYE and not inf.get("jerseys_shipped"):
+                shipped = isinstance(now, int) and now >= STATUS_COLIS_ENVOYE
+                if shipped and not inf.get("jerseys_shipped"):
                     if cat is None:
                         cat = _load_gifting_catalog()
                     miss = _apply_shipment(inf, cat)
                     cat_dirty = True
                     if miss:
                         shortages.extend([f"{inf.get('pseudo','?')} : {m}" for m in miss])
+                elif (not shipped) and inf.get("jerseys_shipped"):
+                    # Retour à une étape avant l'expédition : on rend les maillots.
+                    if cat is None:
+                        cat = _load_gifting_catalog()
+                    _undo_shipment(inf, cat)
+                    cat_dirty = True
             if cat_dirty and cat is not None:
                 _save_gifting_catalog(cat)
                 if shortages:
