@@ -353,19 +353,6 @@ input,select{font-family:inherit}
 .pal.now .pal-perk{color:var(--on-accent)}
 .pal.now .pal-perk svg{color:#fff}
 .pal.lock .pal-perk svg{color:var(--faint)}
-/* Le levier, dans le panneau du palier concerné */
-.pal-lever{background:var(--warn-soft);border-radius:14px;padding:18px;margin-top:16px}
-.pal.now .pal-lever{background:rgba(255,255,255,.14)}
-.pal-lever-k{font-size:8.5px;letter-spacing:.17em;text-transform:uppercase;
-    font-weight:700;color:var(--warn)}
-.pal.now .pal-lever-k{color:#fff}
-.pal-lever-v{font-size:30px;font-weight:800;letter-spacing:-.045em;line-height:1;
-    margin-top:9px;color:var(--ink)}
-.pal.now .pal-lever-v{color:#fff}
-.pal-lever-d{font-size:12.5px;color:var(--ink-2);margin-top:9px;line-height:1.6;font-weight:500}
-.pal-lever-d b{color:var(--ink);font-weight:700}
-.pal.now .pal-lever-d{color:var(--on-accent)}
-.pal.now .pal-lever-d b{color:#fff}
 /* Sur téléphone, la ligne ne tient pas : on garde l'identité du palier
    groupée (icône + nom + état) sur la première ligne, et on renvoie le
    montant sur la seconde. Isoler l'icône du nom, comme le faisait le premier
@@ -1330,7 +1317,7 @@ function viewPaliers(){
                                 <div class="pal-rk">Ta rémunération</div>
                                 <div class="pal-rv">${x.monthly_fixed
                                     ? `<b>${fmtFull(x.monthly_fixed)} € garantis</b> les mois où tu fais ${fmtFull(x.monthly_threshold)} ventes ou plus. Les autres mois, tu touches ${fmtFull(R.base_pct||10)} % de tes ventes.`
-                                    : `<b>${fmtFull(R.base_pct||10)} % de tes ventes</b>, sans minimum. Soit environ ${fmtEur(R.ordinary_sale||0)} par maillot vendu.`}</div>
+                                    : `<b>${fmtFull(R.base_pct||10)} % de tes ventes</b>, sans minimum ni condition.`}</div>
                             </div>
                             ${x.yearly ? `
                             <div class="pal-row">
@@ -1341,12 +1328,6 @@ function viewPaliers(){
                                 <div class="pal-rk">Tes maillots</div>
                                 <div class="pal-rv"><b>${fmtFull(x.jerseys)} maillots floqués</b> chaque mois, envoyés si tu réalises au moins ${fmtFull(x.gifting_threshold)} ventes dans le mois.</div>
                             </div>
-                            ${x.lever ? `
-                            <div class="pal-lever">
-                                <div class="pal-lever-k">Le détail qui compte</div>
-                                <div class="pal-lever-v num">${fmtEur(x.lever.value)}</div>
-                                <div class="pal-lever-d">C'est ce que vaut ta <b>${fmtFull(x.lever.rank)}ᵉ vente du mois</b> : c'est elle qui déclenche les ${fmtFull(x.monthly_fixed)} € garantis. Une vente ordinaire t'en rapporte ${fmtEur(R.ordinary_sale||0)} — celle-ci en vaut <b>${fmtMult(x.lever.multiple)}</b> plus.</div>
-                            </div>` : ''}
                             ${(x.perks && x.perks.length) ? `
                             <div class="pal-row">
                                 <div class="pal-rk">Tes avantages</div>
@@ -1413,11 +1394,6 @@ function fmtEur(v){
 /* Entier avec séparateur de milliers insécable : 1 800, 4 200. */
 function fmtFull(n){
     return String(Math.round(Number(n)||0)).replace(/\B(?=(\d{3})+(?!\d))/g, '\u202F');
-}
-/* Multiplicateur : « 10,5 » et non « 10.5 », et « 4 » plutôt que « 4,0 ». */
-function fmtMult(v){
-    const n = Number(v)||0;
-    return (Number.isInteger(n) ? String(n) : n.toFixed(1).replace('.', ',')) + ' fois';
 }
 
 // ── Contenus ────────────────────────────────────────────────────────────
