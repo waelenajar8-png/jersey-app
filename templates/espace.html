@@ -293,6 +293,33 @@ input,select{font-family:inherit}
     font-size:9.5px;letter-spacing:.13em;text-transform:uppercase;font-weight:700;
     color:var(--on-accent-lab)}
 .rw-hero + .sec{margin-top:52px}
+/* ══ LIEN DE BIO ═════════════════════════════════════════════════════════
+   Le code promo suppose que le visiteur le retienne puis le retape au bon
+   moment. Le lien supprime les deux étapes : la réduction est déjà là. Il
+   mérite donc autant de place que le code, et une explication — parce que
+   « mets ce lien en bio » n'est évident que pour qui sait déjà pourquoi. */
+.bio{background:var(--surface);border-radius:18px;padding:22px;margin-top:14px}
+.bio-head{margin-bottom:14px}
+.bio-k{font-size:9px;letter-spacing:.18em;text-transform:uppercase;font-weight:700;color:var(--accent)}
+.bio-t{font-size:15.5px;font-weight:700;letter-spacing:-.025em;margin-top:6px}
+.bio-box{display:flex;align-items:center;gap:12px;background:var(--surface-2);
+    border-radius:14px;padding:14px 16px}
+.bio-url{flex:1;min-width:0;font-family:'JetBrains Mono',ui-monospace,monospace;
+    font-size:13px;font-weight:500;color:var(--ink);overflow:hidden;
+    text-overflow:ellipsis;white-space:nowrap;letter-spacing:-.01em}
+.bio-why{font-size:12.5px;color:var(--muted);line-height:1.65;margin-top:14px;font-weight:500}
+.bio-acts{margin-top:14px}
+.bio-acts .btn-ghost{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;
+    font-weight:700;color:var(--accent);border:1px solid var(--line-2);
+    border-radius:100px;padding:9px 16px;transition:border-color .16s ease}
+.bio-acts .btn-ghost:hover{border-color:var(--accent)}
+@media (max-width:520px){
+    .bio{padding:18px}
+    .bio-box{flex-direction:column;align-items:stretch;gap:10px}
+    .bio-url{white-space:normal;word-break:break-all;text-align:center;font-size:12.5px}
+    .bio-box .copy-btn{justify-content:center}
+}
+
 /* ══ RÉMUNÉRATION UNIVERSELLE ════════════════════════════════════════════
    Elle passe avant les paliers, parce qu'elle ne dépend pas d'eux : les
    montants garantis sont ouverts à tout le monde dès le premier mois. Les
@@ -1095,6 +1122,7 @@ function blockTasks(){
 // ── Code promo ──────────────────────────────────────────────────────────
 function blockPromo(){
     const code = D.influencer.promo_code, s = D.stats;
+    const link = D.influencer.share_link || '';
     if(!code){
         return `<section class="sec rise" style="animation-delay:.18s">
             <div class="sec-k">Ton code</div>
@@ -1102,20 +1130,49 @@ function blockPromo(){
             <div class="promo-meta" style="margin-top:10px">Il arrive avec ton colis.</div>
         </section>`;
     }
+    const copySvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>`;
+
     return `<section class="sec rise" style="animation-delay:.18s">
         <div class="sec-k">Ton code</div>
         <div class="sec-t">Chaque partage peut te rapporter</div>
+
         <div class="promo" style="margin-top:12px">
             <div class="promo-c">${esc(code)}</div>
-            <button class="copy-btn" id="copyBtn" data-copy="${escAttr(code)}">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
-                <span>Copier</span>
-            </button>
+            <button class="copy-btn" data-copy="${escAttr(code)}">${copySvg}<span>Copier</span></button>
         </div>
         <div class="promo-meta">
             <span>−15 % pour ta communauté</span>
             ${s.sales > 0 ? `<span class="d"></span><span><b class="num">${fmt(s.sales)} vente${s.sales>1?'s':''}</b> générées</span>` : ''}
         </div>
+
+        ${/* ── Le lien de bio ──
+             Un code se recopie à la main : la moitié des visiteurs abandonnent
+             en route. Le lien applique la réduction tout seul et travaille en
+             continu depuis la bio, y compris pour les gens qui découvrent le
+             profil par hasard. C'est pour ça qu'il est présenté juste après,
+             avec sa raison d'être écrite noir sur blanc. */''}
+        ${link ? `
+        <div class="bio">
+            <div class="bio-head">
+                <div class="bio-k">Ton lien à mettre en bio</div>
+                <div class="bio-t">Il applique les −15 % tout seul</div>
+            </div>
+            <div class="bio-box">
+                <span class="bio-url" title="${escAttr(link)}">${esc(link)}</span>
+                <button class="copy-btn" data-copy="${escAttr(link)}">${copySvg}<span>Copier</span></button>
+            </div>
+            <div class="bio-why">
+                Mets-le dans ta bio TikTok et Instagram. Il travaille pour toi en permanence :
+                quelqu'un qui tombe sur ton profil par hasard clique, arrive sur la boutique
+                avec sa réduction déjà appliquée, et la vente t'est comptée. Pas de code à
+                retenir, pas de code à recopier.
+            </div>
+            <div class="bio-acts">
+                <a class="btn-ghost" href="${escAttr(link)}" target="_blank" rel="noopener">
+                    Tester mon lien
+                </a>
+            </div>
+        </div>` : ''}
     </section>`;
 }
 
