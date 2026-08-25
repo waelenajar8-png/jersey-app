@@ -5,6 +5,7 @@ import time
 import uuid
 import hmac
 import secrets
+from urllib.parse import quote
 import threading
 import requests
 import boto3
@@ -2937,6 +2938,11 @@ def _safe_float(v, default=0.0):
 # ══════════════════════════════════════════════════════════════════════════════
 
 SHOPIFY_SHOP_DOMAIN     = os.environ.get("SHOPIFY_SHOP_DOMAIN", "")      # ex: volakits.myshopify.com
+# Domaine PUBLIC de la boutique — celui que voient les clients, pas le
+# domaine technique .myshopify.com. C'est lui qui compose les liens de
+# partage des influenceurs : un lien en .myshopify.com dans une bio fait
+# amateur et n'inspire pas confiance.
+SHOP_PUBLIC_URL         = (os.environ.get("SHOP_PUBLIC_URL") or "https://volakits.com").rstrip("/")
 SHOPIFY_CLIENT_ID       = os.environ.get("SHOPIFY_CLIENT_ID", "")        # ID client (Dev Dashboard)
 SHOPIFY_CLIENT_SECRET   = os.environ.get("SHOPIFY_CLIENT_SECRET", "")    # Secret (Dev Dashboard)
 SHOPIFY_API_VERSION     = "2025-01"
@@ -4324,6 +4330,23 @@ def _espace_pin_ok(inf, slug):
     return bool(session.get(f"espace_pin_{slug}"))
 
 
+def _espace_share_link(inf):
+    """
+    Lien de partage prêt à coller en bio.
+
+    Shopify applique automatiquement une réduction quand on ouvre
+    /discount/CODE : le visiteur arrive sur la boutique avec les −15 % déjà
+    en place, sans rien avoir à saisir. C'est décisif pour un lien de bio —
+    un code à recopier manuellement se perd en route, un lien ne se perd pas.
+
+    Retourne "" si l'influenceur n'a pas encore de code promo.
+    """
+    code = (inf.get("promo_code") or "").strip()
+    if not code:
+        return ""
+    return f"{SHOP_PUBLIC_URL}/discount/{quote(code, safe='')}"
+
+
 def _espace_jerseys(inf):
     """
     Maillots de l'influenceur, avec leur visuel signé pour l'affichage.
@@ -4391,6 +4414,8 @@ def _espace_payload(inf):
             "pseudo": inf.get("pseudo") or "",
             "platform": inf.get("platform") or "",
             "promo_code": inf.get("promo_code") or "",
+            # Lien prêt à coller en bio : la réduction s'applique toute seule.
+            "share_link": _espace_share_link(inf),
             "address": inf.get("address") or "",
             "platforms": inf.get("platforms") or {},
             # Les maillots partent avec leur visuel signé : sans URL signée,
