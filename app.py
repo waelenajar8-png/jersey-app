@@ -4144,7 +4144,8 @@ def _espace_rewards(inf, stats):
     calculé sur le panier moyen RÉEL de l'influenceur, pas sur une moyenne
     du programme.
 
-    Retourne : avg_basket, steps[], next_sale (ou None), year[].
+    Retourne : steps[], tiers[], year[].
+    Le panier moyen et la valeur d'une vente ordinaire restent internes.
     """
     sales_month = _safe_int(stats.get("sales_month", 0))
     sales_total = _safe_int(stats.get("sales", 0))
@@ -4170,27 +4171,10 @@ def _espace_rewards(inf, stats):
     ordinary  = round(avg * BASE_COMMISSION_PCT / 100, 2)
     next_step = next((th for th, _ in steps if th > sales_month), None)
 
-    # Valeur de LA vente qui fait basculer — pas de la vente suivante.
-    # Calculer gain(n+1) − gain(n) ne dirait quelque chose qu'à une vente du
-    # seuil : à 8 ventes sur 10, l'écran n'aurait rien à montrer alors que
-    # c'est justement le moment où l'information motive le plus. On annonce
-    # donc ce que vaudra la vente du seuil, quelle que soit la distance.
-    next_sale = None
-    if next_step:
-        value = round(gain(next_step) - gain(next_step - 1), 2)
-        # Un écart nul signale un plateau du barème (le fixe le plus haut est
-        # atteint, la commission n'est pas encore repassée devant). On se tait
-        # plutôt que d'annoncer « ta prochaine vente vaut 0 € » : ce serait
-        # exact, et parfaitement démotivant.
-        if value > ordinary + 0.01:
-            next_sale = {
-                "value":    value,
-                "ordinary": ordinary,
-                "multiple": round(value / ordinary, 1) if ordinary else 0,
-                "rank":     next_step,        # la Nᵉ vente du mois
-                "unlocks":  next((f for th, f in steps if th == next_step), 0),
-                "missing":  next_step - sales_month,
-            }
+    # La valeur marginale de la vente qui fait basculer n'est PAS exposée.
+    # Elle motive, mais annoncer « ta 10ᵉ vente vaut 15,80 € » à côté de
+    # « 50 € garantis » permet de retrouver la rémunération par vente par
+    # simple soustraction — donc de déduire le panier moyen et la marge.
 
     # Détail de chaque palier, pour le panneau qui s'ouvre au clic.
     # Tout y est calculé une fois côté serveur : le front ne doit jamais
@@ -4201,12 +4185,6 @@ def _espace_rewards(inf, stats):
         jerseys = int(t.get("monthly_jerseys") or 0)
         th = t.get("monthly_threshold")
         fx = t.get("monthly_fixed")
-        lever = None
-        if th and fx:
-            v = round(gain(int(th)) - gain(int(th) - 1), 2)
-            if v > ordinary + 0.01:
-                lever = {"value": v, "rank": int(th),
-                         "multiple": round(v / ordinary, 1) if ordinary else 0}
         tiers.append({
             "id": t["id"], "name": t["name"], "icon": t["icon"],
             "req_sales":     req,
@@ -4219,13 +4197,14 @@ def _espace_rewards(inf, stats):
             "monthly_threshold": int(th) if th else None,
             "monthly_fixed":     float(fx) if fx else None,
             "yearly":            round(float(fx) * 12) if fx else None,
-            "lever":             lever,
             "perks":             t.get("perks") or [],
         })
 
+    # Le panier moyen et la valeur d'une vente ordinaire servent au calcul
+    # mais ne sont PAS renvoyés : ils permettraient de déduire la marge, et
+    # les masquer seulement à l'affichage ne masquerait rien — la réponse de
+    # l'API est lisible depuis le navigateur de l'influenceur.
     return {
-        "avg_basket": avg,
-        "ordinary_sale": ordinary,
         "base_pct": BASE_COMMISSION_PCT,
         "steps": [{
             "threshold": th,
@@ -4233,7 +4212,6 @@ def _espace_rewards(inf, stats):
             "reached":   sales_month >= th,
             "missing":   max(0, th - sales_month),
         } for th, f in steps],
-        "next_sale": next_sale,
         "tiers": tiers,
         "year": [{"threshold": th, "fixed": f, "yearly": round(f * 12)} for th, f in steps],
     }
