@@ -6,47 +6,61 @@
 <title>Mon espace — Volakits</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
 <style>
 /* ══════════════════════════════════════════════════════════════════════════
    VOLAKITS — Design System
-   Football × Streetwear × SaaS premium
+   ──────────────────────────────────────────────────────────────────────────
+   LA RÈGLE : un seul aplat fort par écran.
+   Le bleu de marque ne porte qu'UNE grande surface à la fois — le pavé de
+   gains sur l'accueil, le palier courant sur les paliers, le bouton
+   d'action sur le profil. Partout ailleurs il se limite aux petits signaux.
+   Certains écrans n'ont aucun aplat : c'est volontaire, ça donne du repos.
+   Multiplier les surfaces fortes ne renforce pas la couleur, ça la dilue —
+   c'est ce qui rendait les versions précédentes agressives.
    ══════════════════════════════════════════════════════════════════════════ */
 :root{
-    /* Surfaces */
-    --bg:#F7F8FC;
+    /* Surfaces — crème neutre, jamais bleuté : un fond légèrement bleu fait
+       basculer l'ensemble du côté « tableau de bord ». */
+    --bg:#F4F4F1;
     --surface:#FFFFFF;
-    --surface-2:#FBFCFE;
-    --sidebar:#0E1330;
-    --sidebar-2:#161C3F;
+    --surface-2:#FAFAF8;
+    /* Navigation : bleu très sombre, de la famille de la marque. Plus jamais
+       de noir — un noir neutre concurrence l'aplat bleu au lieu de le porter. */
+    --sidebar:#141D52;
+    --sidebar-2:#1B2664;
 
     /* Texte */
-    --ink:#0B1020;
-    --ink-2:#3A4157;
-    --muted:#7C859B;
-    --faint:#A8B0C3;
-    --on-dark:#EEF1FA;
-    --on-dark-dim:#98A2C0;
+    --ink:#101322;
+    --ink-2:#3B3E4C;
+    --muted:#8A8C84;
+    --faint:#A0A198;
+    --on-dark:#E8ECFA;
+    --on-dark-dim:#7182BC;
 
     /* Accent */
-    /* #2F50F1 : couleur signature Volakits. Une seule grande surface la porte,
-       ailleurs elle ne sert qu'aux accents, liens et actions. */
+    /* #2F50F1 : couleur signature Volakits, en aplat PLEIN (aucun dégradé —
+       un dégradé date, et il brouille la frontière de la surface). */
     --accent:#2F50F1;
     --accent-2:#2846DC;
-    --accent-soft:#EEF1FE;
+    --accent-soft:#E7EBFE;
     --accent-ring:rgba(47,80,241,.16);
-    --accent-grad:linear-gradient(158deg,#3A5AF6 0%,#2F50F1 46%,#2846DC 100%);
+    --accent-grad:#2F50F1;
+    /* Texte posé SUR l'aplat bleu */
+    --on-accent:#C7D3FF;
+    --on-accent-dim:#A8B8FF;
+    --on-accent-lab:#B9C6FF;
 
-    /* Statuts */
-    --ok:#10B981;      --ok-soft:#E7F8F1;
-    --warn:#F59E0B;    --warn-soft:#FEF4E4;
-    --info:#3B82F6;    --info-soft:#EAF2FE;
-    --danger:#EF4444;  --danger-soft:#FEECEC;
-    --gold:#C9A227;    --gold-soft:#FBF5E3;
+    /* Statuts — désaturés pour ne pas rivaliser avec le bleu de marque */
+    --ok:#1F8A5B;      --ok-soft:#E4F3EC;
+    --warn:#B87A18;    --warn-soft:#FBF1DF;
+    --info:#2F50F1;    --info-soft:#E7EBFE;
+    --danger:#C0392B;  --danger-soft:#FBEBE9;
+    --gold:#B08A1E;    --gold-soft:#F8F1DF;
 
     /* Traits */
-    --line:#EDEEF3;
-    --line-2:#E4E6EF;
+    --line:#E2E1DA;
+    --line-2:#DEDDD5;
 
     /* Ombres */
     /* Plus aucune ombre : la hiérarchie vient de l'espace et de la
@@ -60,7 +74,7 @@
 ::selection{background:var(--accent);color:#fff}
 html{-webkit-text-size-adjust:100%}
 body{
-    font-family:'Plus Jakarta Sans',-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    font-family:'Archivo',-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
     background:var(--bg);color:var(--ink);
     -webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;
     letter-spacing:-.011em;line-height:1.5;
@@ -98,7 +112,7 @@ input,select{font-family:inherit}
 .nav-group{margin-bottom:16px}
 .nav-label{
     font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;
-    color:#5A648C;padding:0 10px 7px;
+    color:var(--on-dark-dim);padding:0 10px 7px;
 }
 .nav-item{
     display:flex;align-items:center;gap:11px;padding:10px 11px;border-radius:10px;
@@ -106,7 +120,8 @@ input,select{font-family:inherit}
     transition:background .16s,color .16s;width:100%;text-align:left;
 }
 .nav-item:hover{background:rgba(255,255,255,.05);color:var(--on-dark)}
-.nav-item.active{background:var(--accent);color:#fff;box-shadow:none}
+.nav-item.active{background:rgba(255,255,255,.09);color:#fff;box-shadow:none}
+.nav-item.active .nav-ico{color:#7E97FF}
 .nav-ico{width:17px;height:17px;flex-shrink:0;stroke-width:1.9}
 .nav-badge{
     margin-left:auto;background:rgba(255,255,255,.14);font-size:10.5px;font-weight:800;
@@ -115,7 +130,7 @@ input,select{font-family:inherit}
 .nav-item.active .nav-badge{background:rgba(255,255,255,.25)}
 .side-foot{margin-top:auto;padding:14px 10px 0;border-top:1px solid rgba(255,255,255,.07)}
 .side-help{font-size:11.5px;color:var(--on-dark-dim);line-height:1.6}
-.side-help a{color:#A9BAFB;font-weight:600}
+.side-help a{color:#7E97FF;font-weight:600}
 /* ── Contenu ────────────────────────────────────────────────────────────── */
 .main{flex:1;min-width:0;padding:44px 40px 90px}
 .wrap{max-width:860px;margin:0 auto}
@@ -141,23 +156,31 @@ input,select{font-family:inherit}
    ═════════════════════════════════════════════════════════════════════════ */
 
 /* — Carte des gains — */
+/* ── L'APLAT FORT ─────────────────────────────────────────────────────────
+   C'est la seule grande surface colorée de l'accueil. Aplat plein, sans
+   dégradé ni halo : la frontière de la surface doit être franche, sinon la
+   couleur paraît sale. Tout le reste de la page reste en retrait pour ne
+   pas lui disputer la place. */
 .gains{position:relative;overflow:hidden;color:#fff;border-radius:24px;
-    padding:26px 26px 24px;background:var(--accent-grad)}
-.gains::after{content:'';position:absolute;inset:0;pointer-events:none;
-    background:radial-gradient(460px 220px at 100% -30%,rgba(255,255,255,.14),transparent 62%)}
+    padding:30px 28px 26px;background:var(--accent)}
 .gains > *{position:relative;z-index:1}
-.gains-k{font-size:11px;font-weight:700;letter-spacing:.13em;text-transform:uppercase;color:#A9B7FA}
-.gains-v{font-size:62px;font-weight:700;letter-spacing:-.055em;line-height:.92;margin-top:14px}
-.gains-sub{font-size:12.5px;color:#9EAEF8;font-weight:500;margin-top:10px}
-.gains-sep{height:1px;background:rgba(255,255,255,.14);margin:22px 0 15px}
-.gains-facts{display:flex;align-items:center;gap:10px;font-size:13.5px;font-weight:600;
-    color:#E4E9FE;flex-wrap:wrap}
-.gains-facts .d{width:3px;height:3px;border-radius:50%;background:rgba(255,255,255,.4)}
+.gains-k{font-size:10.5px;font-weight:700;letter-spacing:.19em;text-transform:uppercase;
+    color:var(--on-accent-lab)}
+.gains-v{font-size:62px;font-weight:700;letter-spacing:-.052em;line-height:.94;margin-top:15px}
+.gains-sub{font-size:13px;color:var(--on-accent);font-weight:500;margin-top:12px}
+.gains-sep{height:1px;background:rgba(255,255,255,.2);margin:24px 0 0}
+/* Les faits passent en petites capitales espacées : ils informent sans
+   rivaliser avec le montant, qui reste seul à être lu de loin. */
+.gains-facts{display:flex;align-items:center;margin-top:18px;font-size:9.5px;
+    font-weight:700;letter-spacing:.13em;text-transform:uppercase;
+    color:var(--on-accent-dim);flex-wrap:wrap;row-gap:8px}
+.gains-facts > .num{padding-right:13px;margin-right:13px;
+    border-right:1px solid rgba(255,255,255,.24)}
+.gains-facts > .num:last-child{border-right:none;padding-right:0;margin-right:0}
+.gains-facts .d{display:none}
 
 /* — Objectif : la récompense d'abord, le décompte ensuite — */
-.goal{border:1px solid var(--line);border-radius:18px;padding:22px;margin-top:14px;
-    transition:border-color .2s ease}
-.goal:hover{border-color:var(--line-2)}
+.goal{background:var(--surface);border:none;border-radius:18px;padding:24px;margin-top:14px}
 .goal-head{display:flex;align-items:center;justify-content:space-between;gap:12px}
 .goal-k{font-size:11px;font-weight:700;letter-spacing:.13em;text-transform:uppercase;color:var(--muted)}
 .goal-left{font-size:26px;font-weight:700;letter-spacing:-.04em;margin-top:12px;line-height:1.1}
@@ -167,7 +190,7 @@ input,select{font-family:inherit}
     background:var(--accent-soft);color:var(--accent);border-radius:100px;padding:8px 14px;
     opacity:0;transform:translateY(6px);animation:rise .45s ease forwards}
 .rw svg{width:13px;height:13px;stroke-width:2.2;opacity:.75}
-.goal-bar{height:6px;background:#F0F2F7;border-radius:100px;overflow:hidden;margin-top:20px}
+.goal-bar{height:6px;background:#EDECE5;border-radius:100px;overflow:hidden;margin-top:20px}
 .goal-fill{height:100%;border-radius:100px;background:var(--accent);width:0;transition:width 1.2s ease}
 .goal-foot{display:flex;align-items:center;justify-content:space-between;gap:14px;
     margin-top:11px;flex-wrap:wrap}
@@ -180,16 +203,18 @@ input,select{font-family:inherit}
 
 /* Fin de mois : l'urgence passe par la couleur du trait et une ligne de
    date, pas par un bandeau ni un badge. Le bloc garde exactement sa forme. */
-.goal.urgent{border-color:#F3DFB4}
+.goal.urgent{background:var(--warn-soft)}
 .goal-dl{display:inline-flex;align-items:center;gap:7px;margin-top:12px;
-    font-size:12.5px;font-weight:700;color:#A66A05;letter-spacing:-.01em}
+    font-size:12.5px;font-weight:700;color:var(--warn);letter-spacing:-.01em}
 .goal-dl::before{content:"";width:6px;height:6px;border-radius:100px;background:var(--warn)}
 .goal.urgent .goal-fill{background:var(--warn)}
 
 /* Classement : même graisse que les autres faits, jamais mis en avant —
    sauf sur le podium, réellement tenu, où l'accent de marque le signale. */
+/* Sur l'aplat bleu, le podium se signale en blanc plein — l'accent de
+   marque y serait invisible. */
 .rank{color:inherit}
-.rank-top{color:var(--accent)}
+.rank-top{color:#fff}
 
 /* — Code d'accès — */
 .pin-back{position:fixed;inset:0;z-index:200;background:rgba(11,16,32,.42);
@@ -211,7 +236,7 @@ input,select{font-family:inherit}
 
 /* Rail des paliers : la position rendue tangible, sans donnée nouvelle. */
 .rail{display:flex;align-items:center;gap:5px;flex-shrink:0}
-.rail-s{width:16px;height:4px;border-radius:100px;background:#E7EAF1}
+.rail-s{width:16px;height:4px;border-radius:100px;background:#E5E4DC}
 .rail-s.done{background:var(--accent)}
 .rail-s.now{background:var(--accent);width:24px;box-shadow:0 0 0 3px var(--accent-ring)}
 .rail-l{font-size:11px;font-weight:700;color:var(--faint);margin-left:3px}
@@ -223,14 +248,14 @@ input,select{font-family:inherit}
 .sec-t{font-size:18px;font-weight:700;letter-spacing:-.03em}
 
 /* — Missions présentées comme des gains — */
-.task{display:flex;align-items:center;gap:14px;width:100%;text-align:left;padding:16px 0;
-    border:none;border-bottom:1px solid var(--line);background:none;cursor:pointer;
+.task{display:flex;align-items:center;gap:14px;width:100%;text-align:left;padding:16px 18px;
+    border:none;border-radius:14px;background:var(--surface);cursor:pointer;margin-bottom:7px;
     transition:opacity .16s ease,transform .16s ease}
-.task:last-of-type{border-bottom:none}
+.task:last-of-type{margin-bottom:0}
 .task:hover{opacity:.62}
 .task:active{transform:scale(.994)}
-.task-e{width:40px;height:40px;border-radius:12px;background:var(--accent-soft);
-    display:grid;place-items:center;font-size:18px;flex-shrink:0}
+.task-e{width:36px;height:36px;border-radius:11px;background:var(--surface-2);
+    display:grid;place-items:center;font-size:16px;flex-shrink:0}
 .task-e.ok{background:var(--ok-soft)}
 .task-b{flex:1;min-width:0}
 .task-t{font-size:15px;font-weight:600;letter-spacing:-.02em}
@@ -240,11 +265,11 @@ input,select{font-family:inherit}
 .task.is-done .task-t{color:var(--faint)}
 
 /* — Code promo — */
-.promo{display:flex;align-items:center;gap:14px;background:var(--surface-2);
-    border-radius:18px;padding:18px 20px}
+.promo{display:flex;align-items:center;gap:14px;background:var(--surface);
+    border-radius:18px;padding:22px 24px}
 .promo-c{flex:1;min-width:0;font-family:'JetBrains Mono',ui-monospace,monospace;
     font-size:24px;font-weight:700;letter-spacing:.06em;overflow:hidden;text-overflow:ellipsis}
-.copy-btn{display:inline-flex;align-items:center;gap:7px;background:var(--ink);color:#fff;
+.copy-btn{display:inline-flex;align-items:center;gap:7px;background:var(--accent);color:#fff;
     border:none;border-radius:100px;padding:10px 18px;font-size:13.5px;font-weight:600;
     flex-shrink:0;cursor:pointer;transition:background .2s ease,transform .16s ease}
 .copy-btn:hover{transform:translateY(-1px)}
@@ -254,7 +279,7 @@ input,select{font-family:inherit}
 .promo-meta{display:flex;align-items:center;gap:9px;margin-top:12px;font-size:13px;
     color:var(--muted);font-weight:500;flex-wrap:wrap}
 .promo-meta b{color:var(--ink);font-weight:700}
-.promo-meta .d{width:3px;height:3px;border-radius:50%;background:#D3D7E0}
+.promo-meta .d{width:3px;height:3px;border-radius:50%;background:var(--line-2)}
 
 /* — Évolution : vide tant qu'il n'y a pas deux mois d'historique — */
 .chart-empty{border:1px dashed var(--line-2);border-radius:18px;padding:34px 24px;text-align:center}
@@ -323,11 +348,11 @@ input,select{font-family:inherit}
 /* ── Missions ───────────────────────────────────────────────────────────── */
 /* Une mission est une ligne, séparée par un filet — pas une carte. */
 .mission{
-    display:flex;align-items:center;gap:14px;padding:17px 0;border-radius:0;
-    border:none;border-bottom:1px solid var(--line);background:none;margin-bottom:0;
+    display:flex;align-items:center;gap:14px;padding:17px 18px;border-radius:14px;
+    border:none;background:var(--surface);margin-bottom:7px;
     transition:opacity .15s;
 }
-.mission:last-child{border-bottom:none}
+.mission:last-child{margin-bottom:0}
 .mission:hover{opacity:.65}
 .mission.done{background:none}
 .mission-check{
@@ -393,15 +418,15 @@ input,select{font-family:inherit}
 .empty-text{font-size:12.5px;color:var(--muted);font-weight:500;margin:5px auto 15px;max-width:280px;line-height:1.55}
 /* ── Divers ─────────────────────────────────────────────────────────────── */
 .badge{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:600;padding:0;border-radius:0;background:none!important}
-.b-ok{color:#0A7C58}
-.b-warn{color:#A66A05}
-.b-info{color:#1D5FD0}
+.b-ok{color:var(--ok)}
+.b-warn{color:var(--warn)}
+.b-info{color:var(--accent)}
 .b-muted{color:var(--faint)}
-.skeleton{background:linear-gradient(90deg,#EEF0F5 25%,#F6F7FA 50%,#EEF0F5 75%);background-size:200% 100%;animation:sk 1.4s infinite;border-radius:8px}
+.skeleton{background:linear-gradient(90deg,#EAE9E2 25%,#F5F4F0 50%,#EAE9E2 75%);background-size:200% 100%;animation:sk 1.4s infinite;border-radius:8px}
 @keyframes sk{0%{background-position:200% 0}100%{background-position:-200% 0}}
 .toast{
     position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(90px);
-    background:var(--ink);color:#fff;padding:12px 20px;border-radius:100px;
+    background:var(--sidebar);color:#fff;padding:12px 20px;border-radius:100px;
     font-size:13px;font-weight:700;box-shadow:var(--sh-lg);z-index:99;
     transition:transform .32s cubic-bezier(.2,.8,.2,1);
 }
@@ -433,7 +458,7 @@ input,select{font-family:inherit}
 /* ── Sélecteur de maillots ──────────────────────────────────────────────── */
 .pick-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px;flex-wrap:wrap}
 .pick-count{font-size:12.5px;font-weight:700;padding:6px 13px;border-radius:100px;background:var(--accent-soft);color:var(--accent)}
-.pick-count.full{background:var(--ok-soft);color:#0A7C58}
+.pick-count.full{background:var(--ok-soft);color:var(--ok)}
 .jgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:13px}
 .jcard{border:2px solid var(--line);border-radius:var(--r);overflow:hidden;background:var(--surface);
        cursor:pointer;transition:all .16s;position:relative}
@@ -453,7 +478,7 @@ input,select{font-family:inherit}
 .jsize.on{background:var(--accent);border-color:var(--accent);color:#fff}
 .jsize.out{opacity:.3;cursor:not-allowed;text-decoration:line-through}
 .picked{display:flex;gap:11px;flex-wrap:wrap;margin-bottom:14px}
-.picked-item{display:flex;align-items:center;gap:10px;background:var(--accent-soft);border:1px solid #DDD9FE;
+.picked-item{display:flex;align-items:center;gap:10px;background:var(--accent-soft);border:1px solid var(--accent-soft);
              border-radius:var(--r);padding:8px 13px 8px 8px}
 .picked-img{width:38px;height:38px;border-radius:8px;object-fit:contain;background:#fff;flex-shrink:0}
 .picked-name{font-size:12.5px;font-weight:800;line-height:1.25}
