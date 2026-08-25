@@ -283,6 +283,79 @@ input,select{font-family:inherit}
 .picked.locked .picked-rm{display:none}
 .picked.locked .picked-item{opacity:.9}
 
+/* ══ AVANTAGES ═══════════════════════════════════════════════════════════
+   Écran qui doit donner envie de produire. Le seul aplat fort y est le
+   palier — le statut acquis à vie, ce qui flatte. Les seuils du mois et la
+   valeur de la prochaine vente restent sur surface claire : ils informent
+   fort sans crier. */
+.rw-hero{background:var(--accent);border-radius:22px;padding:26px 24px;color:#fff}
+.rw-hero-k{font-size:10.5px;letter-spacing:.19em;text-transform:uppercase;
+    font-weight:700;color:var(--on-accent-lab)}
+.rw-hero-v{font-size:34px;font-weight:700;letter-spacing:-.04em;line-height:1.05;margin-top:12px}
+.rw-hero-s{font-size:13px;color:var(--on-accent);margin-top:12px;line-height:1.55}
+.rw-hero-s b{color:#fff;font-weight:700}
+.rw-hero-bar{height:6px;background:rgba(255,255,255,.24);border-radius:100px;
+    overflow:hidden;margin-top:22px}
+.rw-hero-bar i{display:block;height:100%;background:#fff;border-radius:100px;
+    transition:width 1s cubic-bezier(.2,.8,.2,1)}
+.rw-hero-m{display:flex;justify-content:space-between;gap:12px;margin-top:10px;
+    font-size:9.5px;letter-spacing:.13em;text-transform:uppercase;font-weight:700;
+    color:var(--on-accent-lab)}
+.rw-hero + .sec{margin-top:52px}
+
+/* Les quatre paliers */
+.rw-tiers{margin-top:14px}
+.rw-ti{display:flex;align-items:center;gap:13px;background:var(--surface);
+    border-radius:16px;padding:15px 17px}
+.rw-ti + .rw-ti{margin-top:7px}
+.rw-ti.got,.rw-ti.lock{opacity:.62}
+.rw-ti-e{width:34px;height:34px;border-radius:11px;background:var(--surface-2);
+    display:grid;place-items:center;font-size:16px;flex-shrink:0}
+.rw-ti.now .rw-ti-e{background:var(--accent-soft)}
+.rw-ti-b{flex:1;min-width:0}
+.rw-ti-n{font-size:13.5px;font-weight:700;letter-spacing:-.02em}
+.rw-ti-w{font-size:11.5px;color:var(--muted);margin-top:2px;font-weight:500}
+.rw-ti-s{font-size:8.5px;letter-spacing:.14em;text-transform:uppercase;font-weight:800;
+    padding:4px 9px;border-radius:100px;flex-shrink:0}
+.rw-ti-s.got{background:var(--ok-soft);color:var(--ok)}
+.rw-ti-s.now{background:var(--accent);color:#fff}
+.rw-ti-s.next{background:var(--warn-soft);color:var(--warn)}
+.rw-ti-s.lock{background:var(--surface-2);color:var(--faint)}
+
+/* Les seuils du mois */
+.rw-steps{margin-top:14px}
+.rw-st{display:flex;align-items:center;gap:13px;background:var(--surface);
+    border-radius:16px;padding:15px 17px}
+.rw-st + .rw-st{margin-top:7px}
+.rw-st-n{width:36px;height:36px;border-radius:11px;flex-shrink:0;display:grid;
+    place-items:center;font-size:13.5px;font-weight:800;background:var(--surface-2);
+    color:var(--ink);letter-spacing:-.02em}
+.rw-st.done .rw-st-n{background:var(--ok-soft);color:var(--ok)}
+.rw-st-b{flex:1;min-width:0}
+.rw-st-t{font-size:13.5px;font-weight:700;letter-spacing:-.02em}
+.rw-st-w{font-size:11.5px;color:var(--muted);margin-top:2px;font-weight:500}
+.rw-st.done .rw-st-w{color:var(--ok)}
+.rw-st-v{font-size:17px;font-weight:800;letter-spacing:-.035em;flex-shrink:0}
+.rw-note{font-size:12.5px;color:var(--muted);margin-top:14px;line-height:1.6;padding:0 3px}
+
+/* Le levier : la valeur de la vente qui fait basculer */
+.rw-spike{background:var(--surface);border-radius:18px;padding:24px}
+.rw-spike-k{font-size:9.5px;letter-spacing:.18em;text-transform:uppercase;
+    font-weight:700;color:var(--warn)}
+.rw-spike-v{font-size:38px;font-weight:800;letter-spacing:-.045em;line-height:1;margin-top:11px}
+.rw-spike-d{font-size:13px;color:var(--muted);margin-top:11px;line-height:1.6}
+.rw-spike-d b{color:var(--ink);font-weight:700}
+
+/* Projection annuelle : bleu sombre, pas un second aplat vif */
+.rw-year{background:var(--sidebar);border-radius:20px;padding:22px 24px;color:#fff}
+.rw-year-k{font-size:9.5px;letter-spacing:.19em;text-transform:uppercase;
+    font-weight:700;color:var(--on-dark-dim);margin-bottom:6px}
+.rw-year-r{display:flex;align-items:baseline;justify-content:space-between;gap:14px;padding:12px 0}
+.rw-year-r + .rw-year-r{border-top:1px solid rgba(255,255,255,.11)}
+.rw-year-l{font-size:13px;color:#A6B2DC;font-weight:500}
+.rw-year-v{font-size:17px;font-weight:800;letter-spacing:-.035em;flex-shrink:0}
+.rw-year-v.hi{color:#7E97FF}
+
 /* — Missions présentées comme des gains — */
 .task{display:flex;align-items:center;gap:14px;width:100%;text-align:left;padding:16px 18px;
     border:none;border-radius:14px;background:var(--surface);cursor:pointer;margin-bottom:7px;
@@ -1152,39 +1225,115 @@ function viewColis(){
 
 // ── Paliers ─────────────────────────────────────────────────────────────
 function viewPaliers(){
-    const idx = D.tier.index;
-    const t = D.tier, next = t.next;
+    const t = D.tier, next = t.next, idx = t.index;
     const d = (t.details && t.details[0]) || null;
     const toNext = d ? Math.max(0, d.target - d.current) : 0;
+    const pct    = d && d.target ? Math.min(100, Math.round(d.current / d.target * 100)) : 100;
+    const R = D.rewards || {steps:[], year:[], next_sale:null};
+
     return `
-        <div class="line-status" style="margin-bottom:26px">
-            <b>${esc(t.current.name)}</b>
-            ${next ? `<span class="sep"></span><span>${esc(next.name)} dans ${fmt(toNext)} vente${toNext>1?'s':''}</span>`
-                   : `<span class="sep"></span><span>Palier maximum</span>`}
+    ${/* ── L'aplat fort : le palier, acquis à vie ── */''}
+    <section class="rw-hero">
+        <div class="rw-hero-k">Ton palier</div>
+        <div class="rw-hero-v">${esc(t.current.name)}</div>
+        <div class="rw-hero-s">${next
+            ? `Acquis définitivement. Plus que <b>${fmt(toNext)} vente${toNext>1?'s':''}</b> cumulée${toNext>1?'s':''} pour devenir ${esc(next.name)} et passer à ${next.monthly_jerseys} maillots par mois.`
+            : `Tu es au palier maximum du programme. Il est acquis définitivement.`}</div>
+        <div class="rw-hero-bar"><i style="width:${pct}%"></i></div>
+        <div class="rw-hero-m">
+            <span>${d ? `${fmt(d.current)} / ${fmt(d.target)} ventes` : 'Palier maximum'}</span>
+            <span>${next ? `Prochain : ${esc(next.name)}` : 'Terminé'}</span>
         </div>
-        <div class="card">
-            <div class="card-head">
-                <div>
-                    <div class="card-title">Le programme ambassadeur</div>
-                    <div class="card-sub" style="margin-top:5px">Progresse pour débloquer de nouveaux avantages</div>
-                </div>
+    </section>
+
+    ${/* ── Les quatre paliers ── */''}
+    <section class="sec">
+        <div class="sec-k">Le programme</div>
+        <div class="sec-t">Les quatre paliers</div>
+        <div class="rw-tiers">
+            ${t.all.map((x,i)=>{
+                const state = i < idx ? 'got' : i === idx ? 'now' : (i === idx+1 ? 'next' : 'lock');
+                const label = state==='got' ? 'Atteint'
+                            : state==='now' ? 'Toi'
+                            : `${fmt(Math.max(0,(x.requirements&&x.requirements.sales||0) - (D.stats.sales||0)))} ventes`;
+                return `<div class="rw-ti ${state}">
+                    <div class="rw-ti-e">${x.icon}</div>
+                    <div class="rw-ti-b">
+                        <div class="rw-ti-n">${esc(x.name)}</div>
+                        <div class="rw-ti-w">${x.monthly_jerseys} maillots par mois${
+                            x.monthly_fixed ? ` · ${fmtFull(x.monthly_fixed)} € dès ${fmtFull(x.monthly_threshold)} ventes` : ''}</div>
+                    </div>
+                    <span class="rw-ti-s ${state}">${label}</span>
+                </div>`;
+            }).join('')}
+        </div>
+    </section>
+
+    ${/* ── Ce que rapporte un mois : les seuils, avec leur montant ── */''}
+    <section class="sec">
+        <div class="sec-k">Chaque mois</div>
+        <div class="sec-t">Ce que tu peux gagner</div>
+        <div class="rw-steps">
+            ${R.steps.map(st=>`
+                <div class="rw-st ${st.reached?'done':''}">
+                    <div class="rw-st-n num">${fmt(st.threshold)}</div>
+                    <div class="rw-st-b">
+                        <div class="rw-st-t">${fmtFull(st.fixed)} € garantis</div>
+                        <div class="rw-st-w">${st.reached
+                            ? 'Débloqué ce mois-ci'
+                            : `${fmt(st.missing)} vente${st.missing>1?'s':''} de plus`}</div>
+                    </div>
+                    <div class="rw-st-v num">${fmtFull(st.fixed)} €</div>
+                </div>`).join('')}
+        </div>
+        <div class="rw-note">Ces seuils se rejouent chaque mois et repartent de zéro le 1er. En dessous du premier seuil, tu touches ${fmt(D.commission_month ? D.commission_month.rate : 10)} % de tes ventes.</div>
+    </section>
+
+    ${/* ── Le levier : ce que vaut vraiment la prochaine vente ──
+         Rien d'inventé : c'est la différence exacte entre ce que rapporte
+         le mois avec N ventes et avec N+1, seuils compris. Masqué quand la
+         prochaine vente ne rapporte rien de plus qu'une vente ordinaire. */''}
+    ${R.next_sale ? `
+    <section class="sec">
+        <div class="rw-spike">
+            <div class="rw-spike-k">Le détail qui compte</div>
+            <div class="rw-spike-v num">${fmtEur(R.next_sale.value)}</div>
+            <div class="rw-spike-d">C'est ce que vaut ta <b>${fmt(R.next_sale.rank)}ᵉ vente du mois</b> : c'est elle qui déclenche les ${fmtFull(R.next_sale.unlocks)} € garantis. Une vente ordinaire t'en rapporte ${fmtEur(R.next_sale.ordinary)}${R.next_sale.multiple >= 2 ? ` — celle-ci en vaut <b>${fmtMult(R.next_sale.multiple)}</b> plus` : ''}.</div>
+        </div>
+    </section>` : ''}
+
+    ${/* ── Projection annuelle ── */''}
+    <section class="sec">
+        <div class="rw-year">
+            <div class="rw-year-k">Si tu tiens le rythme</div>
+            ${R.year.map((y,i)=>`
+                <div class="rw-year-r">
+                    <span class="rw-year-l">${fmtFull(y.threshold)} ventes chaque mois</span>
+                    <span class="rw-year-v ${i===R.year.length-1?'hi':''} num">${fmtFull(y.yearly)} €</span>
+                </div>`).join('')}
+            <div class="rw-year-r">
+                <span class="rw-year-l">Maillots reçus sur l'année</span>
+                <span class="rw-year-v num">jusqu'à ${fmtFull((t.all[t.all.length-1].monthly_jerseys||0)*12)}</span>
             </div>
-            <div class="ladder">
-                ${D.tier.all.map((t,i)=>`
-                    <div class="rung ${i<=idx?'reached':''} ${i===idx?'current':''}">
-                        <div class="rung-badge">${t.icon}</div>
-                        <div class="rung-body">
-                            <div class="rung-name">${esc(t.name)}
-                                ${i===idx?'<span class="rung-tag">Toi</span>':''}
-                                ${i>idx?`<span class="badge b-muted">${ICO.lock} À débloquer</span>`:''}
-                            </div>
-                            <div class="rung-perks">
-                                ${t.perks.map(p=>`<div class="rung-perk">${i<=idx?ICO.checkS:ICO.lock}<span>${esc(p)}</span></div>`).join('')}
-                            </div>
-                        </div>
-                    </div>`).join('')}
-            </div>
-        </div>`;
+        </div>
+    </section>`;
+}
+
+/* Montant exact : « 39,80 € », virgule française, sans décimale inutile.
+   On n'abrège JAMAIS ici — fmt() transformerait 1800 en « 1.8K », ce qui
+   convient à un compteur mais ruine une promesse de rémunération. */
+function fmtEur(v){
+    const n = Number(v)||0;
+    return (Number.isInteger(n) ? fmtFull(n) : n.toFixed(2).replace('.', ',')) + ' €';
+}
+/* Entier avec séparateur de milliers insécable : 1 800, 4 200. */
+function fmtFull(n){
+    return String(Math.round(Number(n)||0)).replace(/\B(?=(\d{3})+(?!\d))/g, '\u202F');
+}
+/* Multiplicateur : « 10,5 » et non « 10.5 », et « 4 » plutôt que « 4,0 ». */
+function fmtMult(v){
+    const n = Number(v)||0;
+    return (Number.isInteger(n) ? String(n) : n.toFixed(1).replace('.', ',')) + ' fois';
 }
 
 // ── Contenus ────────────────────────────────────────────────────────────
