@@ -3101,24 +3101,135 @@ def _shopify_fetch_orders_for_code(code, since_iso=None, max_pages=20):
     return orders, None
 
 
-def _aggregate_orders(orders):
-    """
-    Agrège une liste de commandes en stats : ventes/CA cumulés (hors annulées)
-    + ventes/CA du mois calendaire courant.
+# ══════════════════════════════════════════════════════════════════════════════
+# PÉRIODE DE RÉMUNÉRATION
+#
+# Les seuils mensuels (10 / 30 / 60 ventes) ne se jouent PAS sur le mois
+# calendaire : ils se jouent sur la période d'un mois qui démarre le jour où
+# l'influenceur est entré dans le programme. Inscrit le 12, ses périodes vont
+# du 12 au 12. Sans ça, quelqu'un qui rejoint le 28 n'aurait que trois jours
+# pour atteindre son premier seuil — et repartirait à zéro juste après.
+#
+# L'ancrage est `program_start_date` (YYYY-MM-DD), le champ que la fiche admin
+# renseigne déjà et qui sert au filtrage des commandes Shopify. Sans lui, on
+# retombe sur le mois calendaire : c'est le comportement antérieur, et il vaut
+# mieux ça qu'une période fantaisiste.
+# ══════════════════════════════════════════════════════════════════════════════
 
-    Retourne aussi `by_month` : {"YYYY-MM": {"sales": n, "revenue": x}}.
-    Ce découpage permet de recalculer la commission de CHAQUE mois couvert par
-    les commandes, et pas seulement celle du mois courant. Sans lui, les ventes
-    tombant entre la dernière synchro d'un mois et minuit ne sont jamais
-    rémunérées : l'entrée d'historique du mois se fige au dernier passage et
-    plus rien ne la reprend une fois la clé de mois basculée.
+def _add_months(d, n):
     """
-    now = datetime.now(timezone.utc)
-    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    Décale une date de n mois en bornant le jour au dernier jour du mois cible.
+    Un ancrage au 31 devient donc le 30 en avril, puis retrouve le 31 en mai —
+    la date d'ancrage d'origine n'est jamais perdue, seule la borne s'ajuste.
+    """
+    y, mth = d.year, d.month + n
+    y += (mth - 1) // 12
+    mth = (mth - 1) % 12 + 1
+    last = [31, 29 if (y % 4 == 0 and (y % 100 != 0 or y % 400 == 0)) else 28,
+            31, 30, 31, 30, 31, 31, 30, 31, 30, 31][mth - 1]
+    return d.replace(year=y, month=mth, day=min(d.day, last))
+
+
+def _parse_day(value):
+    """Lit une date YYYY-MM-DD (ou ISO complet) en datetime UTC à minuit."""
+    txt = str(value or "").strip()
+    if not txt:
+        return None
+    try:
+        dt = datetime.fromisoformat(txt.replace("Z", "+00:00"))
+    except Exception:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+
+
+def _period_bounds(inf, now=None):
+    """
+    Bornes de la période de rémunération en cours pour cet influenceur.
+
+    Retourne (debut, fin, anchored) — `anchored` dit si la période suit sa date
+    d'entrée (True) ou le mois calendaire faute de date (False).
+    """
+    now = now or datetime.now(timezone.utc)
+    anchor = _parse_day((inf or {}).get("program_start_date"))
+
+    if not anchor:
+        start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        return start, _add_months(start, 1), False
+
+    # Avant le début du programme, la première période est celle qui s'ouvre.
+    if now < anchor:
+        return anchor, _add_months(anchor, 1), True
+
+    # Les deux bornes se calculent depuis l'ANCRAGE, jamais l'une depuis
+    # l'autre. Dériver la fin en ajoutant un mois au début ferait glisser un
+    # ancrage au 31 : février le ramène au 28, et la période suivante
+    # repartirait du 31 — laissant trois jours qui n'appartiennent à aucune
+    # période. En repartant toujours de l'ancrage, les bornes se touchent.
+    k = (now.year - anchor.year) * 12 + (now.month - anchor.month)
+    # Un ou deux crans suffisent à corriger l'approximation du calcul de k.
+    for step in (k, k - 1, k + 1, k - 2, k + 2):
+        start = _add_months(anchor, step)
+        end   = _add_months(anchor, step + 1)
+        if start <= now < end:
+            return start, end, True
+
+    # Repli défensif : ne doit jamais servir, mais mieux vaut une période
+    # cohérente qu'une exception dans un calcul de rémunération.
+    start = _add_months(anchor, k)
+    return start, _add_months(anchor, k + 1), True
+
+
+def _period_key(start):
+    """Clé d'historique d'une période : sa date de début."""
+    return start.strftime("%Y-%m-%d")
+
+
+def _period_overlaps(key_a, key_b):
+    """Deux périodes d'un mois, identifiées par leur début, se chevauchent-elles ?"""
+    a = _parse_day(key_a if len(key_a) > 7 else key_a + "-01")
+    b = _parse_day(key_b if len(key_b) > 7 else key_b + "-01")
+    if not a or not b:
+        return False
+    return a < _add_months(b, 1) and b < _add_months(a, 1)
+
+
+def _migrate_history_keys(history):
+    """
+    Convertit les clés d'historique de l'ancien format mensuel (YYYY-MM) vers
+    le format période (YYYY-MM-DD). Un mois calendaire devient une période
+    démarrant le 1er — ce qu'il était effectivement sous l'ancien système.
+    Idempotent : une clé déjà au bon format est laissée telle quelle.
+    """
+    out, changed = {}, False
+    for k, v in (history or {}).items():
+        if len(str(k)) == 7:
+            out[f"{k}-01"] = v
+            changed = True
+        else:
+            out[k] = v
+    return out, changed
+
+
+def _aggregate_orders(orders, inf=None, now=None):
+    """
+    Agrège une liste de commandes : ventes/CA cumulés (hors annulées) + ventes
+    et CA de la PÉRIODE en cours.
+
+    La période n'est pas le mois calendaire : elle démarre au jour d'entrée de
+    l'influenceur dans le programme (voir _period_bounds). `by_period` découpe
+    l'historique en périodes successives, clé = date de début, ce qui permet de
+    recalculer la commission de chacune — sans quoi les ventes tombant après la
+    dernière synchro d'une période ne seraient jamais rémunérées.
+    """
+    now = now or datetime.now(timezone.utc)
+    p_start, p_end, _ = _period_bounds(inf or {}, now)
+    anchor = _parse_day((inf or {}).get("program_start_date"))
 
     sales = revenue = 0
-    sales_month = revenue_month = 0
-    by_month = {}
+    sales_period = revenue_period = 0
+    by_period = {}
 
     for o in orders:
         if o.get("cancelled"):
@@ -3131,21 +3242,43 @@ def _aggregate_orders(orders):
             created = datetime.fromisoformat((o["created_at"] or "").replace("Z", "+00:00"))
         except Exception:
             created = None
-        if created:
-            bucket = by_month.setdefault(created.strftime("%Y-%m"), {"sales": 0, "revenue": 0.0})
-            bucket["sales"]   += 1
-            bucket["revenue"] += amount
-        if created and created >= month_start:
-            sales_month += 1
-            revenue_month += amount
+        if not created:
+            continue
 
-    for bucket in by_month.values():
-        bucket["revenue"] = round(bucket["revenue"], 2)
+        # Période à laquelle appartient cette commande.
+        if anchor and created >= anchor:
+            k = (created.year - anchor.year) * 12 + (created.month - anchor.month)
+            bucket_start = None
+            for step in (k, k - 1, k + 1, k - 2, k + 2):
+                a = _add_months(anchor, step)
+                if a <= created < _add_months(anchor, step + 1):
+                    bucket_start = a
+                    break
+            if bucket_start is None:
+                bucket_start = _add_months(anchor, k)
+        else:
+            # Sans ancrage (ou commande antérieure), on retombe sur le mois.
+            bucket_start = created.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+        b = by_period.setdefault(_period_key(bucket_start), {"sales": 0, "revenue": 0.0})
+        b["sales"]   += 1
+        b["revenue"] += amount
+
+        if p_start <= created < p_end:
+            sales_period += 1
+            revenue_period += amount
+
+    for b in by_period.values():
+        b["revenue"] = round(b["revenue"], 2)
 
     return {
         "sales": sales, "revenue": round(revenue, 2),
-        "sales_month": sales_month, "revenue_month": round(revenue_month, 2),
-        "by_month": by_month,
+        # Les clés gardent leur nom historique : tout le reste du code, du
+        # barème à l'affichage, les lit sous ce nom. Seul leur périmètre change.
+        "sales_month": sales_period, "revenue_month": round(revenue_period, 2),
+        "by_month": by_period,
+        "period_start": _period_key(p_start),
+        "period_end":   _period_key(p_end),
     }
 
 
@@ -3180,7 +3313,7 @@ def sync_influencer_stats(force=False):
                             errors.append(f"{inf.get('pseudo','?')} ({code}): {fetch_err}")
                             print(f"[SHOPIFY SYNC] Erreur pour {inf.get('pseudo')} ({code}): {fetch_err}")
                             continue
-                        agg = _aggregate_orders(orders)
+                        agg = _aggregate_orders(orders, inf)
                         # Ventes de référence : Shopify ne donne accès qu'aux commandes
                         # des 60 derniers jours par défaut (limite de plateforme, pas de
                         # notre code). Le "baseline" permet d'ajouter manuellement les
@@ -3194,30 +3327,45 @@ def sync_influencer_stats(force=False):
                         s["sales_month"]   = agg["sales_month"]      # jamais affecté par le baseline
                         s["revenue_month"] = agg["revenue_month"]    # (toujours dans les 60j accessibles)
 
-                        # Ledger mensuel de commission : on recalcule l'entrée de CHAQUE
-                        # mois couvert par les commandes récupérées (clé YYYY-MM), pas
-                        # seulement celle du mois courant. Recalculer plutôt qu'additionner
-                        # évite tout double-comptage, et repasser sur les mois antérieurs
-                        # rattrape les ventes tombées après la dernière synchro d'un mois.
+                        # Ledger de commission par PÉRIODE : on recalcule l'entrée de
+                        # chaque période couverte par les commandes récupérées, clé =
+                        # date de début de période. Recalculer plutôt qu'additionner
+                        # évite tout double-comptage, et repasser sur les périodes
+                        # antérieures rattrape les ventes tombées après la dernière
+                        # synchro d'une période.
                         #
-                        # Règle de sécurité : on n'écrase JAMAIS une entrée existante par
-                        # une valeur nulle. Shopify ne rend accessibles que les commandes
-                        # récentes ; sans ce garde-fou, un mois sorti de la fenêtre de
-                        # rétention verrait sa commission remise à zéro à la synchro
-                        # suivante — donc effacée définitivement.
-                        history = dict(s.get("commission_history") or {})
-                        for month_key, bucket in (agg.get("by_month") or {}).items():
+                        # Règle de sécurité : on n'écrase JAMAIS une entrée existante
+                        # par une valeur nulle. Shopify ne rend accessibles que les
+                        # commandes récentes ; sans ce garde-fou, une période sortie de
+                        # la fenêtre de rétention verrait sa commission remise à zéro à
+                        # la synchro suivante — donc effacée définitivement.
+                        history, migrated = _migrate_history_keys(s.get("commission_history"))
+                        if migrated:
+                            print(f"[SYNC] Historique converti au format période "
+                                  f"pour {inf.get('pseudo','?')}")
+
+                        for period_key, bucket in (agg.get("by_month") or {}).items():
                             amount = _compute_monthly_commission(inf, {
                                 "sales_month":   bucket["sales"],
                                 "revenue_month": bucket["revenue"],
                             }).get("amount", 0)
-                            if amount or month_key not in history:
-                                history[month_key] = amount
+                            # Une entrée héritée du découpage calendaire qui recouvre la
+                            # période recalculée doit disparaître : la garder ferait
+                            # compter deux fois les mêmes ventes, une fois par mois et
+                            # une fois par période.
+                            for old_key in [k for k in history
+                                            if k != period_key and _period_overlaps(k, period_key)]:
+                                print(f"[SYNC] Entrée {old_key} remplacée par {period_key} "
+                                      f"({inf.get('pseudo','?')})")
+                                history.pop(old_key, None)
+                            if amount or period_key not in history:
+                                history[period_key] = amount
 
-                        # Le mois courant est toujours écrit, même à zéro : tant qu'il est
-                        # en cours, sa valeur doit pouvoir redescendre (commande annulée).
-                        current_key = datetime.now(timezone.utc).strftime("%Y-%m")
-                        history[current_key] = _compute_monthly_commission(inf, s).get("amount", 0)
+                        # La période courante est toujours écrite, même à zéro : tant
+                        # qu'elle court, sa valeur doit pouvoir redescendre (annulation).
+                        current_key = agg.get("period_start")
+                        if current_key:
+                            history[current_key] = _compute_monthly_commission(inf, s).get("amount", 0)
 
                         s["commission_history"] = history
                         # La commission cumulée intègre le baseline : sans lui, un
@@ -4245,26 +4393,28 @@ def _monthly_gifting(stats):
     }
 
 
-def _month_clock(now=None):
+def _month_clock(inf=None, now=None):
     """
-    Temps restant dans le mois calendaire courant.
+    Temps restant dans la PÉRIODE de rémunération en cours.
 
-    Sert à passer l'objectif du mois en état d'urgence quand il reste peu de
-    jours : c'est précisément le moment où un influenceur à une vente du seuil
-    peut encore basculer, et où l'information a une valeur.
-    Retourne : days_left (jours entiers restants, 0 le dernier jour), total_days.
+    Sert à passer l'objectif en état d'urgence quand il reste peu de jours :
+    c'est le moment où un influenceur à une vente du seuil peut encore
+    basculer, et où l'information a une valeur. Les dates de début et de fin
+    sont renvoyées telles quelles, parce qu'un influenceur inscrit le 12 ne
+    doit jamais avoir à deviner que sa période finit le 12.
     """
     now = now or datetime.now(timezone.utc)
-    if now.month == 12:
-        next_month = now.replace(year=now.year + 1, month=1, day=1,
-                                 hour=0, minute=0, second=0, microsecond=0)
-    else:
-        next_month = now.replace(month=now.month + 1, day=1,
-                                 hour=0, minute=0, second=0, microsecond=0)
-    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-    total_days  = (next_month - month_start).days
-    days_left   = max(0, (next_month - now).days)
-    return {"days_left": days_left, "total_days": total_days}
+    start, end, anchored = _period_bounds(inf or {}, now)
+    total_days = (end - start).days
+    days_left  = max(0, (end - now).days)
+    return {
+        "days_left":  days_left,
+        "total_days": total_days,
+        "start":      _period_key(start),
+        "end":        _period_key(end),
+        # False = pas de date d'entrée renseignée, on suit le mois calendaire.
+        "anchored":   anchored,
+    }
 
 
 def _espace_rank(inf, influenceurs=None):
@@ -4534,7 +4684,7 @@ def _espace_payload(inf):
         "rewards": _espace_rewards(inf, stats),
         # Temps restant dans le mois : permet à l'interface de hiérarchiser
         # l'objectif quand l'échéance approche.
-        "month_clock": _month_clock(),
+        "month_clock": _month_clock(inf),
         # Classement anonymisé (position seule, jamais les chiffres des autres).
         "rank": _espace_rank(inf),
         # État du code d'accès : l'interface sait ainsi s'il faut le demander
