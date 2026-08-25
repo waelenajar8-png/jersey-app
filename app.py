@@ -4330,6 +4330,78 @@ def _espace_pin_ok(inf, slug):
     return bool(session.get(f"espace_pin_{slug}"))
 
 
+# ── Vérification du code de réduction côté Shopify ──────────────────────────
+# Le lien de bio est construit à partir du code saisi dans la fiche, sans que
+# rien ne garantisse que ce code existe déjà chez Shopify. Un admin qui prépare
+# une fiche la veille et crée le code le lendemain laisse donc, entre les deux,
+# un lien mort que l'influenceuse peut coller en bio de bonne foi.
+#
+# On interroge donc Shopify avant d'afficher le lien. Deux précautions :
+#   - un cache, parce que la vérification a lieu à chaque ouverture d'espace et
+#     qu'un aller-retour réseau à ce moment-là se verrait ;
+#   - un repli PERMISSIF : si Shopify est injoignable ou non configuré, on
+#     affiche quand même le lien. Une panne d'API ne doit pas faire disparaître
+#     de toutes les bios un lien qui, lui, fonctionne parfaitement.
+_discount_cache = {}          # code -> (expire_at, actif)
+_discount_lock  = threading.Lock()
+_DISCOUNT_TTL_OK = 1800       # 30 min : un code actif le reste
+_DISCOUNT_TTL_KO = 120        # 2 min : un code absent va bientôt être créé
+
+_DISCOUNT_QUERY = """
+query($code: String!) {
+  codeDiscountNodeByCode(code: $code) {
+    id
+    codeDiscount {
+      ... on DiscountCodeBasic        { status }
+      ... on DiscountCodeBxgy         { status }
+      ... on DiscountCodeFreeShipping { status }
+    }
+  }
+}
+"""
+
+
+def _discount_code_active(code):
+    """
+    Le code de réduction existe-t-il et est-il utilisable chez Shopify ?
+
+    Retourne True (actif), False (inexistant ou expiré), ou None quand on ne
+    peut pas savoir — Shopify non configuré, hors service, réponse illisible.
+    L'appelant traite None comme un feu vert : mieux vaut un lien affiché à
+    tort qu'un lien retiré à tort.
+    """
+    code = (code or "").strip()
+    if not code:
+        return False
+    if not _shopify_configured():
+        return None
+
+    now = time.time()
+    with _discount_lock:
+        hit = _discount_cache.get(code)
+        if hit and hit[0] > now:
+            return hit[1]
+
+    data, err = _shopify_graphql(_DISCOUNT_QUERY, {"code": code})
+    if err or data is None:
+        print(f"[DISCOUNT] Verification impossible pour {code}: {err}")
+        return None                      # un echec technique ne se met pas en cache
+
+    try:
+        node = (data or {}).get("codeDiscountNodeByCode")
+        # SCHEDULED compte comme actif : le lien fonctionnera a la date prevue,
+        # et l'influenceuse a tout interet a l'avoir deja en bio ce jour-la.
+        status = ((node or {}).get("codeDiscount") or {}).get("status")
+        active = bool(node) and status in ("ACTIVE", "SCHEDULED")
+    except Exception as e:
+        print(f"[DISCOUNT] Reponse inattendue pour {code}: {e}")
+        return None
+
+    with _discount_lock:
+        _discount_cache[code] = (now + (_DISCOUNT_TTL_OK if active else _DISCOUNT_TTL_KO), active)
+    return active
+
+
 def _espace_share_link(inf):
     """
     Lien de partage prêt à coller en bio.
@@ -4339,12 +4411,23 @@ def _espace_share_link(inf):
     en place, sans rien avoir à saisir. C'est décisif pour un lien de bio —
     un code à recopier manuellement se perd en route, un lien ne se perd pas.
 
-    Retourne "" si l'influenceur n'a pas encore de code promo.
+    Le lien n'est renvoye que si le code existe vraiment chez Shopify : un
+    lien mort colle en bio coute une journee de trafic et fait douter du
+    programme. Quand la verification echoue (Shopify injoignable), on affiche
+    quand meme — voir _discount_code_active.
+
+    Retourne {"url", "ready", "code"} ; url vide si pas de code.
     """
     code = (inf.get("promo_code") or "").strip()
     if not code:
-        return ""
-    return f"{SHOP_PUBLIC_URL}/discount/{quote(code, safe='')}"
+        return {"url": "", "ready": False, "code": ""}
+
+    active = _discount_code_active(code)      # True / False / None
+    return {
+        "url":   f"{SHOP_PUBLIC_URL}/discount/{quote(code, safe='')}",
+        "ready": active is not False,         # None = on n'a pas pu verifier
+        "code":  code,
+    }
 
 
 def _espace_jerseys(inf):
