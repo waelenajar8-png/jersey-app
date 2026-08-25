@@ -313,6 +313,11 @@ input,select{font-family:inherit}
     font-weight:700;color:var(--accent);border:1px solid var(--line-2);
     border-radius:100px;padding:9px 16px;transition:border-color .16s ease}
 .bio-acts .btn-ghost:hover{border-color:var(--accent)}
+/* En attente d'activation : ton, pas alerte. Ce n'est pas une erreur de
+   l'influenceuse, juste une etape qui n'est pas encore franchie. */
+.bio.bio-wait{background:var(--surface-2);border:1px dashed var(--line-2)}
+.bio-wait .bio-k{color:var(--muted)}
+.bio-wait .bio-t{color:var(--ink-2)}
 @media (max-width:520px){
     .bio{padding:18px}
     .bio-box{flex-direction:column;align-items:stretch;gap:10px}
@@ -1122,7 +1127,7 @@ function blockTasks(){
 // ── Code promo ──────────────────────────────────────────────────────────
 function blockPromo(){
     const code = D.influencer.promo_code, s = D.stats;
-    const link = D.influencer.share_link || '';
+    const share = D.influencer.share_link || {};
     if(!code){
         return `<section class="sec rise" style="animation-delay:.18s">
             <div class="sec-k">Ton code</div>
@@ -1146,20 +1151,21 @@ function blockPromo(){
         </div>
 
         ${/* ── Le lien de bio ──
-             Un code se recopie à la main : la moitié des visiteurs abandonnent
-             en route. Le lien applique la réduction tout seul et travaille en
-             continu depuis la bio, y compris pour les gens qui découvrent le
-             profil par hasard. C'est pour ça qu'il est présenté juste après,
-             avec sa raison d'être écrite noir sur blanc. */''}
-        ${link ? `
+             Un code se recopie a la main : une partie des visiteurs abandonne
+             en route. Le lien applique la reduction tout seul et travaille en
+             continu depuis la bio, y compris pour ceux qui decouvrent le profil
+             par hasard. Il n'apparait que si le serveur a pu confirmer que le
+             code existe chez Shopify : un lien mort en bio coute plus cher que
+             pas de lien du tout. */''}
+        ${!share.url ? '' : share.ready ? `
         <div class="bio">
             <div class="bio-head">
                 <div class="bio-k">Ton lien à mettre en bio</div>
                 <div class="bio-t">Il applique les −15 % tout seul</div>
             </div>
             <div class="bio-box">
-                <span class="bio-url" title="${escAttr(link)}">${esc(link)}</span>
-                <button class="copy-btn" data-copy="${escAttr(link)}">${copySvg}<span>Copier</span></button>
+                <span class="bio-url" title="${escAttr(share.url)}">${esc(share.url)}</span>
+                <button class="copy-btn" data-copy="${escAttr(share.url)}">${copySvg}<span>Copier</span></button>
             </div>
             <div class="bio-why">
                 Mets-le dans ta bio TikTok et Instagram. Il travaille pour toi en permanence :
@@ -1168,11 +1174,21 @@ function blockPromo(){
                 retenir, pas de code à recopier.
             </div>
             <div class="bio-acts">
-                <a class="btn-ghost" href="${escAttr(link)}" target="_blank" rel="noopener">
-                    Tester mon lien
-                </a>
+                <a class="btn-ghost" href="${escAttr(share.url)}" target="_blank" rel="noopener">Tester mon lien</a>
             </div>
-        </div>` : ''}
+        </div>` : `
+        <div class="bio bio-wait">
+            <div class="bio-head">
+                <div class="bio-k">Ton lien à mettre en bio</div>
+                <div class="bio-t">Il arrive très vite</div>
+            </div>
+            <div class="bio-why" style="margin-top:0">
+                On finalise l'activation de ton code côté boutique. Dès que c'est fait,
+                tu trouveras ici un lien à coller dans ta bio TikTok et Instagram :
+                il appliquera ta réduction automatiquement, sans que personne
+                ait à retenir ton code. Reviens dans un moment.
+            </div>
+        </div>`}
     </section>`;
 }
 
