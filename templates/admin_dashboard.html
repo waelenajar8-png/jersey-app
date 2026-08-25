@@ -462,6 +462,17 @@ select.inp{cursor:pointer}
 .inp[readonly]{background:var(--surface-2);color:var(--muted);border-color:var(--line);cursor:default}
 .inp.mono{font-family:'JetBrains Mono',monospace;font-weight:700;letter-spacing:.02em;text-transform:uppercase}
 .hint{font-size:11px;color:var(--muted);margin-top:6px;line-height:1.5}
+/* Participants hors programme : une ligne = un nom, un nombre, et l'âge du
+   nombre. L'âge passe à la ligne pour ne pas comprimer les champs. */
+.extrow{display:flex;align-items:center;gap:9px;flex-wrap:wrap;
+    padding:9px 0;border-top:1px solid var(--line)}
+.extrow:first-child{border-top:0}
+.extname{flex:1 1 160px;min-width:0}
+.extnum{flex:0 0 90px;text-align:right;font-weight:700}
+.extunit{font-size:11.5px;color:var(--muted);font-weight:600;white-space:nowrap}
+.extage{flex:1 1 100%;font-size:11px;color:var(--muted);font-weight:600;padding-left:2px}
+.extage.bad{color:var(--danger)}
+.extrow.stale .extnum{border-color:var(--danger)}
 /* Code d'accès : le code lui-même porte la valeur, les actions restent en retrait. */
 .pinrow{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
 /* Verrou de sélection des maillots */
@@ -579,6 +590,7 @@ select.inp{cursor:pointer}
                         <input type="text" id="q" placeholder="Rechercher" autocomplete="off">
                     </div>
                     <button class="btn" id="syncBtn" data-i="sync">Synchroniser</button>
+                    <button class="btn" id="extBtn" onclick="openExt()" data-i="trophy">Classement</button>
                     <button class="btn" id="importBtn" data-i="upload">Importer</button>
                     <button class="btn" id="exportBtn" data-i="download">Export</button>
                     <button class="btn primary" id="addBtn" data-i="plus">Ajouter</button>
@@ -992,6 +1004,33 @@ select.inp{cursor:pointer}
     </div>
 </div>
 
+<!-- Participants hors programme : un nom, un chiffre, rien d'autre.
+     Pas de fiche, pas de colis, pas d'espace — ils n'entrent que dans le
+     classement que voient les ambassadrices. -->
+<div class="scrim" id="extScrim">
+    <div class="sheet" style="max-width:620px" role="dialog" aria-modal="true">
+        <div class="sheet-head">
+            <div class="sheet-title">Classement — hors programme<small>Vendeurs suivis à la main, sans fiche ni colis</small></div>
+            <button class="x" onclick="closeExt()" aria-label="Fermer" data-i="x"></button>
+        </div>
+        <div class="sheet-body">
+            <div class="hint" style="margin-bottom:12px">
+                Le nombre saisi est celui que <b>toutes tes ambassadrices verront</b>, et
+                c'est à lui qu'elles se compareront : mets leur vrai total de ventes
+                <b>sur les 30 derniers jours</b>. Un chiffre non remis à jour depuis plus
+                de 30 jours sort du classement tout seul — il ne décrit plus la bonne
+                fenêtre.
+            </div>
+            <div id="extList"></div>
+            <button class="btn sm" onclick="extAdd()" data-i="plus" style="margin-top:12px">Ajouter quelqu'un</button>
+        </div>
+        <div class="sheet-foot" style="justify-content:flex-end">
+            <button class="btn ghost sm" onclick="closeExt()">Annuler</button>
+            <button class="btn primary sm" id="extSave" onclick="extSave()" data-i="check">Enregistrer</button>
+        </div>
+    </div>
+</div>
+
 <script>
 /* ── Icônes ─────────────────────────────────────────────────────────── */
 const I = {
@@ -1001,6 +1040,7 @@ const I = {
   search:'<circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>',
   sync:'<path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>',
   plus:'<path d="M12 5v14M5 12h14"/>',
+  trophy:'<path d="M6 9H4.5a2.5 2.5 0 010-5H6M18 9h1.5a2.5 2.5 0 000-5H18M4 22h16M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22M18 2H6v7a6 6 0 0012 0V2z"/>',
   x:'<path d="M18 6L6 18M6 6l12 12"/>',
   check:'<path d="M20 6L9 17l-5-5"/>',
   send:'<path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/>',
@@ -1198,6 +1238,93 @@ function cardHtml(inf, rank){
             <button class="btn primary sm" ${!url?'disabled':''} onclick="window.open('${esc(url)}','_blank')" data-i="ext">Son espace</button>
         </div>
     </article>`;
+}
+
+/* ── Classement : participants hors programme ───────────────────────────
+   Des vendeurs qu'on ne veut pas gérer comme des ambassadeurs — pas de fiche,
+   pas de colis, pas d'espace. Juste un nom et un nombre de ventes, saisis à
+   la main, qui les font apparaître au classement comme les autres.
+
+   Le chiffre n'est jamais généré ni extrapolé : ce que l'admin tape est ce
+   que tout le monde lit. C'est une donnée que les ambassadrices utilisent
+   pour se situer, elle doit décrire des ventes réelles. */
+let EXT = [];
+
+async function openExt(){
+    document.getElementById('extScrim').classList.add('open');
+    document.getElementById('extList').innerHTML =
+        `<div class="hint">Chargement…</div>`;
+    try{
+        const r = await fetch('/api/classement/externes');
+        const d = await r.json();
+        EXT = (d.entries || []).map(e => ({...e}));
+    }catch(e){
+        EXT = [];
+        toast("Chargement du classement impossible.", true);
+    }
+    if(!EXT.length) extAdd(); else renderExt();
+}
+function closeExt(){ document.getElementById('extScrim').classList.remove('open'); }
+
+function extAdd(){
+    EXT.push({id:'', pseudo:'', sales:0, age_days:null, stale:false});
+    renderExt();
+    setTimeout(()=>{
+        const f = document.querySelectorAll('#extList .extname');
+        if(f.length) f[f.length-1].focus();
+    }, 40);
+}
+function extDel(i){ EXT.splice(i,1); renderExt(); }
+function extSet(i, k, v){ if(EXT[i]) EXT[i][k] = v; }
+
+function renderExt(){
+    const el = document.getElementById('extList');
+    if(!EXT.length){
+        el.innerHTML = `<div class="hint">Personne pour l'instant.</div>`;
+        return;
+    }
+    el.innerHTML = EXT.map((e,i) => {
+        // L'âge du chiffre est la seule chose que l'admin doit surveiller :
+        // affiché en clair, et signalé net quand l'entrée est déjà sortie.
+        const age = e.age_days === null || e.age_days === undefined ? ''
+                  : e.stale ? `<span class="extage bad">Périmé — ${e.age_days} j, hors classement</span>`
+                  : e.age_days === 0 ? `<span class="extage">Mis à jour aujourd'hui</span>`
+                  : `<span class="extage">Il y a ${e.age_days} j</span>`;
+        return `<div class="extrow${e.stale?' stale':''}">
+            <input class="inp extname" value="${esc(e.pseudo)}" placeholder="Nom ou pseudo"
+                   maxlength="40" autocomplete="off"
+                   oninput="extSet(${i},'pseudo',this.value)">
+            <input class="inp extnum num" type="number" min="0" max="100000" value="${Number(e.sales)||0}"
+                   oninput="extSet(${i},'sales',this.value)">
+            <span class="extunit">ventes / 30 j</span>
+            <button class="icon-btn" onclick="extDel(${i})" title="Retirer" data-i="trash"></button>
+            ${age}
+        </div>`;
+    }).join('');
+    paintIcons(el);
+}
+
+async function extSave(){
+    const rows = EXT
+        .map(e => ({id:e.id||'', pseudo:(e.pseudo||'').trim(),
+                    sales: Math.max(0, Math.min(100000, parseInt(e.sales,10)||0))}))
+        .filter(e => e.pseudo);
+    const btn = document.getElementById('extSave');
+    btn.disabled = true;
+    try{
+        const r = await fetch('/api/classement/externes', {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({entries: rows}),
+        });
+        const d = await r.json();
+        if(!d.success) throw new Error(d.error || 'refus');
+        toast(`${d.count} participant${d.count>1?'s':''} hors programme enregistré${d.count>1?'s':''}.`);
+        closeExt();
+    }catch(e){
+        toast("Enregistrement impossible.", true);
+    }finally{
+        btn.disabled = false;
+    }
 }
 
 /* ── Ajout ──────────────────────────────────────────────────────────── */
