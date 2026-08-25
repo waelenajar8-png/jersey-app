@@ -348,11 +348,7 @@ input,select{font-family:inherit}
     overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
     border-bottom:1px solid transparent;transition:border-color .16s ease}
 .shr-url:hover{border-bottom-color:var(--line-2)}
-/* L'argument porte, la consigne suit : deux niveaux de lecture distincts,
-   pour qu'on saisisse le bénéfice avant la manipulation. */
-.shr-arg{font-size:13.5px;color:var(--ink-2);margin-top:13px;line-height:1.55;font-weight:500}
-.shr-arg b{color:var(--ink);font-weight:700}
-.shr-why{font-size:12px;color:var(--faint);margin-top:8px;font-weight:500;line-height:1.5}
+.shr-why{font-size:12.5px;color:var(--muted);margin-top:12px;font-weight:500;line-height:1.55}
 .shr-soon{flex:1;font-size:15px;font-weight:600;color:var(--ink-2);letter-spacing:-.02em}
 .shr-wait .shr-k{color:var(--muted)}
 /* Le code, en pied de bloc : présent, jamais dominant. */
@@ -1045,6 +1041,25 @@ function viewHome(){
     ${blockColis()}`;
 }
 
+
+/* Dates de la période de rémunération, en clair.
+   Un influenceur inscrit le 12 ne doit jamais avoir à deviner que sa période
+   court du 12 au 12 : on écrit les dates plutôt que « le mois ». */
+function periodDates(){
+    const c = D.month_clock || {};
+    if(!c.start || !c.end) return null;
+    const f = iso => {
+        const d = new Date(iso + 'T00:00:00Z');
+        return isNaN(d) ? null : d.toLocaleDateString('fr-FR', {day:'numeric', month:'long', timeZone:'UTC'});
+    };
+    const a = f(c.start), b = f(c.end);
+    return (a && b) ? {from:a, to:b, anchored:!!c.anchored} : null;
+}
+function periodLabel(){
+    const p = periodDates();
+    return p ? `du ${p.from} au ${p.to}` : 'de ce mois';
+}
+
 // ── Gains du mois : la surface de marque ────────────────────────────────
 function blockGains(){
     const c = D.commission_month, s = D.stats;
@@ -1057,7 +1072,7 @@ function blockGains(){
         else                        basis = `Commission de ${c.rate} % sur tes ventes`;
     }
     return `<section class="gains rise">
-        <div class="gains-k">Tes gains ce mois</div>
+        <div class="gains-k">Tes gains sur ta période</div>
         <div class="gains-v num" id="gainsV">€0</div>
         ${basis ? `<div class="gains-sub">${esc(basis)}</div>` : ''}
         <div class="gains-sep"></div>
@@ -1104,8 +1119,8 @@ function blockGoal(){
 
     if(!pending.length){
         const got = g && g.unlocked
-            ? `Tout est débloqué ce mois : ${fmt(g.jerseys)} maillots et ta rémunération.`
-            : 'Tout est débloqué pour ce mois.';
+            ? `Tout est débloqué sur ta période : ${fmt(g.jerseys)} maillots et ta rémunération.`
+            : 'Tout est débloqué pour cette période.';
         return `<section class="goal rise" style="animation-delay:.06s">
             ${head}<div class="goal-done">${esc(got)}</div>
         </section>`;
@@ -1125,21 +1140,21 @@ function blockGoal(){
     const urgent = Number.isFinite(days) && days <= 5 && missing > 0;
     const deadline = urgent
         ? `<div class="goal-dl">${days <= 0
-            ? 'Dernier jour du mois'
+            ? 'Dernier jour de ta période'
             : `Il reste ${fmt(days)} jour${days > 1 ? 's' : ''}`}</div>`
         : '';
 
     return `<section class="goal rise${urgent ? ' urgent' : ''}" style="animation-delay:.06s">
         ${head}
         <div class="goal-left">Plus que ${fmt(missing)} vente${missing > 1 ? 's' : ''}</div>
-        <div class="goal-for">pour débloquer ta récompense de ce mois</div>
+        <div class="goal-for">pour débloquer ta récompense ${esc(periodLabel())}</div>
         ${deadline}
         <div class="rewards">
             ${byAt[at].map((l,i)=>`<span class="rw" style="animation-delay:${.32 + i*.1}s">${lock}${esc(l)}</span>`).join('')}
         </div>
         <div class="goal-bar"><div class="goal-fill" data-fill="${pct}"></div></div>
         <div class="goal-foot">
-            <span class="goal-cnt num">${fmt(c.sales_month)} sur ${fmt(at)} ventes ce mois</span>
+            <span class="goal-cnt num">${fmt(c.sales_month)} sur ${fmt(at)} ventes sur ta période</span>
             <span class="goal-cta" data-goto="paliers">Comment débloquer
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
             </span>
@@ -1204,16 +1219,12 @@ function blockPromo(){
                        title="Ouvrir pour tester">${esc(pretty)}</a>
                     <button class="copy-btn" data-copy="${escAttr(share.url)}">${copySvg}<span>Copier</span></button>
                 </div>
-                ${/* Mettre un lien en bio a un coût réel : la place est unique et
-                     déjà prise. Un argument général — « ce lien travaille tous
-                     les jours » — est vrai mais abstrait : elle ne peut rien en
-                     faire. Le seul argument qui porte est SON chiffre du moment,
-                     celui qui lui manque maintenant. On le rattache donc à
-                     l'objectif en cours, et on répond ensuite au frein pratique
-                     de la place occupée — sans quoi le meilleur argument bute
-                     sur un obstacle matériel. */''}
-                <div class="shr-arg">${shareArgument()}</div>
-                <div class="shr-why">Mets-le dans ta bio TikTok et Instagram. Déjà un lien&nbsp;? Ajoute celui-ci dans ton Linktree ou Beacons.</div>
+                ${/* Une seule ligne, en retrait : le bénéfice puis le geste, sans
+                     chiffre ni mention de vente. Un argument chiffré au-dessus
+                     du lien alourdissait le bloc et ramenait la conversation
+                     sur la performance, alors qu'il s'agit juste de dire à quoi
+                     sert ce lien et où le mettre. */''}
+                <div class="shr-why">Ton lien travaille pendant que tu ne publies pas. Mets-le dans ta bio TikTok et Instagram.</div>
             </div>` : share.url ? `
             <div class="shr-main shr-wait">
                 <div class="shr-k">À mettre en bio</div>
@@ -1235,25 +1246,6 @@ function blockPromo(){
     </section>`;
 }
 
-/* L'argument du lien de bio, rattaché à l'objectif réel du mois.
-   « Il te manque 2 ventes » est infiniment plus mobilisateur que « ce lien
-   travaille en continu » : c'est son chiffre, il est vrai aujourd'hui, et il
-   disparaît le 1er du mois. On retombe sur l'argument général seulement quand
-   il n'y a plus de seuil devant elle. */
-function shareArgument(){
-    const c = D.commission_month, g = D.gifting_month;
-
-    if(c && c.missing > 0 && c.next_gain){
-        return `Il te manque <b>${fmtFull(c.missing)} vente${c.missing>1?'s':''}</b> ce mois-ci pour tes `
-             + `${fmtFull(c.next_gain)} € garantis. Ton lien peut les apporter pendant que tu ne publies pas.`;
-    }
-    if(g && !g.unlocked && g.missing > 0){
-        return `Il te manque <b>${fmtFull(g.missing)} vente${g.missing>1?'s':''}</b> ce mois-ci pour recevoir tes `
-             + `${fmtFull(g.tier_jerseys)} maillots. Ton lien peut les apporter sans que tu publies.`;
-    }
-    return `Tes objectifs du mois sont atteints. <b>Chaque vente en plus reste à toi</b> — `
-         + `et ton lien continue de travailler pendant que tu ne publies pas.`;
-}
 
 
 // ── Évolution : seulement si l'historique existe vraiment ───────────────
@@ -1475,8 +1467,8 @@ function viewPaliers(){
          sous-vendue du programme, elle passe donc avant les paliers. */''}
     <section class="sec">
         <div class="sec-k">Ta rémunération</div>
-        <div class="sec-t">Ce que tu gagnes chaque mois</div>
-        <div class="sec-sub">Ces montants sont ouverts à <b>tout le monde</b>, quel que soit ton palier. Même à ton premier mois.</div>
+        <div class="sec-t">Ce que tu gagnes sur une période</div>
+        <div class="sec-sub">Ces montants sont ouverts à <b>tout le monde</b>, quel que soit ton palier — même dès ta première période.${periodDates() && periodDates().anchored ? ` La tienne court <b>${esc(periodLabel())}</b>.` : ''}</div>
         <div class="pay">
             ${R.steps.map(st=>`
                 <div class="pay-r ${st.reached?'done':''}">
@@ -1484,15 +1476,15 @@ function viewPaliers(){
                     <span class="pay-b">
                         <span class="pay-t">${fmtFull(st.fixed)} € garantis</span>
                         <span class="pay-w">${st.reached
-                            ? 'Débloqué ce mois-ci'
-                            : `${fmtFull(st.missing)} vente${st.missing>1?'s':''} de plus ce mois-ci`}</span>
+                            ? 'Débloqué sur ta période'
+                            : `${fmtFull(st.missing)} vente${st.missing>1?'s':''} de plus sur ta période`}</span>
                     </span>
                     <span class="pay-v num">${fmtFull(st.fixed)} €</span>
                 </div>`).join('')}
         </div>
         <div class="pay-note">
             <div class="pay-note-t">Comment c'est calculé</div>
-            <div class="pay-note-d">Chaque mois, on te verse <b>le plus avantageux des deux</b> : ${base} % de tes ventes, ou le montant garanti le plus élevé que tu as atteint. Tu ne peux jamais y perdre. Les compteurs repartent de zéro le 1er du mois.</div>
+            <div class="pay-note-d">À chaque période, on te verse <b>le plus avantageux des deux</b> : ${base} % de tes ventes, ou le montant garanti le plus élevé que tu as atteint. Tu ne peux jamais y perdre. ${periodDates() && periodDates().anchored ? `Tes compteurs courent ${esc(periodLabel())}, puis repartent de zéro.` : 'Les compteurs repartent de zéro le 1er du mois.'}</div>
         </div>
     </section>
 
@@ -1536,7 +1528,7 @@ function viewPaliers(){
                             </div>
                             <div class="pal-row">
                                 <div class="pal-rk">Tes maillots</div>
-                                <div class="pal-rv"><b>${fmtFull(x.jerseys)} maillots floqués</b> chaque mois, envoyés si tu réalises au moins ${fmtFull(x.gifting_threshold)} ventes dans le mois.</div>
+                                <div class="pal-rv"><b>${fmtFull(x.jerseys)} maillots floqués</b> à chaque période, envoyés si tu réalises au moins ${fmtFull(x.gifting_threshold)} ventes sur la période.</div>
                             </div>
                             <div class="pal-row">
                                 <div class="pal-rk">Tes avantages</div>
@@ -1558,20 +1550,20 @@ function viewPaliers(){
     <section class="sec">
         <div class="sec-k">Projection</div>
         <div class="sec-t">Ce que ça représente sur un an</div>
-        <div class="sec-sub">En tenant le même nombre de ventes chaque mois, douze mois de suite.</div>
+        <div class="sec-sub">En tenant le même nombre de ventes à chaque période, douze périodes de suite.</div>
         <div class="yr">
             ${R.year.map((y,i)=>`
                 <div class="yr-c ${i===R.year.length-1?'top':''}">
-                    <div class="yr-k">${fmtFull(y.threshold)} ventes par mois</div>
+                    <div class="yr-k">${fmtFull(y.threshold)} ventes par période</div>
                     <div class="yr-v num">${fmtFull(y.yearly)} €</div>
                     <div class="yr-u">par an</div>
-                    <div class="yr-d">soit ${fmtFull(y.fixed)} € chaque mois</div>
+                    <div class="yr-d">soit ${fmtFull(y.fixed)} € par période</div>
                 </div>`).join('')}
             <div class="yr-c">
                 <div class="yr-k">Au palier maximum</div>
                 <div class="yr-v num">${fmtFull((t.all[t.all.length-1].monthly_jerseys||0)*12)}</div>
                 <div class="yr-u">maillots par an</div>
-                <div class="yr-d">soit ${fmtFull(t.all[t.all.length-1].monthly_jerseys||0)} chaque mois</div>
+                <div class="yr-d">soit ${fmtFull(t.all[t.all.length-1].monthly_jerseys||0)} par période</div>
             </div>
         </div>
     </section>`;
