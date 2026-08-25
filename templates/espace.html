@@ -293,6 +293,37 @@ input,select{font-family:inherit}
     font-size:9.5px;letter-spacing:.13em;text-transform:uppercase;font-weight:700;
     color:var(--on-accent-lab)}
 .rw-hero + .sec{margin-top:52px}
+/* ══ RÉMUNÉRATION UNIVERSELLE ════════════════════════════════════════════
+   Elle passe avant les paliers, parce qu'elle ne dépend pas d'eux : les
+   montants garantis sont ouverts à tout le monde dès le premier mois. Les
+   placer dans la fiche de chaque palier laissait croire le contraire et
+   sous-vendait le programme auprès des débutants. */
+.pay{margin-top:16px}
+.pay-r{display:flex;align-items:center;gap:14px;background:var(--surface);
+    border-radius:16px;padding:16px 18px}
+.pay-r + .pay-r{margin-top:7px}
+.pay-n{width:38px;height:38px;border-radius:12px;flex-shrink:0;display:grid;
+    place-items:center;font-size:14px;font-weight:800;letter-spacing:-.03em;
+    background:var(--surface-2);color:var(--ink)}
+.pay-r.done .pay-n{background:var(--ok-soft);color:var(--ok)}
+.pay-b{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.pay-t{font-size:14px;font-weight:700;letter-spacing:-.02em}
+.pay-w{font-size:11.5px;color:var(--muted);font-weight:500}
+.pay-r.done .pay-w{color:var(--ok)}
+.pay-v{font-size:18px;font-weight:800;letter-spacing:-.04em;flex-shrink:0}
+
+.pay-note{background:var(--accent-soft);border-radius:16px;padding:18px 20px;margin-top:12px}
+.pay-note-t{font-size:9px;letter-spacing:.17em;text-transform:uppercase;
+    font-weight:700;color:var(--accent)}
+.pay-note-d{font-size:13px;color:var(--ink-2);margin-top:8px;line-height:1.6;font-weight:500}
+.pay-note-d b{color:var(--ink);font-weight:700}
+
+@media (max-width:520px){
+    .pay-r{gap:12px;padding:15px 16px}
+    .pay-n{width:34px;height:34px;font-size:13px}
+    .pay-v{font-size:16px}
+}
+
 /* ══ PALIERS DÉPLIABLES ═══════════════════════════════════════════════════
    C'est l'écran qui doit faire rêver, donc chaque palier est consultable
    même s'il est hors de portée : un influenceur doit pouvoir aller lire ce
@@ -1254,10 +1285,11 @@ function viewPaliers(){
     const d = (t.details && t.details[0]) || null;
     const toNext = d ? Math.max(0, d.target - d.current) : 0;
     const pct    = d && d.target ? Math.min(100, Math.round(d.current / d.target * 100)) : 100;
-    const R = D.rewards || {tiers:[], year:[]};
+    const R = D.rewards || {tiers:[], year:[], steps:[]};
+    const base = fmtFull(R.base_pct || 10);
 
     return `
-    ${/* ── L'aplat fort : le palier acquis à vie ── */''}
+    ${/* ── L'aplat fort : le palier, acquis à vie ── */''}
     <section class="rw-hero">
         <div class="rw-hero-k">Ton palier</div>
         <div class="rw-hero-v">${esc(t.current.name)}</div>
@@ -1271,34 +1303,57 @@ function viewPaliers(){
         </div>
     </section>
 
-    ${/* ── Les paliers, dépliables ── */''}
+    ${/* ── LA RÉMUNÉRATION — universelle ──
+         Elle ne dépend PAS du palier : les montants garantis sont ouverts à
+         tout le monde dès le premier mois. C'était l'information la plus
+         sous-vendue du programme, elle passe donc avant les paliers. */''}
+    <section class="sec">
+        <div class="sec-k">Ta rémunération</div>
+        <div class="sec-t">Ce que tu gagnes chaque mois</div>
+        <div class="sec-sub">Ces montants sont ouverts à <b>tout le monde</b>, quel que soit ton palier. Même à ton premier mois.</div>
+        <div class="pay">
+            ${R.steps.map(st=>`
+                <div class="pay-r ${st.reached?'done':''}">
+                    <span class="pay-n num">${fmtFull(st.threshold)}</span>
+                    <span class="pay-b">
+                        <span class="pay-t">${fmtFull(st.fixed)} € garantis</span>
+                        <span class="pay-w">${st.reached
+                            ? 'Débloqué ce mois-ci'
+                            : `${fmtFull(st.missing)} vente${st.missing>1?'s':''} de plus ce mois-ci`}</span>
+                    </span>
+                    <span class="pay-v num">${fmtFull(st.fixed)} €</span>
+                </div>`).join('')}
+        </div>
+        <div class="pay-note">
+            <div class="pay-note-t">Comment c'est calculé</div>
+            <div class="pay-note-d">Chaque mois, on te verse <b>le plus avantageux des deux</b> : ${base} % de tes ventes, ou le montant garanti le plus élevé que tu as atteint. Tu ne peux jamais y perdre. Les compteurs repartent de zéro le 1er du mois.</div>
+        </div>
+    </section>
+
+    ${/* ── Les paliers : maillots et avantages, plus d'argent ── */''}
     <section class="sec">
         <div class="sec-k">Le programme</div>
         <div class="sec-t">Les quatre paliers</div>
-        <div class="sec-sub">Touche un palier pour voir comment l'atteindre et ce qu'il rapporte.</div>
+        <div class="sec-sub">Ils déterminent le nombre de maillots que tu reçois et tes avantages. Touche un palier pour voir le détail.</div>
         <div class="pal-list">
-            ${(R.tiers.length ? R.tiers : []).map((x,i)=>{
+            ${(R.tiers || []).map((x,i)=>{
                 const state = i < idx ? 'got' : i === idx ? 'now' : 'lock';
                 const badge = state==='got' ? 'Atteint'
                             : state==='now' ? 'Ton palier'
                             : `${fmtFull(x.missing_sales)} vente${x.missing_sales>1?'s':''}`;
-                const head = x.monthly_fixed
-                    ? `${fmtFull(x.monthly_fixed)} €`
-                    : `${fmtFull(R.base_pct||10)} %`;
-                const headSub = x.monthly_fixed
-                    ? `dès ${fmtFull(x.monthly_threshold)} ventes dans le mois`
-                    : `de commission sur chaque vente`;
                 return `
                 <div class="pal ${state}" data-pal="${i}">
                     <button class="pal-head" type="button" aria-expanded="false">
                         <span class="pal-e">${x.icon}</span>
                         <span class="pal-id">
                             <span class="pal-n">${esc(x.name)}</span>
-                            <span class="pal-w">${fmtFull(x.jerseys)} maillots offerts par mois</span>
+                            <span class="pal-w">${x.req_sales === 0
+                                ? `Dès ton entrée dans le programme`
+                                : `À partir de ${fmtFull(x.req_sales)} ventes cumulées`}</span>
                         </span>
                         <span class="pal-r">
-                            <span class="pal-v num">${head}</span>
-                            <span class="pal-vs">${headSub}</span>
+                            <span class="pal-v num">${fmtFull(x.jerseys)}</span>
+                            <span class="pal-vs">maillots offerts<br>par mois</span>
                         </span>
                         <span class="pal-s ${state}">${badge}</span>
                         <span class="pal-chev">${ICO.chevron}</span>
@@ -1309,31 +1364,23 @@ function viewPaliers(){
                                 <div class="pal-rk">Comment l'atteindre</div>
                                 <div class="pal-rv">${x.req_sales === 0
                                     ? `Acquis dès ton entrée dans le programme.`
-                                    : `<b>${fmtFull(x.req_sales)} ventes cumulées</b> depuis ton inscription.${
+                                    : `<b>${fmtFull(x.req_sales)} ventes cumulées</b> depuis ton inscription — pas dans le mois, depuis le début.${
                                         x.reached ? ` C'est fait.` :
-                                        ` Il t'en manque <b>${fmtFull(x.missing_sales)}</b>.`}`}</div>
+                                        ` Il t'en manque <b>${fmtFull(x.missing_sales)}</b>.`} Une fois atteint, il est acquis à vie.`}</div>
                             </div>
-                            <div class="pal-row">
-                                <div class="pal-rk">Ta rémunération</div>
-                                <div class="pal-rv">${x.monthly_fixed
-                                    ? `<b>${fmtFull(x.monthly_fixed)} € garantis</b> les mois où tu fais ${fmtFull(x.monthly_threshold)} ventes ou plus. Les autres mois, tu touches ${fmtFull(R.base_pct||10)} % de tes ventes.`
-                                    : `<b>${fmtFull(R.base_pct||10)} % de tes ventes</b>, sans minimum ni condition.`}</div>
-                            </div>
-                            ${x.yearly ? `
-                            <div class="pal-row">
-                                <div class="pal-rk">Sur une année</div>
-                                <div class="pal-rv"><b>${fmtFull(x.yearly)} € par an</b> si tu tiens ${fmtFull(x.monthly_threshold)} ventes chaque mois, plus ${fmtFull(x.jerseys*12)} maillots offerts.</div>
-                            </div>` : ''}
                             <div class="pal-row">
                                 <div class="pal-rk">Tes maillots</div>
                                 <div class="pal-rv"><b>${fmtFull(x.jerseys)} maillots floqués</b> chaque mois, envoyés si tu réalises au moins ${fmtFull(x.gifting_threshold)} ventes dans le mois.</div>
                             </div>
-                            ${(x.perks && x.perks.length) ? `
                             <div class="pal-row">
                                 <div class="pal-rk">Tes avantages</div>
-                                <div class="pal-perks">${x.perks.map(p=>`
-                                    <div class="pal-perk">${x.reached ? ICO.checkS : ICO.lock}<span>${esc(p)}</span></div>`).join('')}</div>
-                            </div>` : ''}
+                                <div class="pal-perks">${(x.perks||[]).map(pk=>`
+                                    <div class="pal-perk">${x.reached ? ICO.checkS : ICO.lock}<span>${esc(pk)}</span></div>`).join('')}</div>
+                            </div>
+                            <div class="pal-row">
+                                <div class="pal-rk">Ta rémunération</div>
+                                <div class="pal-rv">Elle ne dépend pas de ce palier. Les montants garantis sont <b>les mêmes pour tout le monde</b> — voir la section au-dessus.</div>
+                            </div>
                         </div>
                     </div>
                 </div>`;
@@ -1362,6 +1409,23 @@ function viewPaliers(){
             </div>
         </div>
     </section>`;
+}
+
+/* Ouverture/fermeture d'un palier. Un seul ouvert à la fois : deux panneaux
+   déployés simultanément rendent la comparaison illisible sur téléphone. */
+function bindPaliers(){
+    document.querySelectorAll('.pal-head').forEach(btn=>{
+        btn.addEventListener('click', ()=>{
+            const pal = btn.closest('.pal');
+            const open = pal.classList.contains('open');
+            document.querySelectorAll('.pal.open').forEach(p=>{
+                p.classList.remove('open');
+                const b = p.querySelector('.pal-head');
+                if(b) b.setAttribute('aria-expanded','false');
+            });
+            if(!open){ pal.classList.add('open'); btn.setAttribute('aria-expanded','true'); }
+        });
+    });
 }
 
 /* Ouverture/fermeture d'un palier. Un seul ouvert à la fois : deux panneaux
