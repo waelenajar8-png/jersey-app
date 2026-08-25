@@ -299,32 +299,77 @@ input,select{font-family:inherit}
    mérite donc autant de place que le code, et une explication — parce que
    « mets ce lien en bio » n'est évident que pour qui sait déjà pourquoi. */
 .bio{background:var(--surface);border-radius:18px;padding:22px;margin-top:14px}
-.bio-head{margin-bottom:14px}
-.bio-k{font-size:9px;letter-spacing:.18em;text-transform:uppercase;font-weight:700;color:var(--accent)}
-.bio-t{font-size:15.5px;font-weight:700;letter-spacing:-.025em;margin-top:6px}
-.bio-box{display:flex;align-items:center;gap:12px;background:var(--surface-2);
-    border-radius:14px;padding:14px 16px}
-.bio-url{flex:1;min-width:0;font-family:'JetBrains Mono',ui-monospace,monospace;
-    font-size:13px;font-weight:500;color:var(--ink);overflow:hidden;
-    text-overflow:ellipsis;white-space:nowrap;letter-spacing:-.01em}
-.bio-why{font-size:12.5px;color:var(--muted);line-height:1.65;margin-top:14px;font-weight:500}
-.bio-acts{margin-top:14px}
-.bio-acts .btn-ghost{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;
-    font-weight:700;color:var(--accent);border:1px solid var(--line-2);
-    border-radius:100px;padding:9px 16px;transition:border-color .16s ease}
-.bio-acts .btn-ghost:hover{border-color:var(--accent)}
 /* En attente d'activation : ton, pas alerte. Ce n'est pas une erreur de
    l'influenceuse, juste une etape qui n'est pas encore franchie. */
 .bio.bio-wait{background:var(--surface-2);border:1px dashed var(--line-2)}
-.bio-wait .bio-k{color:var(--muted)}
-.bio-wait .bio-t{color:var(--ink-2)}
 @media (max-width:520px){
     .bio{padding:18px}
-    .bio-box{flex-direction:column;align-items:stretch;gap:10px}
-    .bio-url{white-space:normal;word-break:break-all;text-align:center;font-size:12.5px}
-    .bio-box .copy-btn{justify-content:center}
+}
+/* ══ COLIS, SUR L'ACCUEIL ════════════════════════════════════════════════
+   L'ancien bloc posait une phrase en chasse fixe sur le fond, sans surface
+   ni progression : impossible de savoir où on en est ni quoi faire. On donne
+   une carte, une barre segmentée qui montre les cinq étapes, et surtout une
+   action nommée — quand l'influenceur peut débloquer lui-même, on le lui dit
+   plutôt que de le renvoyer vers un « suivi » qui ne l'avance pas. */
+.pk{background:var(--surface);border-radius:18px;padding:20px 22px;margin-top:12px}
+.pk-top{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}
+.pk-msg{flex:1;min-width:0;font-size:14px;font-weight:600;letter-spacing:-.02em;line-height:1.45}
+.pk-step{font-size:13px;font-weight:800;letter-spacing:-.02em;flex-shrink:0;color:var(--ink)}
+.pk-step span{color:var(--faint);font-weight:600}
+.pk-track{display:flex;gap:4px;margin-top:16px}
+.pk-seg{flex:1;height:5px;border-radius:100px;background:#EDECE5;transition:background .3s ease}
+.pk-seg.done{background:var(--accent)}
+.pk-seg.now{background:var(--accent);opacity:.45}
+.pk-foot{display:flex;align-items:center;justify-content:space-between;gap:14px;
+    margin-top:12px;flex-wrap:wrap}
+.pk-now{font-size:11.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+    color:var(--muted)}
+.pk-cta{font-size:13px;font-weight:700;color:var(--accent);background:none;border:none;
+    padding:0;cursor:pointer;letter-spacing:-.01em;transition:opacity .16s ease}
+.pk-cta:hover{opacity:.7}
+.pk-cta.ghost{color:var(--muted);font-weight:600}
+@media (max-width:520px){
+    .pk{padding:18px}
+    .pk-top{flex-direction:column;gap:8px}
+    .pk-step{align-self:flex-start}
 }
 
+/* ══ PARTAGE ═════════════════════════════════════════════════════════════
+   Un seul bloc pour le lien et le code. Deux cartes distinctes les faisaient
+   se concurrencer, doublaient le texte et donnaient cette impression de
+   remplissage. Le lien est en tête parce que c'est lui qui travaille sans
+   effort ; le code suit, plus petit, sur une ligne. */
+.shr{background:var(--surface);border-radius:18px;overflow:hidden;margin-top:12px}
+.shr-main{padding:22px 22px 20px}
+.shr-k{font-size:9px;letter-spacing:.18em;text-transform:uppercase;font-weight:700;color:var(--accent)}
+.shr-row{display:flex;align-items:center;gap:14px;margin-top:12px}
+.shr-url{flex:1;min-width:0;font-family:'JetBrains Mono',ui-monospace,monospace;
+    font-size:15px;font-weight:500;color:var(--ink);letter-spacing:-.02em;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+    border-bottom:1px solid transparent;transition:border-color .16s ease}
+.shr-url:hover{border-bottom-color:var(--line-2)}
+.shr-why{font-size:12.5px;color:var(--muted);margin-top:11px;font-weight:500}
+.shr-soon{flex:1;font-size:15px;font-weight:600;color:var(--ink-2);letter-spacing:-.02em}
+.shr-wait .shr-k{color:var(--muted)}
+/* Le code, en pied de bloc : présent, jamais dominant. */
+.shr-code{display:flex;align-items:center;gap:12px;padding:15px 22px;
+    border-top:1px solid var(--line);background:var(--surface-2)}
+.shr-code-k{font-size:9px;letter-spacing:.18em;text-transform:uppercase;
+    font-weight:700;color:var(--faint);flex-shrink:0}
+.shr-code-v{flex:1;min-width:0;font-family:'JetBrains Mono',ui-monospace,monospace;
+    font-size:15px;font-weight:700;letter-spacing:.05em;
+    overflow:hidden;text-overflow:ellipsis}
+.copy-btn.ghost{background:transparent;color:var(--ink-2);border:1px solid var(--line-2);
+    padding:7px 13px;font-size:12.5px}
+.copy-btn.ghost:hover{border-color:var(--ink-2)}
+@media (max-width:520px){
+    .shr-main{padding:18px}
+    .shr-row{flex-direction:column;align-items:stretch;gap:11px}
+    .shr-url{white-space:normal;word-break:break-all;font-size:14px;text-align:center}
+    .shr-row .copy-btn{justify-content:center}
+    .shr-code{padding:14px 18px;flex-wrap:wrap;row-gap:8px}
+    .shr-code-v{flex:1 1 auto;font-size:14px}
+}
 /* ══ RÉMUNÉRATION UNIVERSELLE ════════════════════════════════════════════
    Elle passe avant les paliers, parce qu'elle ne dépend pas d'eux : les
    montants garantis sont ouverts à tout le monde dès le premier mois. Les
@@ -343,19 +388,16 @@ input,select{font-family:inherit}
 .pay-w{font-size:11.5px;color:var(--muted);font-weight:500}
 .pay-r.done .pay-w{color:var(--ok)}
 .pay-v{font-size:18px;font-weight:800;letter-spacing:-.04em;flex-shrink:0}
-
 .pay-note{background:var(--accent-soft);border-radius:16px;padding:18px 20px;margin-top:12px}
 .pay-note-t{font-size:9px;letter-spacing:.17em;text-transform:uppercase;
     font-weight:700;color:var(--accent)}
 .pay-note-d{font-size:13px;color:var(--ink-2);margin-top:8px;line-height:1.6;font-weight:500}
 .pay-note-d b{color:var(--ink);font-weight:700}
-
 @media (max-width:520px){
     .pay-r{gap:12px;padding:15px 16px}
     .pay-n{width:34px;height:34px;font-size:13px}
     .pay-v{font-size:16px}
 }
-
 /* ══ PALIERS DÉPLIABLES ═══════════════════════════════════════════════════
    C'est l'écran qui doit faire rêver, donc chaque palier est consultable
    même s'il est hors de portée : un influenceur doit pouvoir aller lire ce
@@ -1136,59 +1178,47 @@ function blockPromo(){
         </section>`;
     }
     const copySvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>`;
+    // L'adresse s'affiche sans le protocole : c'est ainsi qu'on lit un lien de
+    // bio, et « https:// » ne fait qu'allonger une ligne déjà à l'étroit.
+    const pretty = (share.url || '').replace(/^https?:\/\//, '');
 
     return `<section class="sec rise" style="animation-delay:.18s">
-        <div class="sec-k">Ton code</div>
-        <div class="sec-t">Chaque partage peut te rapporter</div>
+        <div class="sec-k">Partage</div>
+        <div class="sec-t">Ton lien et ton code</div>
 
-        <div class="promo" style="margin-top:12px">
-            <div class="promo-c">${esc(code)}</div>
-            <button class="copy-btn" data-copy="${escAttr(code)}">${copySvg}<span>Copier</span></button>
+        ${/* ── Un seul bloc pour les deux ──
+             Le lien et le code sont la même chose sous deux formes. Deux
+             cartes séparées les faisaient se concurrencer et doublaient le
+             texte. Ici le lien passe devant — c'est celui qui travaille tout
+             seul — et le code reste dessous, à sa juste place. */''}
+        <div class="shr">
+            ${share.url && share.ready ? `
+            <div class="shr-main">
+                <div class="shr-k">À mettre en bio</div>
+                <div class="shr-row">
+                    <a class="shr-url" href="${escAttr(share.url)}" target="_blank" rel="noopener"
+                       title="Ouvrir pour tester">${esc(pretty)}</a>
+                    <button class="copy-btn" data-copy="${escAttr(share.url)}">${copySvg}<span>Copier</span></button>
+                </div>
+                <div class="shr-why">Les −15 % s'appliquent tout seuls pour qui clique.</div>
+            </div>` : share.url ? `
+            <div class="shr-main shr-wait">
+                <div class="shr-k">À mettre en bio</div>
+                <div class="shr-row"><span class="shr-soon">Ton lien arrive très vite</span></div>
+                <div class="shr-why">On finalise l'activation de ton code côté boutique.</div>
+            </div>` : ''}
+
+            <div class="shr-code">
+                <span class="shr-code-k">Ton code</span>
+                <span class="shr-code-v">${esc(code)}</span>
+                <button class="copy-btn ghost" data-copy="${escAttr(code)}">${copySvg}<span>Copier</span></button>
+            </div>
         </div>
+
         <div class="promo-meta">
             <span>−15 % pour ta communauté</span>
             ${s.sales > 0 ? `<span class="d"></span><span><b class="num">${fmt(s.sales)} vente${s.sales>1?'s':''}</b> générées</span>` : ''}
         </div>
-
-        ${/* ── Le lien de bio ──
-             Un code se recopie a la main : une partie des visiteurs abandonne
-             en route. Le lien applique la reduction tout seul et travaille en
-             continu depuis la bio, y compris pour ceux qui decouvrent le profil
-             par hasard. Il n'apparait que si le serveur a pu confirmer que le
-             code existe chez Shopify : un lien mort en bio coute plus cher que
-             pas de lien du tout. */''}
-        ${!share.url ? '' : share.ready ? `
-        <div class="bio">
-            <div class="bio-head">
-                <div class="bio-k">Ton lien à mettre en bio</div>
-                <div class="bio-t">Il applique les −15 % tout seul</div>
-            </div>
-            <div class="bio-box">
-                <span class="bio-url" title="${escAttr(share.url)}">${esc(share.url)}</span>
-                <button class="copy-btn" data-copy="${escAttr(share.url)}">${copySvg}<span>Copier</span></button>
-            </div>
-            <div class="bio-why">
-                Mets-le dans ta bio TikTok et Instagram. Il travaille pour toi en permanence :
-                quelqu'un qui tombe sur ton profil par hasard clique, arrive sur la boutique
-                avec sa réduction déjà appliquée, et la vente t'est comptée. Pas de code à
-                retenir, pas de code à recopier.
-            </div>
-            <div class="bio-acts">
-                <a class="btn-ghost" href="${escAttr(share.url)}" target="_blank" rel="noopener">Tester mon lien</a>
-            </div>
-        </div>` : `
-        <div class="bio bio-wait">
-            <div class="bio-head">
-                <div class="bio-k">Ton lien à mettre en bio</div>
-                <div class="bio-t">Il arrive très vite</div>
-            </div>
-            <div class="bio-why" style="margin-top:0">
-                On finalise l'activation de ton code côté boutique. Dès que c'est fait,
-                tu trouveras ici un lien à coller dans ta bio TikTok et Instagram :
-                il appliquera ta réduction automatiquement, sans que personne
-                ait à retenir ton code. Reviens dans un moment.
-            </div>
-        </div>`}
     </section>`;
 }
 
@@ -1235,22 +1265,51 @@ function blockEvolution(){
 // ── Colis ───────────────────────────────────────────────────────────────
 function blockColis(){
     const inf = D.influencer;
-    const st = inf.tracking_status || '';
-    const LABEL = {prepare:'En préparation', envoye:'Expédié', livre:'Livré', probleme:'Problème sur le colis'};
+    const st  = inf.tracking_status || '';
+    const LABEL = {prepare:'En préparation', envoye:'En route vers toi',
+                   livre:'Livré', probleme:'Un souci sur ton colis'};
     const title = LABEL[st] || 'Pas encore expédié';
-    const desc = inf.tracking ? esc(inf.tracking)
-               : st ? 'On te préviendra dès qu\'il bouge.'
-               : 'Ton colis partira dès que tes maillots seront choisis.';
+
+    // L'étape franchie, sur les cinq du parcours d'expédition.
+    const steps = shipSteps();
+    const done  = steps.filter(x=>x.done).length;
+    const cur   = steps.find(x=>x.current);
+    const total = steps.length;
+
+    // Ce qui bloque, dit en une phrase, et l'action qui débloque. Un état
+    // sans action à faire laisse l'influenceur sans prise : on nomme donc
+    // toujours l'étape suivante, même quand elle est de notre côté.
+    const jerseysDone = (inf.jerseys || []).length >= 2;
+    const addrDone    = !!(inf.shipping && (inf.shipping.address || inf.address));
+    let msg, cta = null;
+    if(st === 'livre')          msg = 'Ton colis est arrivé. Il ne reste plus qu\'à filmer.';
+    else if(st === 'probleme')  msg = 'On regarde ce qui s\'est passé et on revient vers toi.';
+    else if(inf.tracking)       msg = 'Ton colis est parti. Tu peux suivre son trajet.';
+    else if(!jerseysDone)     { msg = 'Choisis tes 2 maillots pour lancer l\'expédition.';
+                                cta = {label:'Choisir mes maillots', tab:'profil'}; }
+    else if(!addrDone)        { msg = 'Renseigne ton adresse et ton colis part.';
+                                cta = {label:'Renseigner mon adresse', tab:'profil'}; }
+    else                        msg = 'Tout est bon de ton côté. On prépare ton colis.';
+
     return `<section class="sec rise" style="animation-delay:.3s">
         <div class="sec-k">Ton colis</div>
         <div class="sec-t">${esc(title)}</div>
-        <button class="line" style="padding-top:10px" data-goto="colis">
-            <div class="line-b">
-                <div class="line-t" style="font-family:'JetBrains Mono',ui-monospace,monospace;font-size:13.5px;font-weight:600">${desc}</div>
-                <div class="line-d">Voir le détail du suivi</div>
+        <div class="pk">
+            <div class="pk-top">
+                <div class="pk-msg">${esc(msg)}</div>
+                <div class="pk-step">${fmtFull(Math.max(done, cur ? done+1 : done))} <span>/ ${fmtFull(total)}</span></div>
             </div>
-            <div class="line-v" style="color:var(--accent)">Suivre</div>
-        </button>
+            <div class="pk-track">
+                ${steps.map(x=>`<span class="pk-seg ${x.done?'done':''} ${x.current?'now':''}"
+                    title="${escAttr(x.label)}"></span>`).join('')}
+            </div>
+            <div class="pk-foot">
+                <span class="pk-now">${esc((cur || steps[steps.length-1]).label)}</span>
+                ${cta
+                    ? `<button class="pk-cta" data-goto="${cta.tab}">${esc(cta.label)} →</button>`
+                    : `<button class="pk-cta ghost" data-goto="colis">Voir le suivi →</button>`}
+            </div>
+        </div>
     </section>`;
 }
 
