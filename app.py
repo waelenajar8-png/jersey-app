@@ -3226,9 +3226,15 @@ def _aggregate_orders(orders, inf=None, now=None):
     now = now or datetime.now(timezone.utc)
     p_start, p_end, _ = _period_bounds(inf or {}, now)
     anchor = _parse_day((inf or {}).get("program_start_date"))
+    # Fenêtre commune à tout le monde, indépendante des périodes individuelles.
+    # C'est la seule base équitable pour comparer deux influenceurs entre eux
+    # (voir _leaderboard) : une inscrite le 3 et une inscrite le 27 sont alors
+    # mesurées sur le même intervalle de temps, pas sur deux périodes décalées.
+    win_30 = now - timedelta(days=30)
 
     sales = revenue = 0
     sales_period = revenue_period = 0
+    sales_30d = 0
     by_period = {}
 
     for o in orders:
@@ -3268,6 +3274,9 @@ def _aggregate_orders(orders, inf=None, now=None):
             sales_period += 1
             revenue_period += amount
 
+        if created >= win_30:
+            sales_30d += 1
+
     for b in by_period.values():
         b["revenue"] = round(b["revenue"], 2)
 
@@ -3277,6 +3286,8 @@ def _aggregate_orders(orders, inf=None, now=None):
         # barème à l'affichage, les lit sous ce nom. Seul leur périmètre change.
         "sales_month": sales_period, "revenue_month": round(revenue_period, 2),
         "by_month": by_period,
+        # Ventes des 30 derniers jours glissants — sert uniquement au classement.
+        "sales_30d": sales_30d,
         "period_start": _period_key(p_start),
         "period_end":   _period_key(p_end),
     }
@@ -3326,6 +3337,12 @@ def sync_influencer_stats(force=False):
                         s["revenue"]       = round(baseline_revenue + agg["revenue"], 2)
                         s["sales_month"]   = agg["sales_month"]      # jamais affecté par le baseline
                         s["revenue_month"] = agg["revenue_month"]    # (toujours dans les 60j accessibles)
+                        # Classement : fenêtre commune de 30 jours. Écrite ici et
+                        # datée, pour qu'un chiffre laissé derrière par une synchro
+                        # en échec ne fasse pas figurer quelqu'un à une place qu'il
+                        # n'occupe plus (voir _leaderboard, qui ignore le périmé).
+                        s["sales_30d"]     = agg["sales_30d"]
+                        s["sales_30d_at"]  = datetime.now(timezone.utc).isoformat()
 
                         # Ledger de commission par PÉRIODE : on recalcule l'entrée de
                         # chaque période couverte par les commandes récupérées, clé =
@@ -4417,45 +4434,266 @@ def _month_clock(inf=None, now=None):
     }
 
 
-def _espace_rank(inf, influenceurs=None):
-    """
-    Rang de l'influenceur sur les ventes du mois, parmi ceux qui ont un code
-    promo actif. Aucune donnée d'autrui n'est exposée : on ne renvoie qu'une
-    position et un effectif, jamais un nom ni un chiffre voisin.
+LEADERBOARD_MIN_POOL   = 3     # en dessous, un classement n'a aucun sens
+LEADERBOARD_PODIUM_MIN = 6     # « 3e sur 4 » ne se met pas en avant
+LEADERBOARD_TOP        = 5     # lignes affichées avant le repli sur soi
+LEADERBOARD_STALE_DAYS = 3     # au-delà, le compteur 30 j n'est plus fiable
 
-    Retourne None si le classement n'a pas de sens (moins de 3 participants,
-    ou aucune vente enregistrée ce mois-ci sur tout le programme).
+# ── Participants hors programme ─────────────────────────────────────────────
+# Des vendeurs suivis à la main : ils n'ont pas de fiche, pas de colis, pas
+# d'espace — juste un nom et un chiffre de ventes saisis par l'admin, pour
+# qu'ils apparaissent au classement comme tout le monde.
+#
+# Le chiffre saisi est vu par toutes les ambassadrices, et il les situe par
+# rapport à lui : ce doit être leur vrai nombre de ventes sur 30 jours, pas
+# une estimation. Un chiffre laissé en place trop longtemps ne décrit plus
+# une fenêtre de 30 jours — passé ce délai l'entrée sort du classement d'elle
+# -même, et la console la signale à remettre à jour.
+EXTERNAL_RANK_R2_KEY   = "meta/classement_externes.json"
+EXTERNAL_STALE_DAYS    = 30    # au-delà, le chiffre saisi ne veut plus rien dire
+EXTERNAL_MAX_ENTRIES   = 60
+EXTERNAL_MAX_SALES     = 100000
+
+
+def _load_external_ranked():
+    """Entrées hors programme, telles qu'enregistrées."""
+    try:
+        data = r2_get_json(EXTERNAL_RANK_R2_KEY) or {}
+        rows = data.get("entries") or []
+        return [r for r in rows if isinstance(r, dict)]
+    except Exception as e:
+        print(f"[CLASSEMENT] Entrées externes illisibles: {e}")
+        return []
+
+
+def _external_age_days(row, now=None):
+    """Jours écoulés depuis la dernière mise à jour du chiffre. None si inconnu."""
+    at = (row.get("updated_at") or "").strip()
+    if not at:
+        return None
+    try:
+        seen = datetime.fromisoformat(at.replace("Z", "+00:00"))
+        if seen.tzinfo is None:
+            seen = seen.replace(tzinfo=timezone.utc)
+    except Exception:
+        return None
+    return max(0, ((now or datetime.now(timezone.utc)) - seen).days)
+
+
+def _rank_sales(x):
+    """
+    Ventes retenues pour le classement : la fenêtre glissante de 30 jours,
+    commune à tout le monde. On n'utilise surtout PAS `sales_month`, qui
+    couvre désormais la période personnelle de chacun — comparer une période
+    entamée le 3 à une période entamée le 27 classerait sur la date
+    d'inscription autant que sur le travail fourni.
+    """
+    return _safe_int((x.get("stats") or {}).get("sales_30d", 0))
+
+
+def _rank_fresh(x, now=None):
+    """
+    Le compteur 30 j est-il assez récent pour être classé ?
+
+    La synchro tourne toutes les 30 minutes ; si celle d'un influenceur échoue
+    plusieurs jours d'affilée, son chiffre se fige et le fait figurer à une
+    place qu'il n'occupe plus. Passé le délai, on le sort du classement plutôt
+    que d'afficher un rang faux. Un compteur jamais synchronisé (aucune date)
+    est traité comme frais : c'est le cas normal d'un programme qui démarre.
+    """
+    at = ((x.get("stats") or {}).get("sales_30d_at") or "").strip()
+    if not at:
+        return True
+    try:
+        seen = datetime.fromisoformat(at.replace("Z", "+00:00"))
+        if seen.tzinfo is None:
+            seen = seen.replace(tzinfo=timezone.utc)
+    except Exception:
+        return True
+    now = now or datetime.now(timezone.utc)
+    return (now - seen) <= timedelta(days=LEADERBOARD_STALE_DAYS)
+
+
+def _leaderboard(inf, influenceurs=None, now=None):
+    """
+    Classement des influenceurs sur les 30 derniers jours glissants.
+
+    Ce qui sort d'ici est vu par tous les participants : pseudo et nombre de
+    ventes, jamais un euro. Le chiffre d'affaires et la commission d'un tiers
+    resteraient dérivables l'un de l'autre — c'est exactement ce que le
+    programme s'interdit d'exposer.
+
+    Retourne None quand le classement n'aurait rien à dire : moins de trois
+    participants, ou aucune vente sur la fenêtre pour l'ensemble du programme.
     """
     try:
+        now = now or datetime.now(timezone.utc)
         if influenceurs is None:
             data = r2_get_json(INFLUENCEURS_R2_KEY) or {}
             influenceurs = data.get("influenceurs", []) or []
 
-        pool = [i for i in influenceurs
-                if isinstance(i, dict) and (i.get("promo_code") or "").strip()]
-        if len(pool) < 3:
+        my_id = (inf or {}).get("id")
+
+        # Deux sources, un seul classement : les ambassadeurs du programme
+        # (chiffre synchronisé depuis Shopify) et les vendeurs suivis à la main
+        # (chiffre saisi en console). Elles sont réduites ici à la même forme
+        # — un nom, un nombre — pour que la suite n'ait plus à les distinguer.
+        pool = []
+        for x in influenceurs:
+            if not isinstance(x, dict) or not (x.get("promo_code") or "").strip():
+                continue
+            # Ma propre ligne reste toujours là : un classement dont on est
+            # absent est illisible, et mon chiffre n'est pas une révélation
+            # pour moi.
+            if not _rank_fresh(x, now) and x.get("id") != my_id:
+                continue
+            pool.append({
+                "pseudo": (x.get("pseudo") or "").strip() or "Sans pseudo",
+                "sales":  _rank_sales(x),
+                "is_me":  bool(my_id) and x.get("id") == my_id,
+            })
+
+        for e in _load_external_ranked():
+            name = (e.get("pseudo") or "").strip()
+            if not name:
+                continue
+            age = _external_age_days(e, now)
+            # Un chiffre saisi il y a plus de 30 jours ne décrit plus une
+            # fenêtre de 30 jours : on préfère l'absence à une place fausse.
+            if age is not None and age > EXTERNAL_STALE_DAYS:
+                continue
+            pool.append({
+                "pseudo": name,
+                "sales":  max(0, min(EXTERNAL_MAX_SALES, _safe_int(e.get("sales", 0)))),
+                "is_me":  False,
+            })
+
+        if len(pool) < LEADERBOARD_MIN_POOL:
+            return None
+        if not any(x["sales"] > 0 for x in pool):
             return None
 
-        def month_sales(x):
-            return _safe_int((x.get("stats") or {}).get("sales_month", 0))
+        # Tri : ventes décroissantes, puis pseudo, pour que l'ordre des
+        # ex æquo soit stable d'un chargement à l'autre.
+        ranked = sorted(pool, key=lambda x: (-x["sales"], x["pseudo"].lower()))
 
-        if not any(month_sales(x) > 0 for x in pool):
+        rows, prev_sales, prev_pos = [], None, 0
+        for idx, x in enumerate(ranked, start=1):
+            n = x["sales"]
+            # Rang sportif : à égalité de ventes, même place.
+            pos = prev_pos if n == prev_sales else idx
+            prev_sales, prev_pos = n, pos
+            rows.append({
+                "position": pos,
+                "pseudo":   x["pseudo"],
+                "sales":    n,
+                "is_me":    x["is_me"],
+            })
+
+        me = next((r for r in rows if r["is_me"]), None)
+        if not me:
             return None
 
-        mine = month_sales(inf)
-        # Rang sportif : à égalité de ventes, tout le monde partage la place.
-        position = 1 + sum(1 for x in pool if month_sales(x) > mine)
+        top = rows[:LEADERBOARD_TOP]
+        # Hors du top : on ajoute sa propre ligne en dessous, avec un trou
+        # explicite. Voir la marche à franchir vaut mieux que ne pas figurer.
+        if not any(r["is_me"] for r in top):
+            top = top + [{"gap": True}, me]
+
         return {
-            "position": position,
-            "total":    len(pool),
-            "sales":    mine,
-            # Le podium se mérite : il faut un vrai peloton derrière, sinon
-            # « 3e sur 4 » se mettrait en avant comme une performance.
-            "podium":   position <= 3 and mine > 0 and len(pool) >= 6,
+            "rows":     top,
+            "position": me["position"],
+            "sales":    me["sales"],
+            "total":    len(rows),
+            "podium":   me["position"] <= 3 and me["sales"] > 0
+                        and len(rows) >= LEADERBOARD_PODIUM_MIN,
+            "window":   30,
         }
     except Exception as e:
         print(f"[ESPACE] Classement indisponible: {e}")
         return None
+
+
+@app.route("/api/classement/externes", methods=["GET"])
+@_require_admin_api
+def api_external_ranked_get():
+    """
+    Participants hors programme, pour la console.
+
+    Chaque entrée repart avec l'âge de son chiffre : c'est la seule information
+    qui dit à l'admin ce qu'il doit faire — un nombre saisi il y a cinq
+    semaines est sorti du classement, et il est le seul à pouvoir le corriger.
+    """
+    now = datetime.now(timezone.utc)
+    out = []
+    for e in _load_external_ranked():
+        age = _external_age_days(e, now)
+        out.append({
+            "id":         e.get("id") or "",
+            "pseudo":     (e.get("pseudo") or "").strip(),
+            "sales":      _safe_int(e.get("sales", 0)),
+            "updated_at": e.get("updated_at") or "",
+            "age_days":   age,
+            "stale":      bool(age is not None and age > EXTERNAL_STALE_DAYS),
+        })
+    out.sort(key=lambda r: (-r["sales"], r["pseudo"].lower()))
+    return jsonify({"entries": out, "stale_days": EXTERNAL_STALE_DAYS})
+
+
+@app.route("/api/classement/externes", methods=["POST"])
+@_require_admin_api
+def api_external_ranked_save():
+    """
+    Enregistre la liste complète des participants hors programme.
+
+    `updated_at` n'est pas fourni par le client : il est posé ici, et
+    uniquement quand le chiffre change vraiment. Renommer quelqu'un ou
+    réenregistrer sans rien toucher ne doit pas faire passer un nombre périmé
+    pour un nombre frais — c'est précisément ce que cette date sert à empêcher.
+    """
+    try:
+        payload = request.json or {}
+        rows = payload.get("entries")
+        if not isinstance(rows, list):
+            return jsonify({"success": False, "error": "format invalide"}), 400
+        if len(rows) > EXTERNAL_MAX_ENTRIES:
+            return jsonify({"success": False,
+                            "error": f"{EXTERNAL_MAX_ENTRIES} entrées au maximum"}), 400
+
+        before = {e.get("id"): e for e in _load_external_ranked() if e.get("id")}
+        now_iso = datetime.now(timezone.utc).isoformat()
+        seen, out = set(), []
+
+        for r in rows:
+            if not isinstance(r, dict):
+                continue
+            name = (r.get("pseudo") or "").strip()[:40]
+            if not name:
+                continue                      # une entrée sans nom n'existe pas
+            rid = (r.get("id") or "").strip() or f"ex_{secrets.token_hex(6)}"
+            if rid in seen:
+                continue
+            seen.add(rid)
+            sales = max(0, min(EXTERNAL_MAX_SALES, _safe_int(r.get("sales", 0))))
+            old = before.get(rid)
+            keep_date = bool(old) and _safe_int(old.get("sales", 0)) == sales
+            out.append({
+                "id":         rid,
+                "pseudo":     name,
+                "sales":      sales,
+                "updated_at": (old.get("updated_at") or now_iso) if keep_date else now_iso,
+            })
+
+        ok = r2_put_json(EXTERNAL_RANK_R2_KEY, {
+            "entries": out,
+            "updated_at": now_iso,
+        })
+        if not ok:
+            return jsonify({"success": False, "error": "écriture impossible"}), 500
+        return jsonify({"success": True, "count": len(out)})
+    except Exception as e:
+        print(f"[CLASSEMENT] Enregistrement externes impossible: {e}")
+        return jsonify({"success": False, "error": "erreur serveur"}), 500
 
 
 # ── Code d'accès de l'espace ────────────────────────────────────────────────
@@ -4641,6 +4879,10 @@ def _espace_payload(inf):
             done = bool(done_map.get(m["id"]))
         missions.append({**m, "done": done})
 
+    # Un seul calcul de classement par rendu : il relit la liste complète des
+    # influenceurs, autant ne pas le faire deux fois.
+    _board = _leaderboard(inf)
+
     return {
         "influencer": {
             "id": inf.get("id"),
@@ -4685,8 +4927,14 @@ def _espace_payload(inf):
         # Temps restant dans le mois : permet à l'interface de hiérarchiser
         # l'objectif quand l'échéance approche.
         "month_clock": _month_clock(inf),
-        # Classement anonymisé (position seule, jamais les chiffres des autres).
-        "rank": _espace_rank(inf),
+        # Classement sur 30 jours glissants : `rank` = la position seule, pour la
+        # ligne de faits de l'accueil ; `leaderboard` = le tableau complet.
+        # Les deux viennent du même calcul, fait une fois.
+        "rank": ({
+            "position": _board["position"], "total": _board["total"],
+            "sales":    _board["sales"],    "podium": _board["podium"],
+        } if _board else None),
+        "leaderboard": _board,
         # État du code d'accès : l'interface sait ainsi s'il faut le demander
         # avant de laisser modifier l'adresse de livraison.
         "access": {
