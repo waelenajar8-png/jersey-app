@@ -4192,8 +4192,41 @@ def _espace_rewards(inf, stats):
                 "missing":  next_step - sales_month,
             }
 
+    # Détail de chaque palier, pour le panneau qui s'ouvre au clic.
+    # Tout y est calculé une fois côté serveur : le front ne doit jamais
+    # refaire un calcul de rémunération, sinon les deux finissent par diverger.
+    tiers = []
+    for i, t in enumerate(INFLUENCER_TIERS):
+        req = int((t.get("requirements") or {}).get("sales", 0))
+        jerseys = int(t.get("monthly_jerseys") or 0)
+        th = t.get("monthly_threshold")
+        fx = t.get("monthly_fixed")
+        lever = None
+        if th and fx:
+            v = round(gain(int(th)) - gain(int(th) - 1), 2)
+            if v > ordinary + 0.01:
+                lever = {"value": v, "rank": int(th),
+                         "multiple": round(v / ordinary, 1) if ordinary else 0}
+        tiers.append({
+            "id": t["id"], "name": t["name"], "icon": t["icon"],
+            "req_sales":     req,
+            "missing_sales": max(0, req - sales_total),
+            "reached":       sales_total >= req,
+            "jerseys":       jerseys,
+            # Les maillots ne partent que si l'influenceur a été actif dans le
+            # mois : c'est le garde-fou du gifting, il doit être annoncé.
+            "gifting_threshold": GIFTING_THRESHOLD_BY_JERSEYS.get(jerseys, GIFTING_MIN_SALES),
+            "monthly_threshold": int(th) if th else None,
+            "monthly_fixed":     float(fx) if fx else None,
+            "yearly":            round(float(fx) * 12) if fx else None,
+            "lever":             lever,
+            "perks":             t.get("perks") or [],
+        })
+
     return {
         "avg_basket": avg,
+        "ordinary_sale": ordinary,
+        "base_pct": BASE_COMMISSION_PCT,
         "steps": [{
             "threshold": th,
             "fixed":     f,
@@ -4201,6 +4234,7 @@ def _espace_rewards(inf, stats):
             "missing":   max(0, th - sales_month),
         } for th, f in steps],
         "next_sale": next_sale,
+        "tiers": tiers,
         "year": [{"threshold": th, "fixed": f, "yearly": round(f * 12)} for th, f in steps],
     }
 
