@@ -241,11 +241,47 @@ input,select{font-family:inherit}
 .rail-s.now{background:var(--accent);width:24px;box-shadow:0 0 0 3px var(--accent-ring)}
 .rail-l{font-size:11px;font-weight:700;color:var(--faint);margin-left:3px}
 
-/* — Sections — */
-.sec + .sec{margin-top:38px}
+/* — Sections —
+   L'écart ne se déclenchait qu'entre deux .sec, alors que l'accueil alterne
+   .gains, .goal et .sec : le libellé d'une section se retrouvait donc collé
+   au bloc blanc précédent. On cible tous les voisinages, et on passe l'écart
+   à 52 px — un libellé annonce un nouveau sujet, il lui faut plus d'air
+   qu'à deux paragraphes voisins. */
+.sec + .sec,
+.gains + .sec, .goal + .sec, .promo + .sec,
+.sec + .gains, .sec + .goal{margin-top:52px}
+.gains + .goal{margin-top:16px}
 .sec-k{font-size:11px;font-weight:700;letter-spacing:.13em;text-transform:uppercase;
-    color:var(--muted);margin-bottom:4px}
+    color:var(--muted);margin-bottom:5px}
 .sec-t{font-size:18px;font-weight:700;letter-spacing:-.03em}
+/* Le titre de section respire avant ses éléments. */
+.sec-t + div{margin-top:14px!important}
+
+/* — Contenu de l'envoi : l'influenceur doit VOIR ce qu'il va recevoir —
+   Un nom de maillot ne fait rien ressentir ; sa photo, si. C'est aussi ce
+   qui permet de repérer une erreur de sélection avant que le colis parte. */
+.ship-jerseys{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.sj{background:var(--surface);border-radius:16px;overflow:hidden}
+.sj-img{aspect-ratio:1/1;background:var(--surface-2);display:grid;place-items:center;overflow:hidden}
+.sj-img img{width:100%;height:100%;object-fit:cover;display:block}
+.sj-ph{color:var(--faint);opacity:.55}
+.sj-ph svg{width:26px;height:26px}
+.sj-b{padding:13px 14px 15px}
+.sj-n{font-size:13.5px;font-weight:700;letter-spacing:-.02em;line-height:1.3}
+.sj-s{font-size:12px;color:var(--muted);font-weight:500;margin-top:3px}
+@media (max-width:420px){.ship-jerseys{grid-template-columns:1fr}
+    .sj{display:flex;align-items:center;gap:14px}
+    .sj-img{width:78px;aspect-ratio:1/1;flex-shrink:0}
+    .sj-b{padding:0 14px 0 0}}
+
+/* — Sélection verrouillée par l'équipe — */
+.lock-note{display:flex;gap:11px;align-items:flex-start;background:var(--warn-soft);
+    border-radius:14px;padding:14px 16px;margin-bottom:16px}
+.lock-note svg{width:15px;height:15px;stroke-width:2.2;color:var(--warn);flex-shrink:0;margin-top:2px}
+.lock-note-t{font-size:13px;font-weight:700;color:var(--warn);letter-spacing:-.01em}
+.lock-note-d{font-size:12.5px;color:var(--ink-2);margin-top:3px;line-height:1.55}
+.picked.locked .picked-rm{display:none}
+.picked.locked .picked-item{opacity:.9}
 
 /* — Missions présentées comme des gains — */
 .task{display:flex;align-items:center;gap:14px;width:100%;text-align:left;padding:16px 18px;
@@ -1091,9 +1127,16 @@ function viewColis(){
         <div class="card">
             <div class="card-head"><div class="card-title"><span class="ico-box">${ICO.tag}</span>Contenu de l'envoi</div></div>
             ${(D.influencer.jerseys && D.influencer.jerseys.length)
-                ? D.influencer.jerseys.map(j=>`<div class="mission"><div class="mission-body">
-                        <div class="mission-label">${esc(j.name||j)}</div>
-                        <div class="mission-desc">${esc(j.size||'')}</div></div></div>`).join('')
+                ? `<div class="ship-jerseys">${D.influencer.jerseys.map(j=>`
+                    <div class="sj">
+                        <div class="sj-img">${j.image
+                            ? `<img src="${escAttr(j.image)}" alt="${escAttr(j.name||'Maillot')}" loading="lazy">`
+                            : `<span class="sj-ph">${ICO.tag}</span>`}</div>
+                        <div class="sj-b">
+                            <div class="sj-n">${esc(j.name||'Maillot')}</div>
+                            ${j.size ? `<div class="sj-s">Taille ${esc(j.size)}</div>` : ''}
+                        </div>
+                    </div>`).join('')}</div>`
                 : `<div class="empty" style="padding:20px 10px">
                         <div class="empty-ico">${ICO.tag}</div>
                         <div class="empty-title">Maillots à choisir</div>
@@ -1263,6 +1306,8 @@ function viewProfil(){
     const p = inf.platforms || {};
     const sh = inf.shipping || {};
     PICKS = (inf.jerseys || []).map(j=>({...j}));
+    // Verrou posé par l'admin : la sélection devient une simple présentation.
+    const LOCKED = !!D.influencer.jerseys_locked;
 
     return `
     <div class="card">
@@ -1300,13 +1345,20 @@ function viewProfil(){
     <div class="card">
         <div class="card-head">
             <div>
-                <div class="card-title"><span class="ico-box">${ICO.tag}</span>Choisis tes 2 maillots</div>
-                <div class="card-sub" style="margin-top:5px">Sélectionne un modèle, puis sa taille</div>
+                <div class="card-title"><span class="ico-box">${ICO.tag}</span>${LOCKED ? 'Tes 2 maillots' : 'Choisis tes 2 maillots'}</div>
+                <div class="card-sub" style="margin-top:5px">${LOCKED
+                    ? 'Sélectionnés pour toi par l\'équipe Volakits'
+                    : 'Sélectionne un modèle, puis sa taille'}</div>
             </div>
-            <span class="pick-count ${PICKS.length>=2?'full':''}" id="pickCount">${PICKS.length} / 2</span>
+            ${LOCKED ? '' : `<span class="pick-count ${PICKS.length>=2?'full':''}" id="pickCount">${PICKS.length} / 2</span>`}
         </div>
+        ${LOCKED ? `<div class="lock-note">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+            <div><div class="lock-note-t">Sélection faite par l'équipe</div>
+            <div class="lock-note-d">Ces deux maillots ont été choisis pour toi. Si tu veux en changer, écris-nous — on s'en occupe tant que le colis n'est pas parti.</div></div>
+        </div>` : ''}
         <div id="pickedZone"></div>
-        <div id="jerseyGrid"><div class="empty" style="padding:20px"><div class="empty-text">Chargement du catalogue…</div></div></div>
+        ${LOCKED ? '' : `<div id="jerseyGrid"><div class="empty" style="padding:20px"><div class="empty-text">Chargement du catalogue…</div></div></div>`}
     </div>
 
     <div class="card">
@@ -1392,11 +1444,12 @@ function renderPicked(){
     const z = document.getElementById('pickedZone');
     if(!z) return;
     if(!PICKS.length){ z.innerHTML=''; return; }
-    z.innerHTML = `<div class="picked">${PICKS.map((p,i)=>`
+    const locked = !!D.influencer.jerseys_locked;
+    z.innerHTML = `<div class="picked${locked ? ' locked' : ''}">${PICKS.map((p,i)=>`
         <div class="picked-item">
             <img class="picked-img" src="${escAttr(p.image||'')}" alt="">
             <div><div class="picked-name">${esc(p.name)}</div><div class="picked-size">Taille ${esc(p.size)}</div></div>
-            <span class="picked-rm" data-rm="${i}">✕</span>
+            ${locked ? '' : `<span class="picked-rm" data-rm="${i}">✕</span>`}
         </div>`).join('')}</div>`;
     z.querySelectorAll('[data-rm]').forEach(b=>{
         b.onclick = ()=>{
@@ -1430,7 +1483,9 @@ async function saveProfil(){
     try{
         const r = await fetch(`/api/espace/${SLUG}/update`,{
             method:'POST', headers:{'Content-Type':'application/json'},
-            body: JSON.stringify({platforms, shipping, jerseys:PICKS})
+            body: JSON.stringify(D.influencer.jerseys_locked
+                ? {platforms, shipping}
+                : {platforms, shipping, jerseys:PICKS})
         });
         let d = await r.json();
 
@@ -1445,7 +1500,9 @@ async function saveProfil(){
             }
             const r2 = await fetch(`/api/espace/${SLUG}/update`,{
                 method:'POST', headers:{'Content-Type':'application/json'},
-                body: JSON.stringify({platforms, shipping, jerseys:PICKS})
+                body: JSON.stringify(D.influencer.jerseys_locked
+                    ? {platforms, shipping}
+                    : {platforms, shipping, jerseys:PICKS})
             });
             d = await r2.json();
         }
