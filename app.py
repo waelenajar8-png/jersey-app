@@ -4133,6 +4133,78 @@ def _compute_monthly_commission(inf, stats):
     }
 
 
+def _espace_rewards(inf, stats):
+    """
+    Données de l'écran « Avantages ».
+
+    Le levier n'est pas inventé, il est déjà dans le barème : les seuils sont
+    secs, donc la vente qui fait basculer vaut bien plus qu'une vente
+    ordinaire. À 29 ventes on touche la commission, à 30 on touche le fixe —
+    cette vente-là vaut la différence entre les deux. C'est ça qu'on affiche,
+    calculé sur le panier moyen RÉEL de l'influenceur, pas sur une moyenne
+    du programme.
+
+    Retourne : avg_basket, steps[], next_sale (ou None), year[].
+    """
+    sales_month = _safe_int(stats.get("sales_month", 0))
+    sales_total = _safe_int(stats.get("sales", 0))
+    revenue     = _safe_float(stats.get("revenue", 0))
+
+    # Panier moyen personnel. Sans historique, on retombe sur le panier moyen
+    # du programme (38 € nets) plutôt que d'afficher zéro.
+    avg = round(revenue / sales_total, 2) if sales_total > 0 and revenue > 0 else 38.0
+
+    steps = sorted(
+        [(int(t["monthly_threshold"]), float(t["monthly_fixed"]))
+         for t in INFLUENCER_TIERS
+         if t.get("monthly_threshold") and t.get("monthly_fixed")],
+        key=lambda s: s[0],
+    )
+
+    def gain(n):
+        """Ce que rapporte un mois à n ventes, barème appliqué."""
+        commission = n * avg * BASE_COMMISSION_PCT / 100
+        fixed = max([f for th, f in steps if n >= th], default=0.0)
+        return max(commission, fixed)
+
+    ordinary  = round(avg * BASE_COMMISSION_PCT / 100, 2)
+    next_step = next((th for th, _ in steps if th > sales_month), None)
+
+    # Valeur de LA vente qui fait basculer — pas de la vente suivante.
+    # Calculer gain(n+1) − gain(n) ne dirait quelque chose qu'à une vente du
+    # seuil : à 8 ventes sur 10, l'écran n'aurait rien à montrer alors que
+    # c'est justement le moment où l'information motive le plus. On annonce
+    # donc ce que vaudra la vente du seuil, quelle que soit la distance.
+    next_sale = None
+    if next_step:
+        value = round(gain(next_step) - gain(next_step - 1), 2)
+        # Un écart nul signale un plateau du barème (le fixe le plus haut est
+        # atteint, la commission n'est pas encore repassée devant). On se tait
+        # plutôt que d'annoncer « ta prochaine vente vaut 0 € » : ce serait
+        # exact, et parfaitement démotivant.
+        if value > ordinary + 0.01:
+            next_sale = {
+                "value":    value,
+                "ordinary": ordinary,
+                "multiple": round(value / ordinary, 1) if ordinary else 0,
+                "rank":     next_step,        # la Nᵉ vente du mois
+                "unlocks":  next((f for th, f in steps if th == next_step), 0),
+                "missing":  next_step - sales_month,
+            }
+
+    return {
+        "avg_basket": avg,
+        "steps": [{
+            "threshold": th,
+            "fixed":     f,
+            "reached":   sales_month >= th,
+            "missing":   max(0, th - sales_month),
+        } for th, f in steps],
+        "next_sale": next_sale,
+        "year": [{"threshold": th, "fixed": f, "yearly": round(f * 12)} for th, f in steps],
+    }
+
+
 def _monthly_gifting(stats):
     """
     Gifting du mois : les maillots ne partent que si l'influenceur a été actif.
@@ -4340,6 +4412,9 @@ def _espace_payload(inf):
         },
         "commission_month": _compute_monthly_commission(inf, stats),
         "gifting_month": _monthly_gifting(stats),
+        # Écran Avantages : seuils du mois, valeur de la prochaine vente,
+        # projection annuelle — tout calculé sur les chiffres réels.
+        "rewards": _espace_rewards(inf, stats),
         # Temps restant dans le mois : permet à l'interface de hiérarchiser
         # l'objectif quand l'échéance approche.
         "month_clock": _month_clock(),
