@@ -4243,6 +4243,29 @@ def _espace_pin_ok(inf, slug):
     return bool(session.get(f"espace_pin_{slug}"))
 
 
+def _espace_jerseys(inf):
+    """
+    Maillots de l'influenceur, avec leur visuel signé pour l'affichage.
+
+    Les images vivent sur R2 en accès privé : sans URL signée, l'espace ne peut
+    rien montrer. On signe pour 7 jours — au-delà, un rechargement de la page
+    régénère les liens, donc rien ne casse.
+    """
+    out = []
+    for j in (inf.get("jerseys") or []):
+        if not isinstance(j, dict):
+            continue
+        item = dict(j)
+        if not item.get("image") and item.get("r2_key"):
+            try:
+                item["image"] = r2_presigned(item["r2_key"], expires=604800)
+            except Exception as e:
+                print(f"[ESPACE] Visuel maillot indisponible: {e}")
+                item["image"] = ""
+        out.append(item)
+    return out
+
+
 def _espace_payload(inf):
     """Construit toutes les données affichées dans l'espace influenceur."""
     stats = dict(inf.get("stats") or {})
@@ -4289,7 +4312,13 @@ def _espace_payload(inf):
             "promo_code": inf.get("promo_code") or "",
             "address": inf.get("address") or "",
             "platforms": inf.get("platforms") or {},
-            "jerseys": inf.get("jerseys") or [],
+            # Les maillots partent avec leur visuel signé : sans URL signée,
+            # l'espace n'a rien à afficher et l'influenceur ne voit que du texte
+            # là où il attend de voir ce qu'il va recevoir.
+            "jerseys": _espace_jerseys(inf),
+            # Verrou de sélection : quand l'admin a choisi les maillots lui-même,
+            # l'influenceur ne doit plus pouvoir les changer.
+            "jerseys_locked": bool(inf.get("jerseys_locked")),
             "shipping": inf.get("shipping") or {},
             "tracking": inf.get("tracking") or "",
             "tracking_status": inf.get("trackingStatus") or "",
@@ -4376,6 +4405,23 @@ def api_espace_update(slug):
             return jsonify({
                 "success": False, "error": "code requis", "pin_required": True,
             }), 403
+
+    # Maillots verrouillés : quand l'admin a fait la sélection lui-même, elle
+    # ne doit plus bouger. On retire silencieusement le champ au lieu de
+    # rejeter toute la requête — l'influenceur enregistre souvent ses réseaux
+    # et son adresse dans le même envoi, il serait absurde de tout refuser
+    # parce qu'un champ qu'il ne peut pas modifier est présent dans le corps.
+    if "jerseys" in updates:
+        guard = _get_influencer_by_slug(slug)
+        if guard and guard.get("jerseys_locked"):
+            updates.pop("jerseys")
+            print(f"[ESPACE] Maillots verrouillés, modification ignorée ({slug})")
+            if not updates:
+                return jsonify({
+                    "success": False,
+                    "error": "Tes maillots ont été choisis par l'équipe Volakits.",
+                    "jerseys_locked": True,
+                }), 403
 
     with _influenceurs_lock:
         data = r2_get_json(INFLUENCEURS_R2_KEY) or {}
