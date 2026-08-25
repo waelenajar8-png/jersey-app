@@ -3944,8 +3944,8 @@ INFLUENCER_TIERS = [
         "jersey_cost": 25.52,
         "perks": [
             "2 maillots floqués offerts",
-            "Code promo personnalisé -15%",
-            "10% de commission sur tes ventes",
+            "Code promo personnalisé −15 % pour ta communauté",
+            "Ton espace personnel et ton suivi de ventes",
         ],
     },
     {
@@ -3960,9 +3960,8 @@ INFLUENCER_TIERS = [
         "jersey_cost": 25.52,
         "perks": [
             "2 maillots floqués par mois",
-            "50€ garantis dès 10 ventes dans le mois",
-            "10% de commission les autres mois",
             "Accès anticipé aux nouveautés",
+            "Choix prioritaire sur les modèles disponibles",
         ],
     },
     {
@@ -3977,9 +3976,8 @@ INFLUENCER_TIERS = [
         "jersey_cost": 44.0,
         "perks": [
             "4 maillots floqués par mois",
-            "150€ garantis dès 30 ventes dans le mois",
-            "10% de commission les autres mois",
             "Mise en avant sur nos comptes",
+            "Accès anticipé aux nouveautés",
         ],
     },
     {
@@ -3994,10 +3992,9 @@ INFLUENCER_TIERS = [
         "jersey_cost": 62.0,
         "perks": [
             "6 maillots floqués par mois",
-            "350€ garantis dès 60 ventes dans le mois",
-            "10% de commission les autres mois",
-            "Avantages exclusifs & accès direct",
-            "Avant-première nouveautés Volakits",
+            "Avant-première sur les nouveautés Volakits",
+            "Avantages exclusifs et accès direct à l'équipe",
+            "Mise en avant sur nos comptes",
         ],
     },
 ]
