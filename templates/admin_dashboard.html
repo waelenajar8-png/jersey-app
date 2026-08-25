@@ -464,6 +464,18 @@ select.inp{cursor:pointer}
 .hint{font-size:11px;color:var(--muted);margin-top:6px;line-height:1.5}
 /* Code d'accès : le code lui-même porte la valeur, les actions restent en retrait. */
 .pinrow{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+/* Verrou de sélection des maillots */
+.jlock{display:flex;align-items:flex-start;gap:11px;width:100%;text-align:left;margin-top:14px;
+    padding:13px 15px;border:1px solid var(--line);border-radius:11px;background:var(--surface-2);
+    cursor:pointer;transition:border-color .15s,background .15s}
+.jlock:hover{border-color:var(--line-2)}
+.jlock.on{border-color:var(--accent);background:var(--accent-soft)}
+.jlock-box{width:17px;height:17px;border-radius:5px;border:1.5px solid var(--line-2);
+    background:#fff;display:grid;place-items:center;font-size:10px;color:#fff;flex-shrink:0;margin-top:1px}
+.jlock.on .jlock-box{background:var(--accent);border-color:var(--accent)}
+.jlock-b{display:flex;flex-direction:column;gap:3px}
+.jlock-t{font-size:12.5px;font-weight:600;color:var(--ink)}
+.jlock-d{font-size:11px;color:var(--muted);line-height:1.5}
 .pinval{font-family:'JetBrains Mono',monospace;font-size:19px;font-weight:700;
     letter-spacing:.24em;text-indent:.24em;color:var(--ink);min-width:86px}
 .pinval.none{font-size:13px;letter-spacing:0;text-indent:0;color:var(--muted);font-weight:600}
@@ -1076,6 +1088,7 @@ function normalize(i){
         jerseys: Array.isArray(i.jerseys) ? i.jerseys : [],
         missions_done: i.missions_done || {},
         jerseys_shipped: !!i.jerseys_shipped,
+        jerseys_locked: !!i.jerseys_locked,
         _espace_url: i._espace_url||'', program_start_date: i.program_start_date||'',
         espace_pin: i.espace_pin||'',
         last_synced_at: i.last_synced_at||''
@@ -1393,7 +1406,30 @@ function renderSheetJerseys(inf){
             <button class="btn sm" id="jAdd" disabled>Attribuer</button>
         </div>`;
 
-    box.innerHTML = chips + state + adder;
+    // Verrou de sélection : quand c'est toi qui as attribué les maillots,
+    // l'influenceur ne doit plus pouvoir les changer depuis son espace —
+    // sinon deux personnes décident de la même chose et le colis part faux.
+    const lock = `
+        <button type="button" class="jlock ${inf.jerseys_locked ? 'on' : ''}" id="jLock">
+            <span class="jlock-box">${inf.jerseys_locked ? '✓' : ''}</span>
+            <span class="jlock-b">
+                <span class="jlock-t">Verrouiller la sélection</span>
+                <span class="jlock-d">${inf.jerseys_locked
+                    ? "L'influenceur voit ses maillots mais ne peut pas les changer."
+                    : "L'influenceur peut choisir et modifier ses maillots depuis son espace."}</span>
+            </span>
+        </button>`;
+
+    box.innerHTML = chips + state + adder + lock;
+
+    const lockBtn = box.querySelector('#jLock');
+    if(lockBtn) lockBtn.onclick = () => {
+        const cur = find(currentId);
+        if(!cur) return;
+        cur.jerseys_locked = !cur.jerseys_locked;
+        renderSheetJerseys(cur);
+        scheduleSave();
+    };
 
     box.querySelectorAll('[data-jrm]').forEach(b => {
         b.onclick = () => {
