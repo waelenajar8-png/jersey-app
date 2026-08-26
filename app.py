@@ -5067,6 +5067,16 @@ def _leaderboard(inf, influenceurs=None, now=None):
                 "sales":  _rank_sales(x),
                 "is_me":  mine,
                 "anon":   not mine,
+                # Critères de départage, pour que chacun ait une place à lui.
+                # Sans eux, tout le monde à zéro partageait le même rang : dix
+                # lignes affichant « 2 », ce qui ne ressemble plus à un
+                # classement. Les ventes cumulées puis l'ancienneté départagent
+                # sur quelque chose de réel — l'ordre alphabétique ne sert que
+                # de dernier recours, pour que l'affichage reste stable d'un
+                # chargement à l'autre.
+                "cumul":   _safe_int((x.get("stats") or {}).get("sales", 0)),
+                "entree":  (x.get("program_start_date") or x.get("addedAt") or "9999"),
+                "tri":     name.lower(),
             })
 
         if (len(pool) + (1 if me_out else 0)) < LEADERBOARD_MIN_POOL:
@@ -5079,25 +5089,30 @@ def _leaderboard(inf, influenceurs=None, now=None):
         # le plus — au démarrage, quand chacune a besoin de voir qui est en lice
         # et qu'une seule vente suffit à prendre la tête.
 
-        # Tri : ventes décroissantes, puis pseudo, pour que l'ordre des
-        # ex æquo soit stable d'un chargement à l'autre.
-        ranked = sorted(pool, key=lambda x: (-x["sales"], x["pseudo"].lower()))
+        # Tri : ventes sur 30 jours d'abord, puis ventes cumulées, puis
+        # ancienneté dans le programme. Tout le monde a ainsi une place, y
+        # compris ceux qui n'ont pas encore vendu sur la fenêtre.
+        ranked = sorted(pool, key=lambda x: (-x["sales"], -x["cumul"],
+                                             x["entree"], x["tri"]))
 
-        rows, prev_sales, prev_pos = [], None, 0
+        rows, prev_cle, prev_pos = [], None, 0
         for idx, x in enumerate(ranked, start=1):
             n = x["sales"]
-            # Rang sportif : à égalité de ventes, même place.
-            pos = prev_pos if n == prev_sales else idx
-            prev_sales, prev_pos = n, pos
+            # Rang sportif : même place seulement si TOUS les critères sont
+            # identiques — mêmes ventes, même cumul, même date d'entrée. Deux
+            # personnes réellement indiscernables partagent leur rang ; les
+            # autres en ont un à elles.
+            cle = (n, x["cumul"], x["entree"])
+            pos = prev_pos if cle == prev_cle else idx
+            prev_cle, prev_pos = cle, pos
             rows.append({
                 "position": pos,
                 "pseudo":   x["pseudo"],
                 "sales":    n,
                 "is_me":    x["is_me"],
                 "anon":     x.get("anon", False),
-                # Zéro vente : on montre la ligne, mais pas un rang. Être
-                # « 14ᵉ » quand huit personnes sont à égalité à zéro ne veut
-                # rien dire, et sonne comme une sanction plutôt qu'un départ.
+                # Sert uniquement à nuancer l'affichage du chiffre : la place,
+                # elle, est attribuée à tout le monde.
                 "unranked": n <= 0,
             })
 
