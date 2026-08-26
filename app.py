@@ -4550,8 +4550,16 @@ def _rank_sales(x):
     couvre désormais la période personnelle de chacun — comparer une période
     entamée le 3 à une période entamée le 27 classerait sur la date
     d'inscription autant que sur le travail fourni.
+
+    `rank_adjust` est une correction manuelle, en plus ou en moins. Elle existe
+    parce que toute vente enregistrée n'est pas une vente du programme : un
+    flocage à 1 €, une commande de complaisance passée par un proche. La
+    retirer du classement sans toucher aux commandes réelles est le seul moyen
+    de rétablir un tableau juste — et elle survit aux synchros, qui réécrivent
+    `sales_30d` mais jamais la correction.
     """
-    return _safe_int((x.get("stats") or {}).get("sales_30d", 0))
+    base = _safe_int((x.get("stats") or {}).get("sales_30d", 0))
+    return max(0, base + _safe_int(x.get("rank_adjust", 0)))
 
 
 def _rank_fresh(x, now=None):
@@ -4861,11 +4869,21 @@ def _leaderboard(inf, influenceurs=None, now=None):
         # on le refait donc systématiquement plutôt que de risquer un zéro.
         _refresh_light_stats(influenceurs, now)
 
-        pool = []
+        pool, me_out = [], None
         for x in influenceurs:
             if not isinstance(x, dict):
                 continue
             mine = bool(my_id) and x.get("id") == my_id
+            name = (x.get("pseudo") or "").strip() or "Sans pseudo"
+
+            # Retiré du classement par l'admin : il n'apparaît pour personne, et
+            # pas davantage pour lui-même. Il verra « pas encore classé », ce
+            # qui est exact — annoncer une sanction dans l'interface n'est pas
+            # le rôle de l'app, c'est une conversation à avoir de vive voix.
+            if x.get("rank_hidden"):
+                if mine:
+                    me_out = {"pseudo": name, "reason": "hidden"}
+                continue
 
             if _is_light(x):
                 if not (x.get("pseudo") or "").strip():
@@ -4873,25 +4891,32 @@ def _leaderboard(inf, influenceurs=None, now=None):
                 # Un volume que l'admin n'a pas reconfirmé depuis six semaines
                 # ne décrit plus rien : mieux vaut l'absence qu'une place fausse.
                 age = _light_age_days(x, now)
-                if age is not None and age > LIGHT_STALE_DAYS and not mine:
+                if age is not None and age > LIGHT_STALE_DAYS:
+                    if mine:
+                        me_out = {"pseudo": name, "reason": "stale"}
                     continue
             elif not (x.get("promo_code") or "").strip():
+                # Pas encore de code promo : rien à compter, mais le tableau
+                # doit quand même lui être montré — voir que d'autres vendent
+                # vraiment est précisément ce qui donne envie de s'y mettre.
+                if mine:
+                    me_out = {"pseudo": name, "reason": "no_code"}
                 continue
-            # Ma propre ligne reste toujours là : un classement dont on est
-            # absent est illisible, et mon chiffre n'est pas une révélation
-            # pour moi.
-            elif not _rank_fresh(x, now) and not mine:
+            elif not _rank_fresh(x, now):
+                if mine:
+                    me_out = {"pseudo": name, "reason": "stale"}
                 continue
 
             pool.append({
-                "pseudo": (x.get("pseudo") or "").strip() or "Sans pseudo",
+                "pseudo": name,
                 "sales":  _rank_sales(x),
                 "is_me":  mine,
             })
 
-        if len(pool) < LEADERBOARD_MIN_POOL:
+        if (len(pool) + (1 if me_out else 0)) < LEADERBOARD_MIN_POOL:
             return {"empty": True, "reason": "pool",
                     "have": len(pool), "need": LEADERBOARD_MIN_POOL, "window": 30}
+        # Un tableau où personne n'a vendu ne dit rien à personne.
         if not any(x["sales"] > 0 for x in pool):
             return {"empty": True, "reason": "sales",
                     "have": len(pool), "need": LEADERBOARD_MIN_POOL, "window": 30}
@@ -4911,20 +4936,38 @@ def _leaderboard(inf, influenceurs=None, now=None):
                 "pseudo":   x["pseudo"],
                 "sales":    n,
                 "is_me":    x["is_me"],
+                # Zéro vente : on montre la ligne, mais pas un rang. Être
+                # « 14ᵉ » quand huit personnes sont à égalité à zéro ne veut
+                # rien dire, et sonne comme une sanction plutôt qu'un départ.
+                "unranked": n <= 0,
             })
 
         me = next((r for r in rows if r["is_me"]), None)
-        if not me:
-            # Consultation par quelqu'un qui ne participe pas (fiche sans code
-            # promo, pas encore de volume) : on annonce le classement sans le
-            # dévoiler, il n'y a pas sa place dedans à montrer.
-            return {"empty": True, "reason": "not_in",
-                    "have": len(rows), "need": LEADERBOARD_MIN_POOL, "window": 30}
-
         top = rows[:LEADERBOARD_TOP]
+
+        if not me:
+            # Elle ne figure pas encore au classement (pas de code promo, ou
+            # compteur en attente). On lui montre quand même le tableau : c'est
+            # en voyant des ventes réelles en face qu'on a envie d'y entrer.
+            # Sa ligne est ajoutée en bas, sans place ni chiffre — elle n'a
+            # rien produit, lui inventer un rang serait faux.
+            if me_out:
+                top = top + [{"gap": True},
+                             {"pseudo": me_out["pseudo"], "is_me": True,
+                              "unranked": True}]
+            return {
+                "rows":     top,
+                "position": None,
+                "sales":    0,
+                "total":    len(rows),
+                "podium":   False,
+                "unranked": True,
+                "window":   30,
+            }
+
         # Hors du top : on ajoute sa propre ligne en dessous, avec un trou
         # explicite. Voir la marche à franchir vaut mieux que ne pas figurer.
-        if not any(r["is_me"] for r in top):
+        if not any(r.get("is_me") for r in top):
             top = top + [{"gap": True}, me]
 
         return {
@@ -4934,11 +4977,84 @@ def _leaderboard(inf, influenceurs=None, now=None):
             "total":    len(rows),
             "podium":   me["position"] <= 3 and me["sales"] > 0
                         and len(rows) >= LEADERBOARD_PODIUM_MIN,
+            "unranked": me["sales"] <= 0,
             "window":   30,
         }
     except Exception as e:
         print(f"[ESPACE] Classement indisponible: {e}")
         return None
+
+
+@app.route("/api/classement", methods=["GET"])
+@_require_admin_api
+def api_leaderboard_admin():
+    """
+    Le classement complet, tel que la console doit le voir : tout le monde, pas
+    seulement le haut du tableau, et avec de quoi le corriger.
+
+    Toute vente enregistrée n'est pas une vente du programme — un flocage à 1 €,
+    une commande de complaisance passée par un proche. La console montre donc
+    côte à côte le compteur brut, la correction appliquée et le total retenu :
+    sans ces trois chiffres, impossible de savoir si un rang est celui qu'on a
+    voulu ou celui qu'on a laissé passer.
+    """
+    now = datetime.now(timezone.utc)
+    data = r2_get_json(INFLUENCEURS_R2_KEY) or {}
+    influenceurs = data.get("influenceurs", []) or []
+    _refresh_light_stats(influenceurs, now)
+
+    entries = []
+    for x in influenceurs:
+        if not isinstance(x, dict):
+            continue
+        light = _is_light(x)
+        if not light and not (x.get("promo_code") or "").strip():
+            continue
+        if light and not (x.get("pseudo") or "").strip():
+            continue
+
+        raw    = _safe_int((x.get("stats") or {}).get("sales_30d", 0))
+        adjust = _safe_int(x.get("rank_adjust", 0))
+        hidden = bool(x.get("rank_hidden"))
+        age    = _light_age_days(x, now) if light else None
+        stale  = (age is not None and age > LIGHT_STALE_DAYS) if light \
+                 else (not _rank_fresh(x, now))
+        entries.append({
+            "id":      x.get("id") or "",
+            "pseudo":  (x.get("pseudo") or "").strip() or "Sans pseudo",
+            "light":   light,
+            "raw":     raw,
+            "adjust":  adjust,
+            "total":   max(0, raw + adjust),
+            "hidden":  hidden,
+            "stale":   bool(stale),
+            # Ce qui l'exclut du tableau vu par les influenceuses, s'il l'est.
+            "out":     hidden or bool(stale),
+        })
+
+    # Même tri et même rang sportif que le classement public : la console doit
+    # montrer exactement ce que les influenceuses voient, sinon elle ne sert à
+    # rien pour arbitrer.
+    visibles = sorted([e for e in entries if not e["out"]],
+                      key=lambda e: (-e["total"], e["pseudo"].lower()))
+    prev_total, prev_pos = None, 0
+    for i, e in enumerate(visibles, start=1):
+        e["position"] = prev_pos if e["total"] == prev_total else i
+        prev_total, prev_pos = e["total"], e["position"]
+        if e["total"] <= 0:
+            e["position"] = None          # pas encore classé
+    hors = sorted([e for e in entries if e["out"]],
+                  key=lambda e: (-e["total"], e["pseudo"].lower()))
+    for e in hors:
+        e["position"] = None
+
+    return jsonify({
+        "entries":  visibles + hors,
+        "ranked":   len([e for e in visibles if e["total"] > 0]),
+        "total":    len(entries),
+        "window":   RANK_WINDOW_DAYS,
+        "min_pool": LEADERBOARD_MIN_POOL,
+    })
 
 
 @app.route("/api/classement/light", methods=["GET"])
@@ -5238,7 +5354,7 @@ def _espace_payload(inf):
         "rank": ({
             "position": _board["position"], "total": _board["total"],
             "sales":    _board["sales"],    "podium": _board["podium"],
-        } if (_board and not _board.get("empty")) else None),
+        } if (_board and not _board.get("empty") and _board.get("position")) else None),
         "leaderboard": _board,
         # État du code d'accès : l'interface sait ainsi s'il faut le demander
         # avant de laisser modifier l'adresse de livraison.
