@@ -1189,10 +1189,15 @@ function blockGains(){
         <div class="gains-v num" id="gainsV">€0</div>
         ${basis ? `<div class="gains-sub">${esc(basis)}</div>` : ''}
         <div class="gains-sep"></div>
+        ${/* Le chiffre d'affaires généré ne figure plus ici. Affiché à côté du
+             nombre de ventes, il donnait le panier moyen par une simple
+             division — et le panier moyen multiplié par le taux de commission
+             donne ce que rapporte chaque maillot. Tout le travail fait sur
+             l'écran Avantages pour ne pas exposer la rémunération par vente
+             était annulé par cette seule ligne. */''}
         <div class="gains-facts">
-            <span class="num">${fmt(s.sales)} vente${s.sales > 1 ? 's' : ''}</span>
-            <span class="d"></span>
-            <span class="num">${fmt(Math.round(s.revenue || 0))} € générés</span>
+            <span class="num">${fmt(s.sales)} vente${s.sales > 1 ? 's' : ''} au total</span>
+            ${s.videos ? `<span class="d"></span><span class="num">${fmt(s.videos)} vidéo${s.videos > 1 ? 's' : ''}</span>` : ''}
         </div>
     </section>`;
 }
