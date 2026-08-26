@@ -4865,11 +4865,10 @@ def _leaderboard(inf, influenceurs=None, now=None):
     resteraient dérivables l'un de l'autre — c'est exactement ce que le
     programme s'interdit d'exposer.
 
-    Ne retourne jamais None quand l'influenceur existe : quand le classement
-    n'a pas encore de sens (moins de trois participants, ou aucune vente sur
-    la fenêtre), il repart avec `empty` et un motif. Disparaître purement et
-    simplement de l'écran donnerait l'impression d'une fonction cassée — mieux
-    vaut dire ce qu'on attend pour l'afficher.
+    Le tableau s'affiche dès qu'il y a assez de participants, même si personne
+    n'a encore vendu : c'est au démarrage qu'il donne le plus envie de s'y
+    mettre. Le seul cas où il repart avec `empty`, c'est un programme trop
+    petit pour qu'un classement veuille dire quoi que ce soit.
     """
     try:
         now = now or datetime.now(timezone.utc)
@@ -4936,10 +4935,12 @@ def _leaderboard(inf, influenceurs=None, now=None):
         if (len(pool) + (1 if me_out else 0)) < LEADERBOARD_MIN_POOL:
             return {"empty": True, "reason": "pool",
                     "have": len(pool), "need": LEADERBOARD_MIN_POOL, "window": 30}
-        # Un tableau où personne n'a vendu ne dit rien à personne.
-        if not any(x["sales"] > 0 for x in pool):
-            return {"empty": True, "reason": "sales",
-                    "have": len(pool), "need": LEADERBOARD_MIN_POOL, "window": 30}
+
+        # Volontairement, AUCUNE condition sur les ventes : le tableau s'affiche
+        # même si tout le monde est encore à zéro. Le masquer jusqu'à la
+        # première vente enlevait le classement précisément au moment où il sert
+        # le plus — au démarrage, quand chacune a besoin de voir qui est en lice
+        # et qu'une seule vente suffit à prendre la tête.
 
         # Tri : ventes décroissantes, puis pseudo, pour que l'ordre des
         # ex æquo soit stable d'un chargement à l'autre.
