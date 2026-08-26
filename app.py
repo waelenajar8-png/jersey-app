@@ -3703,23 +3703,15 @@ def _stamp_light_sellers(stored, incoming):
         )
         inf["sales_checked_at"] = (old.get("sales_checked_at") or now_iso) \
                                   if (old and unchanged) else now_iso
-        # `sales_ramp` dit si ce vendeur doit monter en régime ou s'il y est
-        # déjà. Par défaut il y est : on enregistre des gens qui vendent depuis
-        # des mois, pas des débutants. Se tromper de défaut dans ce sens-là est
-        # sans conséquence visible ; dans l'autre, le classement reste vide et
-        # rien ne l'explique.
-        ramp = "new" if inf.get("sales_ramp") == "new" else "installed"
-        inf["sales_ramp"] = ramp
-        if ramp == "new":
-            # La montée redémarre quand le rythme change : quelqu'un qui passe
-            # de 2 à 4 ventes par jour n'a pas trente jours de ventes à 4
-            # derrière lui.
-            keep_start = bool(old.get("sales_start")) and unchanged
-            inf["sales_start"] = old.get("sales_start") if keep_start else today
-        else:
-            # Régime établi : la date n'entre plus dans le calcul (voir
-            # _light_active_days), on la garde pour mémoire de son entrée.
-            inf["sales_start"] = old.get("sales_start") or today
+        # Le volume saisi EST celui des 30 derniers jours : il compte à plein dès
+        # l'enregistrement, sans montée en régime. La bascule qui permettait de
+        # déclarer un vendeur « débutant » a été retirée — elle demandait un
+        # choix dont la conséquence n'était pas visible à l'écran, alors que le
+        # nombre saisi porte déjà l'information : quelqu'un qui vient de
+        # commencer a simplement un petit nombre. `sales_start` ne sert plus
+        # qu'à garder trace de son entrée.
+        inf["sales_ramp"] = "installed"
+        inf["sales_start"] = old.get("sales_start") or today
         # Sa période de rémunération démarre le jour de son entrée dans le
         # programme — pas le jour où il a commencé à vendre ailleurs. On ne
         # paie pas rétroactivement des ventes faites avant de le rejoindre.
@@ -4773,17 +4765,14 @@ def _light_active_days(inf, since, until):
         ventes le placerait devant des ambassadrices qui, elles, ont réellement
         produit ce chiffre.
 
-    C'est `sales_ramp` qui tranche, pas `sales_start`. La distinction est
-    délibérée : une date de départ, une fois écrite, reste écrite — un vendeur
-    enregistré avant que ce réglage existe garderait à jamais l'ancre du jour
-    de sa saisie, donc un volume proche de zéro, sans que rien ne l'explique
-    ni qu'un réenregistrement n'y change quoi que ce soit. En faisant du mode
-    la source de vérité, une fiche marquée « déjà en rythme » repasse d'
-    elle-même à plein régime, y compris celles créées avant.
-
-    Absence de mode = régime établi. C'est le cas de loin le plus fréquent —
-    on enregistre des gens qui vendent déjà — et se tromper dans ce sens n'a
-    aucune conséquence visible, alors que l'inverse vide le classement.
+    Aucune montée en régime : le volume saisi décrit déjà les 30 derniers
+    jours, il compte donc en entier dès l'enregistrement. C'est `sales_ramp`
+    qui tranche et non `sales_start`, et c'est délibéré : une date, une fois
+    écrite, reste écrite — une fiche créée avant ce réglage garderait à jamais
+    l'ancre du jour de sa saisie, donc un volume proche de zéro, sans que rien
+    ne l'explique ni qu'un réenregistrement n'y change quoi que ce soit. Le
+    chemin « montée » reste en place pour d'éventuelles fiches anciennes, mais
+    plus rien ne l'active.
     """
     def _jours(a, b):
         # En jours FRACTIONNAIRES, volontairement. `.days` tronque, et la
@@ -4958,6 +4947,45 @@ def _migrate_external_ranked(influenceurs):
         return False
 
 
+# Plateformes reconnues. L'ordre fixe ici est celui de l'affichage partout :
+# une liste qui se réordonne d'une ligne à l'autre se lit deux fois moins vite.
+RANK_PLATFORMS = ["tiktok", "instagram", "snapchat", "youtube",
+                  "x", "facebook", "pinterest", "threads"]
+
+# Deux sources possibles, et c'est voulu : l'admin coche les plateformes depuis
+# la fiche, l'influenceuse renseigne les siennes depuis son espace. On prend
+# l'union — celui qui sait remplit, sans que l'un écrase l'autre.
+_PLAT_ALIAS = {
+    "tiktok": "tiktok", "instagram": "instagram", "insta": "instagram",
+    "snapchat": "snapchat", "snap": "snapchat", "youtube": "youtube",
+    "yt": "youtube", "x": "x", "twitter": "x", "facebook": "facebook",
+    "fb": "facebook", "pinterest": "pinterest", "threads": "threads",
+}
+
+
+def _rank_platforms(x):
+    """
+    Plateformes sur lesquelles la personne est active, dans l'ordre canonique.
+
+    Sert au classement : voir que la première est présente sur quatre réseaux
+    quand on n'est que sur un seul est une information actionnable, bien plus
+    que son nombre de ventes. C'est la seule chose du tableau qui dise
+    *comment* elle y arrive.
+    """
+    trouve = set()
+    for nom in (x.get("platform_list") or []):
+        k = _PLAT_ALIAS.get(str(nom).strip().lower())
+        if k:
+            trouve.add(k)
+    # Côté influenceuse : une plateforme ne compte que si elle y a mis un
+    # pseudo. Un bloc ouvert mais vide ne prouve aucune présence.
+    for cle, val in (x.get("platforms") or {}).items():
+        k = _PLAT_ALIAS.get(str(cle).strip().lower())
+        if k and isinstance(val, dict) and (val.get("username") or "").strip():
+            trouve.add(k)
+    return [p for p in RANK_PLATFORMS if p in trouve]
+
+
 RANK_MASK_KEEP = 2       # lettres visibles du pseudo d'un tiers
 RANK_MASK_DOTS = "•••"   # longueur fixe : la taille du pseudo ne se déduit pas
 
@@ -5074,6 +5102,7 @@ def _leaderboard(inf, influenceurs=None, now=None):
                 # sur quelque chose de réel — l'ordre alphabétique ne sert que
                 # de dernier recours, pour que l'affichage reste stable d'un
                 # chargement à l'autre.
+                "plats":   _rank_platforms(x),
                 "cumul":   _safe_int((x.get("stats") or {}).get("sales", 0)),
                 "entree":  (x.get("program_start_date") or x.get("addedAt") or "9999"),
                 "tri":     name.lower(),
@@ -5111,6 +5140,7 @@ def _leaderboard(inf, influenceurs=None, now=None):
                 "sales":    n,
                 "is_me":    x["is_me"],
                 "anon":     x.get("anon", False),
+                "plats":    x.get("plats") or [],
                 # Sert uniquement à nuancer l'affichage du chiffre : la place,
                 # elle, est attribuée à tout le monde.
                 "unranked": n <= 0,
@@ -5248,7 +5278,12 @@ def api_light_sellers_get():
         age = _light_age_days(inf, now)
         start = _parse_day(inf.get("sales_start"))
         ramp = None
-        if start is not None:
+        # La montée ne concerne QUE les vendeurs déclarés débutants. Elle était
+        # calculée pour tout le monde, si bien qu'une fiche marquée « déjà en
+        # rythme » affichait « en montée, jour 0/30 » le jour de sa création —
+        # deux affirmations contradictoires sur la même ligne, alors que son
+        # volume, lui, était bien à plein régime.
+        if inf.get("sales_ramp") == "new" and start is not None:
             elapsed = max(0, (now - start).days)
             if elapsed < RANK_WINDOW_DAYS:
                 # Encore en montée : l'admin doit savoir que le nombre affiché
