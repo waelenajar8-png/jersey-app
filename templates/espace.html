@@ -199,9 +199,14 @@ input,select{font-family:inherit}
 .goal-cta:hover{gap:9px}
 .goal-cta svg{width:14px;height:14px;stroke-width:2.2}
 .goal-done{font-size:13.5px;font-weight:600;color:var(--ok);margin-top:14px}
-/* Fin de mois : l'urgence passe par la couleur du trait et une ligne de
-   date, pas par un bandeau ni un badge. Le bloc garde exactement sa forme. */
-.goal.urgent{background:var(--warn-soft)}
+/* Fin de période : l'urgence passe par la couleur du trait et une ligne de
+   date, pas par un bandeau ni un badge. Le bloc garde exactement sa forme.
+   Une règle repeignait pourtant tout le fond en beige — elle contredisait
+   cette intention écrite juste au-dessus, et surtout elle sortait le bloc de
+   la palette : une grande surface chaude au milieu d'un écran crème et bleu
+   ne se lit pas comme une alerte, seulement comme une faute de couleur.
+   L'urgence tient sur deux signaux, la ligne de compte à rebours et la barre
+   de progression, tous deux dans l'ambre de la marque. */
 .goal-dl{display:inline-flex;align-items:center;gap:7px;margin-top:12px;
     font-size:12.5px;font-weight:700;color:var(--warn);letter-spacing:-.01em}
 .goal-dl::before{content:"";width:6px;height:6px;border-radius:100px;background:var(--warn)}
