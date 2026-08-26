@@ -3634,10 +3634,16 @@ def _stamp_light_sellers(stored, incoming):
         # rien ne l'explique.
         ramp = "new" if inf.get("sales_ramp") == "new" else "installed"
         inf["sales_ramp"] = ramp
-        installed_start = _period_key(now - timedelta(days=RANK_WINDOW_DAYS))
-        keep_start = bool(old.get("sales_start")) and unchanged
-        inf["sales_start"] = old.get("sales_start") if keep_start else (
-            today if ramp == "new" else installed_start)
+        if ramp == "new":
+            # La montée redémarre quand le rythme change : quelqu'un qui passe
+            # de 2 à 4 ventes par jour n'a pas trente jours de ventes à 4
+            # derrière lui.
+            keep_start = bool(old.get("sales_start")) and unchanged
+            inf["sales_start"] = old.get("sales_start") if keep_start else today
+        else:
+            # Régime établi : la date n'entre plus dans le calcul (voir
+            # _light_active_days), on la garde pour mémoire de son entrée.
+            inf["sales_start"] = old.get("sales_start") or today
         # Sa période de rémunération démarre le jour de son entrée dans le
         # programme — pas le jour où il a commencé à vendre ailleurs. On ne
         # paie pas rétroactivement des ventes faites avant de le rejoindre.
@@ -4694,11 +4700,20 @@ def _light_active_days(inf, since, until):
         ventes le placerait devant des ambassadrices qui, elles, ont réellement
         produit ce chiffre.
 
-    C'est `sales_start` qui tranche, et la console la pose explicitement à
-    l'ajout. Sans date, on suppose le régime établi : c'est le cas de loin le
-    plus fréquent, et supposer l'inverse laisse un classement vide sans que
-    personne comprenne pourquoi.
+    C'est `sales_ramp` qui tranche, pas `sales_start`. La distinction est
+    délibérée : une date de départ, une fois écrite, reste écrite — un vendeur
+    enregistré avant que ce réglage existe garderait à jamais l'ancre du jour
+    de sa saisie, donc un volume proche de zéro, sans que rien ne l'explique
+    ni qu'un réenregistrement n'y change quoi que ce soit. En faisant du mode
+    la source de vérité, une fiche marquée « déjà en rythme » repasse d'
+    elle-même à plein régime, y compris celles créées avant.
+
+    Absence de mode = régime établi. C'est le cas de loin le plus fréquent —
+    on enregistre des gens qui vendent déjà — et se tromper dans ce sens n'a
+    aucune conséquence visible, alors que l'inverse vide le classement.
     """
+    if (inf.get("sales_ramp") or "installed") != "new":
+        return max(0, (until - since).days)      # régime établi : aucune montée
     start = _parse_day(inf.get("sales_start"))
     if start is None or start < since:
         start = since
