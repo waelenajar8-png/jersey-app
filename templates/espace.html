@@ -578,6 +578,9 @@ input,select{font-family:inherit}
 .lb-name{flex:0 1 auto;min-width:0;font-size:14.5px;font-weight:650;letter-spacing:-.02em;
     color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .lb-r.out .lb-name{color:var(--ink-2);font-weight:600}
+/* Ligne anonyme : le libellé de palier ne doit pas se lire comme un nom. */
+.lb-r.anon .lb-name{font-weight:600;color:var(--ink-2)}
+.lb-r.anon .lb-av{color:var(--faint);font-size:16px;line-height:1}
 .lb-n{font-size:17px;font-weight:800;color:var(--ink);font-variant-numeric:tabular-nums;
     letter-spacing:-.035em;flex-shrink:0;line-height:1}
 .lb-u{font-size:11px;font-weight:600;color:var(--muted);margin-left:5px;
@@ -597,6 +600,10 @@ input,select{font-family:inherit}
    faire croire au voisinage. */
 .lb-gap{display:flex;justify-content:center;padding:6px 0;border-top:1px solid var(--line);
     color:var(--line-2);font-size:12px;letter-spacing:.32em;line-height:1}
+/* Les participantes sans vente, comptées en une ligne plutôt qu'énumérées. */
+.lb-wait{padding:13px 18px;border-top:1px solid var(--line);background:var(--surface-2);
+    font-size:12.5px;font-weight:600;color:var(--muted);text-align:center;
+    font-variant-numeric:tabular-nums}
 /* Pagination : discrète, elle ne doit pas peser autant que le tableau. */
 .lb-pager{display:flex;align-items:center;gap:5px;margin-top:12px;flex-wrap:wrap}
 .lb-p{min-width:31px;height:31px;padding:0 8px;border-radius:9px;
@@ -1210,7 +1217,7 @@ function blockGains(){
 /* Barre de pagination. Au-delà de cinq pages on n'affiche plus tous les
    numéros : la page courante, ses voisines, les extrémités, et des points de
    suspension. Une rangée de vingt chiffres serait illisible sur téléphone. */
-function lbPager(pages, b){
+function lbPager(pages, classees){
     const cur = LB_PAGE;
     let nums = [];
     if(pages <= 5){
@@ -1227,12 +1234,12 @@ function lbPager(pages, b){
         prev = i;
     });
     const de = cur * LB_PER + 1;
-    const a  = Math.min(b.rows.length, (cur + 1) * LB_PER);
+    const a  = Math.min(classees.length, (cur + 1) * LB_PER);
     return `<div class="lb-pager">
         <button class="lb-p nav" data-lbp="${cur - 1}" ${cur === 0 ? 'disabled' : ''} aria-label="Page précédente">‹</button>
         ${out}
         <button class="lb-p nav" data-lbp="${cur + 1}" ${cur === pages - 1 ? 'disabled' : ''} aria-label="Page suivante">›</button>
-        <span class="lb-prange num">${de}–${a} sur ${fmt(b.total)}</span>
+        <span class="lb-prange num">${de}–${a} sur ${fmt(classees.length)}</span>
     </div>`;
 }
 
@@ -1434,20 +1441,29 @@ function blockRank(){
 
     if(!b.rows || !b.rows.length) return '';
 
-    // Pagination : dix par page, et on peut naviguer. Le classement complet
-    // reste consultable sans que cinquante lignes s'empilent sur l'accueil.
-    const pages = Math.max(1, Math.ceil(b.rows.length / LB_PER));
+    // Celles qui n'ont pas encore vendu ne prennent pas une ligne chacune.
+    // Anonymes, elles affichaient toutes le même libellé de palier : dix lignes
+    // rigoureusement identiques, qui noyaient les vraies places et donnaient
+    // l'impression d'un tableau cassé. Elles sont comptées en une seule ligne
+    // au bas du tableau — l'information « combien attendent encore » est
+    // conservée, la répétition disparaît.
+    const classees = b.rows.filter(r => !r.unranked);
+    const attente  = b.rows.filter(r => r.unranked && !r.is_me);
+
+    const pages = Math.max(1, Math.ceil(classees.length / LB_PER));
     if(LB_PAGE >= pages) LB_PAGE = pages - 1;
     if(LB_PAGE < 0) LB_PAGE = 0;
 
-    let vue = b.rows.slice(LB_PAGE * LB_PER, (LB_PAGE + 1) * LB_PER);
+    let vue = classees.slice(LB_PAGE * LB_PER, (LB_PAGE + 1) * LB_PER);
 
     // Sa propre ligne reste visible où qu'on soit dans le tableau : épinglée
     // en bas quand elle n'est pas sur la page affichée. Naviguer dans le
     // classement ne doit jamais faire perdre de vue sa propre place.
     const moi = b.rows.find(r => r.is_me);
+    const dernierePage = LB_PAGE === pages - 1;
     if(b.me_row) vue = vue.concat([{gap:true}, b.me_row]);
     else if(moi && vue.indexOf(moi) === -1) vue = vue.concat([{gap:true}, moi]);
+    if(attente.length && dernierePage) vue = vue.concat([{attente: attente.length}]);
 
     // Échelle des barres : le leader fait la largeur pleine, tout le reste se
     // lit par rapport à lui. Sans référence commune, une barre ne dit rien.
@@ -1455,12 +1471,14 @@ function blockRank(){
 
     const rows = vue.map(r => {
         if(r.gap) return `<div class="lb-gap">•••</div>`;
+        if(r.attente) return `<div class="lb-wait">${fmt(r.attente)} participante${r.attente > 1 ? 's' : ''} en attente de leur première vente</div>`;
         // Le doré ne va qu'à une vraie première place. Sans cette condition,
         // un programme où personne n'a encore vendu couronnait tout le monde :
         // à égalité à zéro, chacun est « 1er ».
         const cls = [r.is_me ? 'me' : '',
                      (r.position === 1 && !r.unranked) ? 'p1' : '',
-                     r.unranked ? 'out' : ''].filter(Boolean).join(' ');
+                     r.unranked ? 'out' : '',
+                     r.anon ? 'anon' : ''].filter(Boolean).join(' ');
         // Sans vente, ni rang ni compteur : un tiret et « Pas encore classée ».
         // Afficher « 0 ventes » à côté des autres ne dit rien de plus et
         // ressemble à un constat d'échec au lieu d'un point de départ.
@@ -1473,7 +1491,9 @@ function blockRank(){
         const pct = r.unranked ? 0 : Math.max(5, Math.round((r.sales / tete) * 100));
         return `<div class="lb-r ${cls}">
             <span class="lb-pos num">${pos}</span>
-            <span class="lb-av">${esc(lbInitiale(r.pseudo))}</span>
+            ${/* Pastille neutre pour les autres : une initiale suffirait à les
+                 reconnaître sur un programme de cette taille. */''}
+            <span class="lb-av">${r.anon ? '•' : esc(lbInitiale(r.pseudo))}</span>
             <div class="lb-mid">
                 <div class="lb-nrow">
                     <span class="lb-name">${esc(r.pseudo)}</span>
@@ -1500,8 +1520,9 @@ function blockRank(){
         <div class="sec-k">Classement</div>
         <div class="sec-t">${esc(titre)}</div>
         <div class="lb">${rows}</div>
-        ${pages > 1 ? lbPager(pages, b) : ''}
-        <div class="lb-foot">Sur les ventes des 30 derniers jours, la même fenêtre pour tout le monde.</div>
+        ${pages > 1 ? lbPager(pages, classees) : ''}
+        <div class="lb-foot">Sur les ventes des 30 derniers jours, la même fenêtre pour tout le monde.
+            Les autres participantes apparaissent sous leur palier : chacune voit sa place, personne ne voit les noms.</div>
     </section>`;
 }
 
