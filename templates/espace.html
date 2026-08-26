@@ -1312,17 +1312,12 @@ function blockRank(){
     // le bloc laisserait croire à une fonction absente ou cassée, alors qu'il
     // ne manque qu'une vente ou un participant.
     if(b.empty){
-        const t = b.reason === 'pool'
-            ? {t:'Ton classement arrive', d:`Il s'affichera dès que le programme comptera ${fmt(b.need || 3)} participants.`}
-            : b.reason === 'not_in'
-            ? {t:'Ton classement arrive', d:'Il s\'affichera dès ta première vente — tu y prendras ta place avec les autres.'}
-            : {t:'Ton classement arrive', d:'Il s\'affichera dès les premières ventes du mois. À toi d\'ouvrir le bal.'};
         return `<section class="sec rise" style="animation-delay:.21s">
             <div class="sec-k">Classement</div>
-            <div class="sec-t">${esc(t.t)}</div>
+            <div class="sec-t">Ton classement arrive</div>
             <div class="chart-empty" style="margin-top:12px">
                 <div class="chart-empty-t">Où tu te situes face aux autres</div>
-                <div class="chart-empty-d">${esc(t.d)}</div>
+                <div class="chart-empty-d">Il s'affichera dès que le programme comptera ${fmt(b.need || 3)} participants.</div>
             </div>
         </section>`;
     }
@@ -1351,8 +1346,13 @@ function blockRank(){
 
     // Le sous-titre dit la place, pas la performance : « 4e sur 12 » se lit
     // sans avoir à compter les lignes. Sans vente, il dit ce qui l'attend.
+    // Quand personne n'a encore vendu, le tableau est une grille de départ :
+    // le dire ainsi vaut mieux que d'annoncer une place que personne n'occupe.
+    const aucune = b.rows.every(r => r.gap || r.unranked);
     const titre = (b.position && !b.unranked)
         ? `Ta ${b.position === 1 ? '1ʳᵉ place' : b.position + 'ᵉ place'} sur ${fmt(b.total)}`
+        : aucune
+        ? 'Tout le monde est à égalité — la première vente prend la tête'
         : 'Ta première vente te fait entrer';
 
     return `<section class="sec rise" style="animation-delay:.21s">
