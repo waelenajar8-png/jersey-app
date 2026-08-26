@@ -578,8 +578,17 @@ input,select{font-family:inherit}
 .lb-name{flex:0 1 auto;min-width:0;font-size:14.5px;font-weight:650;letter-spacing:-.02em;
     color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .lb-r.out .lb-name{color:var(--ink-2);font-weight:600}
-/* Ligne masquée : mêmes graisses que les autres, seul le pseudo est tronqué. */
+/* Ligne masquée : mêmes graisses que les autres, seule la fin du pseudo est
+   brouillée. Le flou garde la longueur du mot — c'est ce qui fait qu'on lit
+   encore un pseudo et pas une troncature. */
 .lb-r.anon .lb-name{letter-spacing:-.01em}
+.lb-blur{filter:blur(3.4px);opacity:.62;user-select:none;pointer-events:none;
+    padding-right:3px;letter-spacing:.01em}
+.lb-r.p1 .lb-blur{opacity:.7}
+@supports not (filter: blur(1px)){
+    /* Sans filtre CSS, le leurre serait lisible : on le remplace par des points. */
+    .lb-blur{color:transparent;text-shadow:0 0 6px currentColor}
+}
 .lb-n{font-size:17px;font-weight:800;color:var(--ink);font-variant-numeric:tabular-nums;
     letter-spacing:-.035em;flex-shrink:0;line-height:1}
 .lb-u{font-size:11px;font-weight:600;color:var(--muted);margin-left:5px;
@@ -1433,7 +1442,9 @@ function platIcon(k){
    un rond ne dit rien de personne. */
 function lbInitiale(nom){
     const c = String(nom || '').replace(/[^\p{L}\p{N}]/gu, '');
-    return (c[0] || '?').toUpperCase();
+    // Pseudo trop court pour qu'on en montre une lettre : un point neutre
+    // plutôt qu'un « ? », qui se lisait comme une erreur de chargement.
+    return (c[0] || '•').toUpperCase();
 }
 // Fenêtre de 30 jours glissants, la même pour tout le monde — surtout pas la
 // période de rémunération personnelle, qui commence au jour d'inscription :
@@ -1505,7 +1516,12 @@ function blockRank(){
             <span class="lb-av">${esc(lbInitiale(r.pseudo))}</span>
             <div class="lb-mid">
                 <div class="lb-nrow">
-                    <span class="lb-name">${esc(r.pseudo)}</span>
+                    ${/* La fin du pseudo est un leurre envoyé par le serveur, pas
+                         le vrai texte flouté : le flou n'est qu'un effet visuel,
+                         il ne cache rien à qui inspecte la page. Ce qu'on floute
+                         ici ne veut donc rien dire, et c'est le but. */''}
+                    <span class="lb-name">${esc(r.pseudo)}${r.blur
+                        ? `<span class="lb-blur" aria-hidden="true">${esc(r.blur)}</span>` : ''}</span>
                     ${(r.plats && r.plats.length)
                         ? `<span class="lb-plats" title="Active sur ${r.plats.length} plateforme${r.plats.length>1?'s':''}">${r.plats.map(platIcon).join('')}</span>`
                         : ''}
