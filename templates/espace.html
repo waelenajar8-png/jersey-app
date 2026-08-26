@@ -526,51 +526,94 @@ input,select{font-family:inherit}
      l'accueil reste le bloc de gains. Ici, une seule ligne est colorée, la
      sienne. C'est ce qui rend le tableau lisible d'un coup d'œil : on ne
      cherche pas son nom, on voit sa ligne. */
-.lb{background:var(--surface);border-radius:18px;overflow:hidden;margin-top:12px}
-.lb-r{display:flex;align-items:center;gap:14px;padding:14px 20px;
+/* ══ CLASSEMENT ═══════════════════════════════════════════════════════════
+   Une table de résultats, pas une liste. Trois choses la sortent du tableau
+   administratif : une pastille d'initiale qui donne un visage à chaque ligne,
+   une barre de fond proportionnelle au leader qui rend l'écart lisible sans
+   qu'on ait à comparer des chiffres, et une hiérarchie typographique qui met
+   le nombre de ventes au même niveau qu'un montant.
+
+   La barre reste à très basse opacité : l'aplat fort de l'écran est le bloc
+   de gains, et rien ici ne doit venir le concurrencer. */
+.lb{background:var(--surface);border-radius:20px;overflow:hidden;margin-top:14px;
+    border:1px solid var(--line)}
+.lb-r{display:flex;align-items:center;gap:13px;padding:13px 18px;
     border-top:1px solid var(--line)}
 .lb-r:first-child{border-top:0}
-.lb-pos{width:26px;flex-shrink:0;font-size:14px;font-weight:700;color:var(--faint);
-    font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+/* La mesure, sous le nom. Deux essais avant celui-ci : un aplat sur toute la
+   hauteur se lisait comme un surlignage, et un filet collé au bas de la ligne
+   se confondait avec le séparateur — dans les deux cas, ça ressemblait à un
+   défaut d'affichage. Rattachée au nom, dans sa propre piste, la barre ne peut
+   plus se lire que pour ce qu'elle est : une longueur qu'on compare. */
+.lb-mid{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:6px}
+.lb-nrow{display:flex;align-items:center;gap:8px;min-width:0}
+.lb-track{height:3px;border-radius:3px;background:var(--line);overflow:hidden}
+/* Une seule couleur pour toutes les barres : c'est la longueur qui distingue,
+   pas la teinte. Le doré du premier reste sur son rang et sa pastille — deux
+   couleurs de mesure dans le même tableau feraient croire à deux échelles. */
+.lb-bar{display:block;height:100%;width:0;border-radius:3px;background:var(--accent);
+    opacity:.42;transition:width .55s cubic-bezier(.22,1,.36,1)}
+.lb-r.p1 .lb-bar{opacity:.7}
+.lb-r.me .lb-bar{opacity:1}
+
+.lb-pos{width:20px;flex-shrink:0;font-size:12.5px;font-weight:700;color:var(--faint);
+    font-variant-numeric:tabular-nums;letter-spacing:-.02em;text-align:right}
+/* Le premier se distingue par la couleur de son rang et l'anneau de sa
+   pastille — pas par une médaille, qui ferait jeu-concours. */
 .lb-r.p1 .lb-pos{color:var(--gold)}
-.lb-name{flex:0 1 auto;min-width:0;font-size:14.5px;font-weight:600;letter-spacing:-.02em;
-    color:var(--ink-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.lb-n{font-size:14.5px;font-weight:700;color:var(--ink);font-variant-numeric:tabular-nums;
-    letter-spacing:-.02em;flex-shrink:0}
-.lb-u{font-size:12.5px;font-weight:500;color:var(--muted);margin-left:4px}
+
+.lb-av{width:34px;height:34px;flex-shrink:0;border-radius:50%;
+    display:flex;align-items:center;justify-content:center;
+    background:var(--surface-2);border:1px solid var(--line);
+    font-size:13px;font-weight:700;color:var(--ink-2);letter-spacing:-.01em}
+.lb-r.p1 .lb-av{border-color:var(--gold);color:var(--gold)}
+.lb-r.me .lb-av{background:var(--accent);border-color:var(--accent);color:#fff}
+.lb-r.out .lb-av{color:var(--faint)}
+
+.lb-name{flex:0 1 auto;min-width:0;font-size:14.5px;font-weight:650;letter-spacing:-.02em;
+    color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lb-r.out .lb-name{color:var(--ink-2);font-weight:600}
+.lb-n{font-size:17px;font-weight:800;color:var(--ink);font-variant-numeric:tabular-nums;
+    letter-spacing:-.035em;flex-shrink:0;line-height:1}
+.lb-u{font-size:11px;font-weight:600;color:var(--muted);margin-left:5px;
+    letter-spacing:-.01em}
 /* Ma ligne : l'accent, et lui seul. */
 .lb-r.me{background:var(--accent-soft)}
 .lb-r.me .lb-pos{color:var(--accent)}
 .lb-r.me .lb-name,.lb-r.me .lb-n{color:var(--accent-2)}
 .lb-sp{flex:1 1 auto}
-.lb-soon{font-size:12.5px;font-weight:600;color:var(--faint);flex-shrink:0;letter-spacing:-.01em}
+.lb-soon{font-size:12px;font-weight:600;color:var(--faint);flex-shrink:0;letter-spacing:-.01em}
 .lb-r.out .lb-pos{color:var(--line-2)}
 .lb-r.me.out .lb-soon{color:var(--accent)}
-.lb-me-tag{font-size:9px;letter-spacing:.16em;text-transform:uppercase;font-weight:700;
-    color:var(--accent);flex-shrink:0}
-/* Le trou entre le top et sa propre ligne : montrer la marche plutôt que
+.lb-me-tag{font-size:8.5px;letter-spacing:.16em;text-transform:uppercase;font-weight:800;
+    color:var(--accent);flex-shrink:0;padding:3px 6px;border-radius:5px;
+    background:rgba(47,80,241,.1)}
+/* Le trou entre la page et sa propre ligne : montrer la marche plutôt que
    faire croire au voisinage. */
-.lb-gap{display:flex;justify-content:center;padding:7px 0;border-top:1px solid var(--line);
-    color:var(--line-2);font-size:13px;letter-spacing:.3em;line-height:1}
+.lb-gap{display:flex;justify-content:center;padding:6px 0;border-top:1px solid var(--line);
+    color:var(--line-2);font-size:12px;letter-spacing:.32em;line-height:1}
 /* Pagination : discrète, elle ne doit pas peser autant que le tableau. */
 .lb-pager{display:flex;align-items:center;gap:5px;margin-top:12px;flex-wrap:wrap}
-.lb-p{min-width:32px;height:32px;padding:0 8px;border-radius:9px;
+.lb-p{min-width:31px;height:31px;padding:0 8px;border-radius:9px;
     border:1px solid var(--line);background:var(--surface);
     font-size:12.5px;font-weight:700;color:var(--ink-2);
     font-variant-numeric:tabular-nums;transition:all .14s ease}
 .lb-p:hover:not(:disabled){border-color:var(--line-2);color:var(--ink)}
 .lb-p.on{background:var(--accent);border-color:var(--accent);color:#fff}
 .lb-p.nav{font-size:16px;line-height:1;color:var(--muted)}
-.lb-p:disabled{opacity:.35;cursor:default}
+.lb-p:disabled{opacity:.32;cursor:default}
 .lb-pdots{color:var(--faint);font-weight:700;padding:0 2px}
-.lb-prange{margin-left:auto;font-size:11.5px;font-weight:600;color:var(--faint)}
+.lb-prange{margin-left:auto;font-size:11.5px;font-weight:600;color:var(--faint);
+    font-variant-numeric:tabular-nums}
 @media(max-width:420px){
     .lb-prange{flex:1 1 100%;margin-left:0;margin-top:4px}
 }
 .lb-foot{font-size:12.5px;color:var(--muted);font-weight:500;margin-top:12px;line-height:1.55}
 @media(max-width:860px){
-    .lb-r{padding:13px 16px;gap:11px}
+    .lb-r{padding:12px 14px;gap:10px}
+    .lb-av{width:31px;height:31px;font-size:12px}
     .lb-name{font-size:14px}
+    .lb-n{font-size:16px}
 }
 /* — Évolution : vide tant qu'il n'y a pas deux mois d'historique — */
 .chart-empty{border:1px dashed var(--line-2);border-radius:18px;padding:34px 24px;text-align:center}
@@ -1346,6 +1389,14 @@ function blockPromo(){
 // l'objectif et le colis qui le suivent sur l'accueil.
 const LB_PER = 10;
 let LB_PAGE = 0;
+
+/* Initiale de la pastille. Une seule lettre, et la première qui en est une :
+   beaucoup de pseudos commencent par un underscore ou un point, et « _ » dans
+   un rond ne dit rien de personne. */
+function lbInitiale(nom){
+    const c = String(nom || '').replace(/[^\p{L}\p{N}]/gu, '');
+    return (c[0] || '?').toUpperCase();
+}
 // Fenêtre de 30 jours glissants, la même pour tout le monde — surtout pas la
 // période de rémunération personnelle, qui commence au jour d'inscription :
 // comparer une période entamée le 3 à une période entamée le 27 classerait
@@ -1388,9 +1439,17 @@ function blockRank(){
     if(b.me_row) vue = vue.concat([{gap:true}, b.me_row]);
     else if(moi && vue.indexOf(moi) === -1) vue = vue.concat([{gap:true}, moi]);
 
+    // Échelle des barres : le leader fait la largeur pleine, tout le reste se
+    // lit par rapport à lui. Sans référence commune, une barre ne dit rien.
+    const tete = Math.max(1, ...b.rows.map(r => Number(r.sales) || 0));
+
     const rows = vue.map(r => {
         if(r.gap) return `<div class="lb-gap">•••</div>`;
-        const cls = [r.is_me ? 'me' : '', r.position === 1 ? 'p1' : '',
+        // Le doré ne va qu'à une vraie première place. Sans cette condition,
+        // un programme où personne n'a encore vendu couronnait tout le monde :
+        // à égalité à zéro, chacun est « 1er ».
+        const cls = [r.is_me ? 'me' : '',
+                     (r.position === 1 && !r.unranked) ? 'p1' : '',
                      r.unranked ? 'out' : ''].filter(Boolean).join(' ');
         // Sans vente, ni rang ni compteur : un tiret et « Pas encore classée ».
         // Afficher « 0 ventes » à côté des autres ne dit rien de plus et
@@ -1399,11 +1458,19 @@ function blockRank(){
         const val = r.unranked
             ? `<span class="lb-soon">Pas encore classé${r.is_me ? 'e' : ''}</span>`
             : `<span class="lb-n num">${fmt(r.sales)}<span class="lb-u">vente${r.sales > 1 ? 's' : ''}</span></span>`;
+        // La barre part à zéro et s'anime jusqu'à sa largeur au premier rendu :
+        // le tableau se remplit sous les yeux plutôt que d'apparaître figé.
+        const pct = r.unranked ? 0 : Math.max(5, Math.round((r.sales / tete) * 100));
         return `<div class="lb-r ${cls}">
             <span class="lb-pos num">${pos}</span>
-            <span class="lb-name">${esc(r.pseudo)}</span>
-            ${r.is_me ? `<span class="lb-me-tag">Toi</span>` : ''}
-            <span class="lb-sp"></span>
+            <span class="lb-av">${esc(lbInitiale(r.pseudo))}</span>
+            <div class="lb-mid">
+                <div class="lb-nrow">
+                    <span class="lb-name">${esc(r.pseudo)}</span>
+                    ${r.is_me ? `<span class="lb-me-tag">Toi</span>` : ''}
+                </div>
+                ${r.unranked ? '' : `<div class="lb-track"><i class="lb-bar" data-fill="${pct}"></i></div>`}
+            </div>
             ${val}
         </div>`;
     }).join('');
@@ -1860,6 +1927,13 @@ function bindDynamic(){
                 neuf.style.animation = 'none';
                 sec.replaceWith(neuf);
                 bindDynamic();
+                // Les barres du bloc reconstruit doivent être remplies elles
+                // aussi : animate() ne tourne qu'au rendu complet de l'écran.
+                requestAnimationFrame(()=>{
+                    neuf.querySelectorAll('[data-fill]').forEach(el=>{
+                        el.style.width = el.getAttribute('data-fill') + '%';
+                    });
+                });
             }
         };
     });
