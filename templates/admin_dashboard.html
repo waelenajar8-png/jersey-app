@@ -470,8 +470,21 @@ select.inp{cursor:pointer}
 .extname{flex:1 1 160px;min-width:0}
 .extnum{flex:0 0 90px;text-align:right;font-weight:700}
 .extunit{font-size:11.5px;color:var(--muted);font-weight:600;white-space:nowrap}
-.extage{flex:1 1 100%;font-size:11px;color:var(--muted);font-weight:600;padding-left:2px}
+.extage{flex:1 1 auto;font-size:11px;color:var(--muted);font-weight:600;padding-left:2px}
 .extage.bad{color:var(--danger)}
+.extage.warn{color:#9A6B00}
+.extlink{flex:0 0 auto;font-size:11px;font-weight:700;color:var(--accent);
+    margin-left:auto;text-decoration:none}
+.extlink:hover{text-decoration:underline}
+.extcalc{flex:1 1 100%;font-size:11.5px;color:var(--ink);font-weight:500;padding-left:2px}
+.extcalc b{font-weight:700}
+/* Bascule rythme / total : deux états exclusifs, pas deux boutons d'action. */
+.extseg{display:flex;flex:0 0 auto;border:1.5px solid var(--line);border-radius:var(--r-xs);
+    overflow:hidden;height:40px}
+.extseg button{padding:0 11px;font-size:11.5px;font-weight:700;color:var(--muted);
+    background:var(--surface);white-space:nowrap}
+.extseg button + button{border-left:1.5px solid var(--line)}
+.extseg button.on{background:var(--accent);color:#fff}
 .extrow.stale .extnum{border-color:var(--danger)}
 /* Code d'accès : le code lui-même porte la valeur, les actions restent en retrait. */
 .pinrow{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
@@ -590,7 +603,7 @@ select.inp{cursor:pointer}
                         <input type="text" id="q" placeholder="Rechercher" autocomplete="off">
                     </div>
                     <button class="btn" id="syncBtn" data-i="sync">Synchroniser</button>
-                    <button class="btn" id="extBtn" onclick="openExt()" data-i="trophy">Classement</button>
+                    <button class="btn" id="extBtn" onclick="openExt()" data-i="trophy">Hors boutique</button>
                     <button class="btn" id="importBtn" data-i="upload">Importer</button>
                     <button class="btn" id="exportBtn" data-i="download">Export</button>
                     <button class="btn primary" id="addBtn" data-i="plus">Ajouter</button>
@@ -1010,16 +1023,22 @@ select.inp{cursor:pointer}
 <div class="scrim" id="extScrim">
     <div class="sheet" style="max-width:620px" role="dialog" aria-modal="true">
         <div class="sheet-head">
-            <div class="sheet-title">Classement — hors programme<small>Vendeurs suivis à la main, sans fiche ni colis</small></div>
+            <div class="sheet-title">Vendeurs hors boutique<small>Dans le programme, payés au même barème, sans colis à gérer</small></div>
             <button class="x" onclick="closeExt()" aria-label="Fermer" data-i="x"></button>
         </div>
         <div class="sheet-body">
-            <div class="hint" style="margin-bottom:12px">
-                Le nombre saisi est celui que <b>toutes tes ambassadrices verront</b>, et
-                c'est à lui qu'elles se compareront : mets leur vrai total de ventes
-                <b>sur les 30 derniers jours</b>. Un chiffre non remis à jour depuis plus
-                de 30 jours sort du classement tout seul — il ne décrit plus la bonne
-                fenêtre.
+            <div class="hint" style="margin-bottom:14px">
+                Ils font partie du programme et touchent la commission au <b>même barème</b>,
+                mais vendent hors boutique : rien à synchroniser, tu renseignes leur volume ici.
+                Ils n'ont ni colis, ni adresse, ni maillots, ni missions à gérer, et reçoivent
+                un espace allégé (gains, objectif, classement).<br><br>
+                <b>Rythme</b> — son nombre de ventes par jour ; tout le reste s'en déduit et
+                reste à jour sans que tu y touches. <b>Total</b> — tu tapes toi-même son total
+                sur 30 jours ; c'est le mode de correction de fin de mois.<br><br>
+                Ce volume sert à deux choses : sa place au classement, que toutes tes
+                ambassadrices voient, et <b>sa commission</b>. Il doit décrire des ventes
+                réelles. Repasse une fois par mois corriger l'écart — au-delà de 45 jours
+                sans passage, il sort du classement tout seul.
             </div>
             <div id="extList"></div>
             <button class="btn sm" onclick="extAdd()" data-i="plus" style="margin-top:12px">Ajouter quelqu'un</button>
@@ -1109,7 +1128,7 @@ function urgency(inf){
 
 function normalize(i){
     const now = new Date().toISOString();
-    return {
+    const base = {
         id: i.id || genId(),
         pseudo: i.pseudo||'', profil: i.profil||'', whatsapp: i.whatsapp||'', platform: i.platform||'',
         platform_list: Array.isArray(i.platform_list) ? i.platform_list
@@ -1131,8 +1150,21 @@ function normalize(i){
         jerseys_locked: !!i.jerseys_locked,
         _espace_url: i._espace_url||'', program_start_date: i.program_start_date||'',
         espace_pin: i.espace_pin||'',
+        // Vendeur hors boutique : volume renseigné à la main, pas de Shopify.
+        // Les dates (sales_start, sales_checked_at) sont posées par le serveur
+        // et ne transitent pas par ici — les renvoyer permettrait de faire
+        // passer un chiffre périmé pour un chiffre confirmé.
         last_synced_at: i.last_synced_at||''
     };
+    // Champs propres aux vendeurs hors boutique : ajoutés seulement pour eux,
+    // pour ne pas semer des `sales_rate: 0` sur toutes les fiches.
+    if(i.light){
+        base.light = true;
+        base.sales_mode   = i.sales_mode || 'rythme';
+        base.sales_rate   = Number(i.sales_rate) || 0;
+        base.sales_manual = Number(i.sales_manual) || 0;
+    }
+    return base;
 }
 const find = id => influenceurs.find(i => i.id === id);
 
@@ -1240,34 +1272,41 @@ function cardHtml(inf, rank){
     </article>`;
 }
 
-/* ── Classement : participants hors programme ───────────────────────────
-   Des vendeurs qu'on ne veut pas gérer comme des ambassadeurs — pas de fiche,
-   pas de colis, pas d'espace. Juste un nom et un nombre de ventes, saisis à
-   la main, qui les font apparaître au classement comme les autres.
+/* ── Vendeurs hors boutique ─────────────────────────────────────────────
+   Des vendeurs qui font partie du programme et touchent la commission au même
+   barème, mais qui vendent en direct : rien à interroger côté Shopify, donc
+   leur volume est renseigné ici.
 
-   Le chiffre n'est jamais généré ni extrapolé : ce que l'admin tape est ce
-   que tout le monde lit. C'est une donnée que les ambassadrices utilisent
-   pour se situer, elle doit décrire des ventes réelles. */
-let EXT = [];
+   Ce sont de vrais influenceurs de la liste (light: true), pas une liste à
+   part : c'est ce qui leur donne la commission, le ledger, le classement et
+   leur espace sans une ligne de code en double. « Allégé » ne porte que sur
+   la logistique — ni colis, ni adresse, ni maillots, ni missions.
+
+   Le volume n'est jamais généré : soit un rythme journalier constaté, soit un
+   total corrigé à la main. Les deux se recalculent, aucun ne se tire au sort. */
+let EXT = [], EXTMETA = {};
 
 async function openExt(){
     document.getElementById('extScrim').classList.add('open');
-    document.getElementById('extList').innerHTML =
-        `<div class="hint">Chargement…</div>`;
+    document.getElementById('extList').innerHTML = `<div class="hint">Chargement…</div>`;
     try{
-        const r = await fetch('/api/classement/externes');
+        const r = await fetch('/api/classement/light');
         const d = await r.json();
         EXT = (d.entries || []).map(e => ({...e}));
+        EXTMETA = d;
     }catch(e){
-        EXT = [];
-        toast("Chargement du classement impossible.", true);
+        EXT = []; EXTMETA = {};
+        toast("Chargement impossible.", true);
     }
-    if(!EXT.length) extAdd(); else renderExt();
+    renderExt();
+    if(!EXT.length) extAdd();
 }
 function closeExt(){ document.getElementById('extScrim').classList.remove('open'); }
 
 function extAdd(){
-    EXT.push({id:'', pseudo:'', sales:0, age_days:null, stale:false});
+    EXT.push({id:'', pseudo:'', mode:'rythme', rate:3, manual:0, shown:0,
+              ramp:null, period:null, commission:null,
+              age_days:null, warn:false, stale:false});
     renderExt();
     setTimeout(()=>{
         const f = document.querySelectorAll('#extList .extname');
@@ -1275,7 +1314,18 @@ function extAdd(){
     }, 40);
 }
 function extDel(i){ EXT.splice(i,1); renderExt(); }
-function extSet(i, k, v){ if(EXT[i]) EXT[i][k] = v; }
+function extSet(i, k, v){ if(EXT[i]){ EXT[i][k] = v; if(k!=='pseudo') renderExt(); } }
+function extMode(i, m){ if(EXT[i] && EXT[i].mode !== m){ EXT[i].mode = m; renderExt(); } }
+
+/* Ce que le classement affichera, calculé ici comme côté serveur : l'admin ne
+   doit pas avoir à deviner ce que « 3 par jour » donne. */
+function extShown(e){
+    const rate = e.mode === 'rythme'
+        ? Math.max(0, Math.min(200, parseFloat(e.rate) || 0))
+        : Math.max(0, Math.min(100000, parseInt(e.manual,10) || 0)) / 30;
+    const days = e.ramp ? e.ramp.day : (e.id ? 30 : 0);
+    return Math.round(rate * days);
+}
 
 function renderExt(){
     const el = document.getElementById('extList');
@@ -1284,42 +1334,98 @@ function renderExt(){
         return;
     }
     el.innerHTML = EXT.map((e,i) => {
-        // L'âge du chiffre est la seule chose que l'admin doit surveiller :
-        // affiché en clair, et signalé net quand l'entrée est déjà sortie.
-        const age = e.age_days === null || e.age_days === undefined ? ''
-                  : e.stale ? `<span class="extage bad">Périmé — ${e.age_days} j, hors classement</span>`
-                  : e.age_days === 0 ? `<span class="extage">Mis à jour aujourd'hui</span>`
-                  : `<span class="extage">Il y a ${e.age_days} j</span>`;
+        const rythme = e.mode === 'rythme';
+        const shown  = extShown(e);
+        const plein  = Math.round((rythme
+            ? (parseFloat(e.rate)||0)
+            : (parseInt(e.manual,10)||0)/30) * 30);
+
+        const champ = rythme
+            ? `<input class="inp extnum num" type="number" min="0" max="200" step="0.5"
+                      value="${Number(e.rate)||0}" oninput="extSet(${i},'rate',this.value)">
+               <span class="extunit">ventes / jour</span>`
+            : `<input class="inp extnum num" type="number" min="0" max="100000"
+                      value="${Number(e.manual)||0}" oninput="extSet(${i},'manual',this.value)">
+               <span class="extunit">ventes / 30 j</span>`;
+
+        // Ce que verront les ambassadrices, où en est la montée, et surtout ce
+        // que tu lui dois sur sa période en cours : c'est de l'argent, il doit
+        // être visible au moment où on règle le chiffre.
+        let calc = '';
+        if(!e.id){
+            calc = `<span class="extcalc">Démarre à 0 et montera jusqu'à <b>${plein}</b> ventes en 30 jours</span>`;
+        }else{
+            const r = e.ramp;
+            const com = e.commission
+                ? ` · commission période : <b>${euro(e.commission.amount)}</b>`
+                : '';
+            const per = e.period ? ` · ${e.period.sales} vente${e.period.sales>1?'s':''} sur sa période` : '';
+            calc = r
+                ? `<span class="extcalc">Affiché : <b>${shown}</b> · en montée, jour ${r.day}/${r.of} → <b>${plein}</b> au régime${per}${com}</span>`
+                : `<span class="extcalc">Affiché : <b>${shown}</b> ventes sur 30 j${per}${com}</span>`;
+        }
+
+        const age = (e.age_days === null || e.age_days === undefined) ? ''
+                  : e.stale ? `<span class="extage bad">Non vérifié depuis ${e.age_days} j — sorti du classement</span>`
+                  : e.warn  ? `<span class="extage warn">À vérifier — ${e.age_days} j</span>`
+                  : e.age_days === 0 ? `<span class="extage">Confirmé aujourd'hui</span>`
+                  : `<span class="extage">Confirmé il y a ${e.age_days} j</span>`;
+
+        const lien = e.espace_url
+            ? `<a class="extlink" href="${esc(e.espace_url)}" target="_blank" rel="noopener">Son espace</a>` : '';
+
         return `<div class="extrow${e.stale?' stale':''}">
             <input class="inp extname" value="${esc(e.pseudo)}" placeholder="Nom ou pseudo"
                    maxlength="40" autocomplete="off"
                    oninput="extSet(${i},'pseudo',this.value)">
-            <input class="inp extnum num" type="number" min="0" max="100000" value="${Number(e.sales)||0}"
-                   oninput="extSet(${i},'sales',this.value)">
-            <span class="extunit">ventes / 30 j</span>
+            <div class="extseg">
+                <button class="${rythme?'on':''}" onclick="extMode(${i},'rythme')">Rythme</button>
+                <button class="${rythme?'':'on'}" onclick="extMode(${i},'fixe')">Total</button>
+            </div>
+            ${champ}
             <button class="icon-btn" onclick="extDel(${i})" title="Retirer" data-i="trash"></button>
-            ${age}
+            ${calc}${age}${lien}
         </div>`;
     }).join('');
     paintIcons(el);
 }
 
+/* L'enregistrement passe par la liste des influenceurs, pas par une route à
+   part : ces vendeurs SONT dans le programme. On remplace le sous-ensemble
+   light et on laisse doSave() faire le reste — versioning et fusion inclus. */
 async function extSave(){
-    const rows = EXT
-        .map(e => ({id:e.id||'', pseudo:(e.pseudo||'').trim(),
-                    sales: Math.max(0, Math.min(100000, parseInt(e.sales,10)||0))}))
-        .filter(e => e.pseudo);
+    const rows = EXT.filter(e => (e.pseudo||'').trim());
+    const byId = {};
+    influenceurs.forEach(i => { if(i.id) byId[i.id] = i; });
+
+    const kept = new Set();
+    rows.forEach(e => {
+        const champs = {
+            pseudo: (e.pseudo||'').trim(),
+            light: true,
+            sales_mode: e.mode === 'fixe' ? 'fixe' : 'rythme',
+            sales_rate: Math.max(0, Math.min(200, parseFloat(e.rate)||0)),
+            sales_manual: Math.max(0, Math.min(100000, parseInt(e.manual,10)||0)),
+        };
+        const exist = e.id && byId[e.id];
+        if(exist){ Object.assign(exist, champs); kept.add(e.id); }
+        else {
+            const neuf = normalize({...champs, status: 0});
+            influenceurs.push(neuf);
+            kept.add(neuf.id);
+        }
+    });
+    // Retirés du panneau = retirés du programme. Seuls les light sont concernés :
+    // une ambassadrice ne peut pas disparaître par ce chemin.
+    influenceurs = influenceurs.filter(i => !i.light || kept.has(i.id));
+
     const btn = document.getElementById('extSave');
     btn.disabled = true;
     try{
-        const r = await fetch('/api/classement/externes', {
-            method:'POST', headers:{'Content-Type':'application/json'},
-            body: JSON.stringify({entries: rows}),
-        });
-        const d = await r.json();
-        if(!d.success) throw new Error(d.error || 'refus');
-        toast(`${d.count} participant${d.count>1?'s':''} hors programme enregistré${d.count>1?'s':''}.`);
+        await doSave();
+        toast(`${rows.length} vendeur${rows.length>1?'s':''} hors boutique enregistré${rows.length>1?'s':''}.`);
         closeExt();
+        await load();
     }catch(e){
         toast("Enregistrement impossible.", true);
     }finally{
