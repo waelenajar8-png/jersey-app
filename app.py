@@ -4837,8 +4837,11 @@ def _leaderboard(inf, influenceurs=None, now=None):
     resteraient dérivables l'un de l'autre — c'est exactement ce que le
     programme s'interdit d'exposer.
 
-    Retourne None quand le classement n'aurait rien à dire : moins de trois
-    participants, ou aucune vente sur la fenêtre pour l'ensemble du programme.
+    Ne retourne jamais None quand l'influenceur existe : quand le classement
+    n'a pas encore de sens (moins de trois participants, ou aucune vente sur
+    la fenêtre), il repart avec `empty` et un motif. Disparaître purement et
+    simplement de l'écran donnerait l'impression d'une fonction cassée — mieux
+    vaut dire ce qu'on attend pour l'afficher.
     """
     try:
         now = now or datetime.now(timezone.utc)
@@ -4887,9 +4890,11 @@ def _leaderboard(inf, influenceurs=None, now=None):
             })
 
         if len(pool) < LEADERBOARD_MIN_POOL:
-            return None
+            return {"empty": True, "reason": "pool",
+                    "have": len(pool), "need": LEADERBOARD_MIN_POOL, "window": 30}
         if not any(x["sales"] > 0 for x in pool):
-            return None
+            return {"empty": True, "reason": "sales",
+                    "have": len(pool), "need": LEADERBOARD_MIN_POOL, "window": 30}
 
         # Tri : ventes décroissantes, puis pseudo, pour que l'ordre des
         # ex æquo soit stable d'un chargement à l'autre.
@@ -4910,7 +4915,11 @@ def _leaderboard(inf, influenceurs=None, now=None):
 
         me = next((r for r in rows if r["is_me"]), None)
         if not me:
-            return None
+            # Consultation par quelqu'un qui ne participe pas (fiche sans code
+            # promo, pas encore de volume) : on annonce le classement sans le
+            # dévoiler, il n'y a pas sa place dedans à montrer.
+            return {"empty": True, "reason": "not_in",
+                    "have": len(rows), "need": LEADERBOARD_MIN_POOL, "window": 30}
 
         top = rows[:LEADERBOARD_TOP]
         # Hors du top : on ajoute sa propre ligne en dessous, avec un trou
@@ -5229,7 +5238,7 @@ def _espace_payload(inf):
         "rank": ({
             "position": _board["position"], "total": _board["total"],
             "sales":    _board["sales"],    "podium": _board["podium"],
-        } if _board else None),
+        } if (_board and not _board.get("empty")) else None),
         "leaderboard": _board,
         # État du code d'accès : l'interface sait ainsi s'il faut le demander
         # avant de laisser modifier l'adresse de livraison.
