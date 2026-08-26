@@ -162,7 +162,18 @@ h1{font-size:27px;font-weight:800;letter-spacing:-.035em;line-height:1.1}
 .hb-bar b{font-weight:800;color:var(--ink);font-variant-numeric:tabular-nums}
 .hb-bar .d{width:3px;height:3px;border-radius:50%;background:var(--line-2)}
 .hb-note{color:var(--muted);font-weight:500}
-.hb-bar .btn{margin-left:auto}
+.hb-bar .btn{margin-left:0}
+.hb-eye{margin-left:auto;width:30px;height:30px;flex:none;border-radius:8px;
+    display:inline-flex;align-items:center;justify-content:center;
+    border:1px solid transparent;background:none;color:var(--muted);
+    transition:background .14s ease,color .14s ease,border-color .14s ease}
+.hb-eye:hover{background:var(--surface-2);border-color:var(--line);color:var(--ink-2)}
+.hb-eye svg{width:16px;height:16px}
+.hb-bar.masked .hb-eye{color:var(--accent)}
+/* Masqué : seuls les chiffres se brouillent. Le libellé reste lisible, sinon
+   on ne sait plus ce que la ligne cachait ni où recliquer. */
+.hb-v{transition:filter .18s ease,opacity .18s ease}
+.hb-bar.masked .hb-v{filter:blur(5px);opacity:.6;user-select:none}
 .filters{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:20px}
 .chip{
     display:inline-flex;align-items:center;gap:7px;height:32px;padding:0 13px;border-radius:100px;
@@ -1119,6 +1130,8 @@ const I = {
   sync:'<path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>',
   plus:'<path d="M12 5v14M5 12h14"/>',
   trophy:'<path d="M6 9H4.5a2.5 2.5 0 010-5H6M18 9h1.5a2.5 2.5 0 000-5H18M4 22h16M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22M18 2H6v7a6 6 0 0012 0V2z"/>',
+  eye:'<path d="M1.5 12S5 5 12 5s10.5 7 10.5 7-3.5 7-10.5 7S1.5 12 1.5 12z"/><circle cx="12" cy="12" r="3"/>',
+  eyeOff:'<path d="M9.9 5.2A9.8 9.8 0 0112 5c7 0 10.5 7 10.5 7a17.6 17.6 0 01-3.4 4.2M6.6 6.6A17.4 17.4 0 001.5 12S5 19 12 19a9.7 9.7 0 004.2-.9M3 3l18 18"/><path d="M9.9 9.9a3 3 0 004.2 4.2"/>',
   x:'<path d="M18 6L6 18M6 6l12 12"/>',
   check:'<path d="M20 6L9 17l-5-5"/>',
   send:'<path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/>',
@@ -1277,16 +1290,50 @@ function renderAll(){
         el.hidden = !hb.length;
         if(hb.length){
             const v30 = hb.reduce((s,i)=>s+(i.stats_sales_30d||0),0);
-            el.innerHTML = `${ico('trophy')}<span><b>${hb.length}</b> vendeur${hb.length>1?'s':''}
-                hors boutique</span><span class="d"></span><span><b>${v30}</b> vente${v30>1?'s':''}
-                sur 30 j au classement</span><span class="d"></span>
+            // Les chiffres sont masquables d'un clic : ce bandeau dit que le
+            // classement est alimenté par des vendeurs qu'on ajoute à la main,
+            // et ce n'est pas une information à laisser traîner à l'écran
+            // quand on montre la console à quelqu'un.
+            el.innerHTML = `${ico('trophy')}
+                <span class="hb-v"><b>${hb.length}</b> vendeur${hb.length>1?'s':''} hors boutique</span>
+                <span class="d"></span>
+                <span class="hb-v"><b>${v30}</b> vente${v30>1?'s':''} sur 30 j au classement</span>
+                <span class="d"></span>
                 <span class="hb-note">comptés au classement, pas dans les chiffres ci-dessus</span>
+                <button class="hb-eye" id="hbEye" type="button" onclick="hbToggle()"
+                        title="Masquer ces chiffres" aria-pressed="false"></button>
                 <button class="btn ghost sm" onclick="openExt();setExtTab('light')">Gérer</button>`;
+            el.classList.toggle('masked', HB_MASKED);
             paintIcons(el);
+            hbPaintEye();
         }
     }
     renderFilters();
     renderGrid();
+}
+
+/* Masquage des chiffres hors boutique. L'état survit au rechargement : si on
+   les a cachés pour montrer son écran, ils ne doivent pas réapparaître au
+   premier F5. Le stockage local peut être indisponible (navigation privée,
+   réglages) — dans ce cas on repart simplement de « visible ». */
+let HB_MASKED = (() => {
+    try { return localStorage.getItem('vk_hb_masked') === '1'; } catch(e){ return false; }
+})();
+
+function hbPaintEye(){
+    const b = document.getElementById('hbEye');
+    if(!b) return;
+    b.innerHTML = ico(HB_MASKED ? 'eyeOff' : 'eye');
+    b.title = HB_MASKED ? 'Afficher ces chiffres' : 'Masquer ces chiffres';
+    b.setAttribute('aria-pressed', HB_MASKED ? 'true' : 'false');
+}
+
+function hbToggle(){
+    HB_MASKED = !HB_MASKED;
+    try { localStorage.setItem('vk_hb_masked', HB_MASKED ? '1' : '0'); } catch(e){}
+    const el = document.getElementById('boardHB');
+    if(el) el.classList.toggle('masked', HB_MASKED);
+    hbPaintEye();
 }
 
 function renderFilters(){
