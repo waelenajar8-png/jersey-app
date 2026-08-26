@@ -4958,6 +4958,22 @@ def _migrate_external_ranked(influenceurs):
         return False
 
 
+def _rank_label(x):
+    """
+    Ce qui remplace le pseudo d'un tiers au classement : son palier.
+
+    Le palier est une vraie information — il dit où en est la personne dans le
+    programme — sans permettre de la reconnaître. Il donne aussi au tableau une
+    raison d'exister au-delà du chiffre : voir « VIP » en tête rend le palier
+    désirable, ce qu'un simple numéro ne fait pas.
+    """
+    try:
+        idx, _next, _pct, _det = _compute_tier_progress(x.get("stats") or {})
+        return f"Ambassadrice · {INFLUENCER_TIERS[idx]['name']}"
+    except Exception:
+        return "Ambassadrice"
+
+
 def _leaderboard(inf, influenceurs=None, now=None):
     """
     Classement des influenceurs sur les 30 derniers jours glissants.
@@ -5028,10 +5044,22 @@ def _leaderboard(inf, influenceurs=None, now=None):
                     me_out = {"pseudo": name, "reason": "stale"}
                 continue
 
+            # ── Anonymat ──
+            # Le pseudo des autres ne sort PAS d'ici. Le masquer à l'affichage
+            # ne servirait à rien : il resterait dans la réponse de l'API, donc
+            # lisible par n'importe qui sait ouvrir les outils du navigateur.
+            # Ce que voit une influenceuse, c'est le palier de l'autre — vrai,
+            # utile, et qui ne désigne personne.
+            #
+            # Une initiale ou les premières lettres avaient été envisagées : sur
+            # un programme d'une dizaine de personnes qui se suivent entre
+            # elles, elles identifient presque à coup sûr. Un demi-anonymat qui
+            # se décode est pire que pas d'anonymat du tout.
             pool.append({
-                "pseudo": name,
+                "pseudo": name if mine else _rank_label(x),
                 "sales":  _rank_sales(x),
                 "is_me":  mine,
+                "anon":   not mine,
             })
 
         if (len(pool) + (1 if me_out else 0)) < LEADERBOARD_MIN_POOL:
@@ -5059,6 +5087,7 @@ def _leaderboard(inf, influenceurs=None, now=None):
                 "pseudo":   x["pseudo"],
                 "sales":    n,
                 "is_me":    x["is_me"],
+                "anon":     x.get("anon", False),
                 # Zéro vente : on montre la ligne, mais pas un rang. Être
                 # « 14ᵉ » quand huit personnes sont à égalité à zéro ne veut
                 # rien dire, et sonne comme une sanction plutôt qu'un départ.
