@@ -150,9 +150,14 @@ h1{font-size:27px;font-weight:800;letter-spacing:-.035em;line-height:1.1}
 /* ── Filtres ─────────────────────────────────────────────────────────── */
 /* Ligne des vendeurs hors boutique : à part, en retrait, jamais additionnée
    aux chiffres de la boutique juste au-dessus. */
-.hb-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:12px;
+.hb-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+    margin-top:12px;margin-bottom:22px;
     padding:11px 16px;border:1px dashed var(--line-2);border-radius:12px;
     font-size:12.5px;font-weight:600;color:var(--ink-2);background:var(--surface)}
+/* Ce bandeau est une note de bas de tableau, pas un bloc autonome : il se colle
+   aux chiffres qu'il commente, et l'air se met en dessous, avant les filtres.
+   Il n'avait aucune marge basse et se retrouvait soudé aux puces de statut. */
+.board + .hb-bar{margin-top:-10px}
 .hb-bar svg{width:15px;height:15px;color:var(--muted);flex:none}
 .hb-bar b{font-weight:800;color:var(--ink);font-variant-numeric:tabular-nums}
 .hb-bar .d{width:3px;height:3px;border-radius:50%;background:var(--line-2)}
