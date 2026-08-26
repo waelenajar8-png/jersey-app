@@ -543,6 +543,9 @@ input,select{font-family:inherit}
 .lb-r.me .lb-pos{color:var(--accent)}
 .lb-r.me .lb-name,.lb-r.me .lb-n{color:var(--accent-2)}
 .lb-sp{flex:1 1 auto}
+.lb-soon{font-size:12.5px;font-weight:600;color:var(--faint);flex-shrink:0;letter-spacing:-.01em}
+.lb-r.out .lb-pos{color:var(--line-2)}
+.lb-r.me.out .lb-soon{color:var(--accent)}
 .lb-me-tag{font-size:9px;letter-spacing:.16em;text-transform:uppercase;font-weight:700;
     color:var(--accent);flex-shrink:0}
 /* Le trou entre le top et sa propre ligne : montrer la marche plutôt que
@@ -1328,23 +1331,33 @@ function blockRank(){
 
     const rows = b.rows.map(r => {
         if(r.gap) return `<div class="lb-gap">•••</div>`;
-        const cls = [r.is_me ? 'me' : '', r.position === 1 ? 'p1' : ''].filter(Boolean).join(' ');
+        const cls = [r.is_me ? 'me' : '', r.position === 1 ? 'p1' : '',
+                     r.unranked ? 'out' : ''].filter(Boolean).join(' ');
+        // Sans vente, ni rang ni compteur : un tiret et « Pas encore classée ».
+        // Afficher « 0 ventes » à côté des autres ne dit rien de plus et
+        // ressemble à un constat d'échec au lieu d'un point de départ.
+        const pos = r.unranked ? '–' : r.position;
+        const val = r.unranked
+            ? `<span class="lb-soon">Pas encore classé${r.is_me ? 'e' : ''}</span>`
+            : `<span class="lb-n num">${fmt(r.sales)}<span class="lb-u">vente${r.sales > 1 ? 's' : ''}</span></span>`;
         return `<div class="lb-r ${cls}">
-            <span class="lb-pos num">${r.position}</span>
+            <span class="lb-pos num">${pos}</span>
             <span class="lb-name">${esc(r.pseudo)}</span>
             ${r.is_me ? `<span class="lb-me-tag">Toi</span>` : ''}
             <span class="lb-sp"></span>
-            <span class="lb-n num">${fmt(r.sales)}<span class="lb-u">vente${r.sales > 1 ? 's' : ''}</span></span>
+            ${val}
         </div>`;
     }).join('');
 
     // Le sous-titre dit la place, pas la performance : « 4e sur 12 » se lit
-    // sans avoir à compter les lignes.
-    const ord = b.position === 1 ? '1ʳᵉ place' : b.position + 'ᵉ place';
+    // sans avoir à compter les lignes. Sans vente, il dit ce qui l'attend.
+    const titre = (b.position && !b.unranked)
+        ? `Ta ${b.position === 1 ? '1ʳᵉ place' : b.position + 'ᵉ place'} sur ${fmt(b.total)}`
+        : 'Ta première vente te fait entrer';
 
     return `<section class="sec rise" style="animation-delay:.21s">
         <div class="sec-k">Classement</div>
-        <div class="sec-t">Ta ${esc(ord)} sur ${fmt(b.total)}</div>
+        <div class="sec-t">${esc(titre)}</div>
         <div class="lb">${rows}</div>
         <div class="lb-foot">Sur les ventes des 30 derniers jours, la même fenêtre pour tout le monde.</div>
     </section>`;
