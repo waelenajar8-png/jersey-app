@@ -3627,13 +3627,22 @@ def _stamp_light_sellers(stored, incoming):
         )
         inf["sales_checked_at"] = (old.get("sales_checked_at") or now_iso) \
                                   if (old and unchanged) else now_iso
+        # `sales_ramp` dit si ce vendeur doit monter en régime ou s'il y est
+        # déjà. Par défaut il y est : on enregistre des gens qui vendent depuis
+        # des mois, pas des débutants. Se tromper de défaut dans ce sens-là est
+        # sans conséquence visible ; dans l'autre, le classement reste vide et
+        # rien ne l'explique.
+        ramp = "new" if inf.get("sales_ramp") == "new" else "installed"
+        inf["sales_ramp"] = ramp
+        installed_start = _period_key(now - timedelta(days=RANK_WINDOW_DAYS))
         keep_start = bool(old.get("sales_start")) and unchanged
-        inf["sales_start"] = old.get("sales_start") if keep_start else today
-        # Sa période de rémunération démarre le jour de son entrée, comme pour
-        # tout le monde : sans ancrage, le barème retomberait sur le mois
-        # calendaire et il serait payé sur une période qui n'est pas la sienne.
+        inf["sales_start"] = old.get("sales_start") if keep_start else (
+            today if ramp == "new" else installed_start)
+        # Sa période de rémunération démarre le jour de son entrée dans le
+        # programme — pas le jour où il a commencé à vendre ailleurs. On ne
+        # paie pas rétroactivement des ventes faites avant de le rejoindre.
         if not inf.get("program_start_date"):
-            inf["program_start_date"] = inf["sales_start"]
+            inf["program_start_date"] = old.get("program_start_date") or today
 
 
 def _merge_influenceurs(stored, incoming):
@@ -4672,15 +4681,26 @@ def _light_daily_rate(inf):
 
 def _light_active_days(inf, since, until):
     """
-    Jours réellement travaillés entre deux bornes.
+    Jours réellement vendus entre deux bornes.
 
-    Un vendeur ajouté il y a six jours n'a pas un mois de ventes derrière lui :
-    l'afficher à plein régime le placerait devant des ambassadrices qui, elles,
-    ont réellement produit ce chiffre. La date de départ borne donc toujours
-    l'intervalle par la gauche.
+    `sales_start` dit depuis quand ce vendeur produit à ce rythme — ce qui
+    n'est pas la même chose que depuis quand il figure dans l'outil. Les deux
+    cas existent et ne doivent surtout pas être confondus :
+
+      • un vendeur déjà installé, qui tourne à son rythme depuis des mois et
+        qu'on ne fait qu'enregistrer : son volume est immédiatement celui de
+        son régime, il n'y a rien à faire monter ;
+      • un vendeur qui démarre vraiment aujourd'hui : le créditer d'un mois de
+        ventes le placerait devant des ambassadrices qui, elles, ont réellement
+        produit ce chiffre.
+
+    C'est `sales_start` qui tranche, et la console la pose explicitement à
+    l'ajout. Sans date, on suppose le régime établi : c'est le cas de loin le
+    plus fréquent, et supposer l'inverse laisse un classement vide sans que
+    personne comprenne pourquoi.
     """
-    start = _parse_day(inf.get("sales_start")) or since
-    if start < since:
+    start = _parse_day(inf.get("sales_start"))
+    if start is None or start < since:
         start = since
     if until <= start:
         return 0
@@ -5094,6 +5114,7 @@ def api_light_sellers_get():
             "rate":       float(inf.get("sales_rate") or 0),
             "manual":     _safe_int(inf.get("sales_manual", 0)),
             "start":      inf.get("sales_start") or "",
+            "ramp_mode":  "new" if inf.get("sales_ramp") == "new" else "installed",
             "shown":      st["sales_30d"],
             "ramp":       ramp,
             "period":     {"sales": st["sales_month"],
