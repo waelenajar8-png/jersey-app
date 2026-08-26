@@ -5015,11 +5015,15 @@ def _rank_label(nom, seed=""):
     if not n:
         return "Participante", ""
 
-    # Deux lettres visibles sur un pseudo court, ce n'est plus un masquage :
-    # « Lo » se donnerait en entier, « Abcd » aux trois quarts. Ce qu'on montre
-    # se réduit donc avec la longueur, jusqu'à ne rien montrer du tout, et il
-    # reste toujours au moins deux caractères brouillés.
-    garde = RANK_MASK_KEEP if len(n) >= 5 else (1 if len(n) == 4 else 0)
+    # Toujours deux lettres visibles, quelle que soit la longueur : une ligne
+    # sans aucune lettre ne se lit plus comme un pseudo.
+    #
+    # Sur un pseudo très court, ces deux lettres peuvent le couvrir en entier —
+    # mais la suite brouillée fait toujours au moins deux caractères, si bien
+    # qu'on ne peut pas savoir si ce qu'on lit est le début d'un nom long ou
+    # un nom court en entier. C'est cette ambiguïté qui protège, pas la
+    # troncature.
+    garde = min(RANK_MASK_KEEP, len(n))
     reste = max(2, min(RANK_MASK_MAX, len(n) - garde))
     visible = n[:garde]
 
