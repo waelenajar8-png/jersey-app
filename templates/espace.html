@@ -210,8 +210,6 @@ input,select{font-family:inherit}
    sauf sur le podium, réellement tenu, où l'accent de marque le signale. */
 /* Sur l'aplat bleu, le podium se signale en blanc plein — l'accent de
    marque y serait invisible. */
-.rank{color:inherit}
-.rank-top{color:#fff}
 /* — Code d'accès — */
 .pin-back{position:fixed;inset:0;z-index:200;background:rgba(11,16,32,.42);
     display:grid;place-items:center;padding:20px;animation:pinIn .18s ease}
@@ -524,6 +522,38 @@ input,select{font-family:inherit}
     color:var(--muted);font-weight:500;flex-wrap:wrap}
 .promo-meta b{color:var(--ink);font-weight:700}
 .promo-meta .d{width:3px;height:3px;border-radius:50%;background:var(--line-2)}
+/* — Classement — La règle « un seul aplat fort par écran » tient : l'aplat de
+     l'accueil reste le bloc de gains. Ici, une seule ligne est colorée, la
+     sienne. C'est ce qui rend le tableau lisible d'un coup d'œil : on ne
+     cherche pas son nom, on voit sa ligne. */
+.lb{background:var(--surface);border-radius:18px;overflow:hidden;margin-top:12px}
+.lb-r{display:flex;align-items:center;gap:14px;padding:14px 20px;
+    border-top:1px solid var(--line)}
+.lb-r:first-child{border-top:0}
+.lb-pos{width:26px;flex-shrink:0;font-size:14px;font-weight:700;color:var(--faint);
+    font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.lb-r.p1 .lb-pos{color:var(--gold)}
+.lb-name{flex:0 1 auto;min-width:0;font-size:14.5px;font-weight:600;letter-spacing:-.02em;
+    color:var(--ink-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lb-n{font-size:14.5px;font-weight:700;color:var(--ink);font-variant-numeric:tabular-nums;
+    letter-spacing:-.02em;flex-shrink:0}
+.lb-u{font-size:12.5px;font-weight:500;color:var(--muted);margin-left:4px}
+/* Ma ligne : l'accent, et lui seul. */
+.lb-r.me{background:var(--accent-soft)}
+.lb-r.me .lb-pos{color:var(--accent)}
+.lb-r.me .lb-name,.lb-r.me .lb-n{color:var(--accent-2)}
+.lb-sp{flex:1 1 auto}
+.lb-me-tag{font-size:9px;letter-spacing:.16em;text-transform:uppercase;font-weight:700;
+    color:var(--accent);flex-shrink:0}
+/* Le trou entre le top et sa propre ligne : montrer la marche plutôt que
+   faire croire au voisinage. */
+.lb-gap{display:flex;justify-content:center;padding:7px 0;border-top:1px solid var(--line);
+    color:var(--line-2);font-size:13px;letter-spacing:.3em;line-height:1}
+.lb-foot{font-size:12.5px;color:var(--muted);font-weight:500;margin-top:12px;line-height:1.55}
+@media(max-width:860px){
+    .lb-r{padding:13px 16px;gap:11px}
+    .lb-name{font-size:14px}
+}
 /* — Évolution : vide tant qu'il n'y a pas deux mois d'historique — */
 .chart-empty{border:1px dashed var(--line-2);border-radius:18px;padding:34px 24px;text-align:center}
 .chart-empty-t{font-size:14.5px;font-weight:600}
@@ -968,21 +998,42 @@ async function load(){
     }
 }
 
+/* Vendeur hors boutique : il n'a ni colis, ni maillots, ni missions à
+   accomplir. Les onglets correspondants ne sont pas grisés mais retirés —
+   un onglet vide donne l'impression d'un espace incomplet, pas d'un espace
+   fait pour lui. Restent ses gains, son objectif et son classement. */
+const LIGHT_HIDDEN = ['missions','colis','profil','contenus'];
+function isLight(){ return !!(D && D.influencer && D.influencer.light); }
+
+function applyLight(){
+    if(!isLight()) return;
+    document.querySelectorAll('[data-tab]').forEach(b=>{
+        if(LIGHT_HIDDEN.includes(b.getAttribute('data-tab'))) b.remove();
+    });
+    // Les libellés de groupe du menu latéral n'ont plus rien à annoncer.
+    document.querySelectorAll('.nav-group').forEach(g=>{
+        if(!g.querySelector('.nav-item')) g.remove();
+    });
+    if(LIGHT_HIDDEN.includes(TAB)) TAB = 'home';
+}
+
 function paintChrome(){
+    applyLight();
     const name = D.influencer.pseudo || 'Ambassadeur';
     const initial = (name[0] || 'V').toUpperCase();
     const t = D.tier.current;
 
     document.getElementById('sideAvatar').textContent = initial;
     document.getElementById('sideName').textContent = name;
-    document.getElementById('sideTier').innerHTML = `${t.icon} ${t.name}`;
+    const label = isLight() ? 'Vendeur partenaire' : `${t.icon} ${t.name}`;
+    document.getElementById('sideTier').innerHTML = label;
     document.getElementById('mobName').textContent = name;
-    document.getElementById('mobTier').textContent = `${t.icon} ${t.name}`;
+    document.getElementById('mobTier').textContent = label;
 
     document.getElementById('greeting').innerHTML = `Salut ${esc(name)} 👋`;
 
-    const todo = D.missions.filter(m=>!m.done).length;
-    document.getElementById('navMissions').textContent = todo;
+    const badge = document.getElementById('navMissions');
+    if(badge) badge.textContent = D.missions.filter(m=>!m.done).length;
 }
 
 // ── Rendu par onglet ────────────────────────────────────────────────────
@@ -1035,10 +1086,11 @@ function viewHome(){
     return `
     ${blockGains()}
     ${blockGoal()}
-    ${blockTasks()}
+    ${isLight() ? '' : blockTasks()}
     ${blockPromo()}
+    ${blockRank()}
     ${blockEvolution()}
-    ${blockColis()}`;
+    ${isLight() ? '' : blockColis()}`;
 }
 
 
@@ -1080,20 +1132,8 @@ function blockGains(){
             <span class="num">${fmt(s.sales)} vente${s.sales > 1 ? 's' : ''}</span>
             <span class="d"></span>
             <span class="num">${fmt(Math.round(s.revenue || 0))} € générés</span>
-            ${rankFact()}
         </div>
     </section>`;
-}
-
-// ── Classement ──────────────────────────────────────────────────────────
-// Une position, rien d'autre : ni nom, ni chiffre d'un tiers. Elle prend
-// place dans la ligne de faits existante plutôt que dans un bloc à elle —
-// c'est une donnée de contexte, pas un écran.
-function rankFact(){
-    const r = D.rank;
-    if(!r || !r.position) return '';
-    const ord = r.position === 1 ? '1ᵉʳ' : r.position + 'ᵉ';
-    return `<span class="d"></span><span class="num rank${r.podium ? ' rank-top' : ''}">${ord} sur ${fmt(r.total)}</span>`;
 }
 
 // ── Objectif : ce qu'il reste à faire, et ce que ça débloque ────────────
@@ -1105,11 +1145,13 @@ function blockGoal(){
     const pending = [];
     if(c.missing > 0 && c.next_gain && c.next_threshold)
         pending.push({at:c.next_threshold, label:`${fmt(c.next_gain)} € garantis`});
-    if(g && !g.unlocked && g.missing > 0)
+    // Les maillots du mois ne concernent que les ambassadrices : un vendeur
+    // hors boutique n'a pas de colis, lui promettre des maillots serait faux.
+    if(!isLight() && g && !g.unlocked && g.missing > 0)
         pending.push({at:g.threshold, label:`${fmt(g.tier_jerseys)} maillots`});
 
     // Rail des paliers : position actuelle sur l'échelle complète.
-    const total = (t.all || []).length;
+    const total = isLight() ? 0 : (t.all || []).length;
     const rail = total ? `<div class="rail" title="${esc(t.current.name)}, palier ${t.index+1} sur ${total}">
         ${t.all.map((_,i)=>`<span class="rail-s ${i < t.index ? 'done' : i === t.index ? 'now' : ''}"></span>`).join('')}
         <span class="rail-l num">${t.index+1}/${total}</span>
@@ -1189,6 +1231,9 @@ function blockTasks(){
 function blockPromo(){
     const code = D.influencer.promo_code, s = D.stats;
     const share = D.influencer.share_link || {};
+    // Vendeur hors boutique : il vend en direct, il n'a pas de code à diffuser.
+    // Afficher « ton code arrive » lui promettrait une chose qui ne viendra pas.
+    if(isLight() && !code) return '';
     if(!code){
         return `<section class="sec rise" style="animation-delay:.18s">
             <div class="sec-k">Ton code</div>
@@ -1224,7 +1269,7 @@ function blockPromo(){
                      du lien alourdissait le bloc et ramenait la conversation
                      sur la performance, alors qu'il s'agit juste de dire à quoi
                      sert ce lien et où le mettre. */''}
-                <div class="shr-why">Ton lien travaille pendant que tu ne publies pas. Mets-le dans ta bio TikTok et Instagram.</div>
+                <div class="shr-why">Une vidéo peut s'arrêter de percer. Ton lien, lui, reste actif.<br>Ajoute-le à ta bio TikTok et Instagram pour continuer à générer des ventes, même entre deux vidéos.</div>
             </div>` : share.url ? `
             <div class="shr-main shr-wait">
                 <div class="shr-k">À mettre en bio</div>
@@ -1247,6 +1292,42 @@ function blockPromo(){
 }
 
 
+
+// ── Classement ──────────────────────────────────────────────────────────
+// Fenêtre de 30 jours glissants, la même pour tout le monde — surtout pas la
+// période de rémunération personnelle, qui commence au jour d'inscription :
+// comparer une période entamée le 3 à une période entamée le 27 classerait
+// sur la date d'entrée autant que sur le travail fourni.
+//
+// Ce qui s'affiche : un pseudo et un nombre de ventes. Jamais un euro — un
+// montant permettrait de remonter à ce que touche l'autre.
+function blockRank(){
+    const b = D.leaderboard;
+    if(!b || !b.rows || !b.rows.length) return '';
+
+    const rows = b.rows.map(r => {
+        if(r.gap) return `<div class="lb-gap">•••</div>`;
+        const cls = [r.is_me ? 'me' : '', r.position === 1 ? 'p1' : ''].filter(Boolean).join(' ');
+        return `<div class="lb-r ${cls}">
+            <span class="lb-pos num">${r.position}</span>
+            <span class="lb-name">${esc(r.pseudo)}</span>
+            ${r.is_me ? `<span class="lb-me-tag">Toi</span>` : ''}
+            <span class="lb-sp"></span>
+            <span class="lb-n num">${fmt(r.sales)}<span class="lb-u">vente${r.sales > 1 ? 's' : ''}</span></span>
+        </div>`;
+    }).join('');
+
+    // Le sous-titre dit la place, pas la performance : « 4e sur 12 » se lit
+    // sans avoir à compter les lignes.
+    const ord = b.position === 1 ? '1ʳᵉ place' : b.position + 'ᵉ place';
+
+    return `<section class="sec rise" style="animation-delay:.21s">
+        <div class="sec-k">Classement</div>
+        <div class="sec-t">Ta ${esc(ord)} sur ${fmt(b.total)}</div>
+        <div class="lb">${rows}</div>
+        <div class="lb-foot">Sur les ventes des 30 derniers jours, la même fenêtre pour tout le monde.</div>
+    </section>`;
+}
 
 // ── Évolution : seulement si l'historique existe vraiment ───────────────
 function blockEvolution(){
@@ -1447,7 +1528,12 @@ function viewPaliers(){
     const base = fmtFull(R.base_pct || 10);
 
     return `
-    ${/* ── L'aplat fort : le palier, acquis à vie ── */''}
+    ${/* ── L'aplat fort : le palier, acquis à vie ──
+         Sauté pour un vendeur hors boutique : les paliers ne portent que des
+         maillots et des avantages logistiques, dont il n'a rien. Sa
+         rémunération devient alors la surface forte de l'écran, ce qui est
+         de toute façon la seule chose qui le concerne ici. */''}
+    ${isLight() ? '' : `
     <section class="rw-hero">
         <div class="rw-hero-k">Ton palier</div>
         <div class="rw-hero-v">${esc(t.current.name)}</div>
@@ -1459,7 +1545,7 @@ function viewPaliers(){
             <span>${d ? `${fmtFull(d.current)} / ${fmtFull(d.target)} ventes` : 'Palier maximum'}</span>
             <span>${next ? `Prochain : ${esc(next.name)}` : 'Terminé'}</span>
         </div>
-    </section>
+    </section>`}
 
     ${/* ── LA RÉMUNÉRATION — universelle ──
          Elle ne dépend PAS du palier : les montants garantis sont ouverts à
@@ -1489,6 +1575,7 @@ function viewPaliers(){
     </section>
 
     ${/* ── Les paliers : maillots et avantages, plus d'argent ── */''}
+    ${isLight() ? '' : `
     <section class="sec">
         <div class="sec-k">Le programme</div>
         <div class="sec-t">Les quatre paliers</div>
@@ -1544,7 +1631,7 @@ function viewPaliers(){
                 </div>`;
             }).join('')}
         </div>
-    </section>
+    </section>`}
 
     ${/* ── Projection annuelle ── */''}
     <section class="sec">
@@ -1559,12 +1646,13 @@ function viewPaliers(){
                     <div class="yr-u">par an</div>
                     <div class="yr-d">soit ${fmtFull(y.fixed)} € par période</div>
                 </div>`).join('')}
+            ${isLight() ? '' : `
             <div class="yr-c">
                 <div class="yr-k">Au palier maximum</div>
                 <div class="yr-v num">${fmtFull((t.all[t.all.length-1].monthly_jerseys||0)*12)}</div>
                 <div class="yr-u">maillots par an</div>
                 <div class="yr-d">soit ${fmtFull(t.all[t.all.length-1].monthly_jerseys||0)} par période</div>
-            </div>
+            </div>`}
         </div>
     </section>`;
 }
