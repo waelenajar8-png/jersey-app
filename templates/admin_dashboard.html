@@ -473,6 +473,28 @@ select.inp{cursor:pointer}
 .extage{flex:1 1 auto;font-size:11px;color:var(--muted);font-weight:600;padding-left:2px}
 .extage.bad{color:var(--danger)}
 .extage.warn{color:#9A6B00}
+/* Le classement côté console : une ligne = un rang, un total, un levier. */
+.rkrow{display:flex;align-items:center;gap:11px;flex-wrap:wrap;
+    padding:11px 0;border-top:1px solid var(--line)}
+.rkrow:first-child{border-top:0}
+.rkrow.out{opacity:.55}
+.rk-pos{flex:0 0 26px;font-size:14px;font-weight:800;color:var(--muted);
+    font-variant-numeric:tabular-nums}
+.rk-name{flex:1 1 130px;min-width:0;font-size:13.5px;font-weight:700;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rk-tag{font-size:9.5px;font-weight:700;color:var(--muted);margin-left:7px;
+    text-transform:uppercase;letter-spacing:.08em}
+.rk-raw{flex:0 0 auto;font-size:13.5px;font-weight:800;font-variant-numeric:tabular-nums}
+.rk-u{font-size:11px;font-weight:600;color:var(--muted);margin-left:4px}
+.rk-adjw{display:flex;align-items:center;gap:7px;flex:0 0 auto}
+.rk-adjk{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;
+    letter-spacing:.08em}
+.rk-adj{width:74px;height:34px;text-align:right;font-weight:700}
+.rk-calc{flex:1 1 100%;font-size:11.5px;color:var(--ink-2);font-weight:600;padding-left:37px}
+.rk-calc b{font-weight:800}
+.rk-flag{flex:1 1 100%;font-size:11px;font-weight:700;color:var(--muted);padding-left:37px}
+.rk-flag.bad{color:var(--danger)}
+.rk-flag.warn{color:#9A6B00}
 .extlink{flex:0 0 auto;font-size:11px;font-weight:700;color:var(--accent);
     margin-left:auto;text-decoration:none}
 .extlink:hover{text-decoration:underline}
@@ -1023,10 +1045,28 @@ select.inp{cursor:pointer}
 <div class="scrim" id="extScrim">
     <div class="sheet" style="max-width:620px" role="dialog" aria-modal="true">
         <div class="sheet-head">
-            <div class="sheet-title">Vendeurs hors boutique<small>Dans le programme, payés au même barème, sans colis à gérer</small></div>
+            <div class="sheet-title">Classement<small id="extSub">Ce que voient tes influenceuses, et de quoi le corriger</small></div>
             <button class="x" onclick="closeExt()" aria-label="Fermer" data-i="x"></button>
         </div>
-        <div class="sheet-body">
+
+        <div style="display:flex;gap:6px;padding:14px 22px 0">
+            <button class="chip on" id="tabRank" onclick="setExtTab('rank')">Le classement</button>
+            <button class="chip" id="tabLight" onclick="setExtTab('light')">Vendeurs hors boutique</button>
+        </div>
+
+        <div class="sheet-body" id="extBodyRank">
+            <div class="hint" style="margin-bottom:14px">
+                Le classement complet sur les 30 derniers jours, dans l'ordre exact que
+                voient tes influenceuses. Deux leviers si une vente n'en est pas une —
+                un flocage à 1 €, une commande passée par un proche :
+                <b>corrige son compteur</b> (en moins ou en plus), ou <b>retire-la</b> du
+                classement. Ça ne touche ni ses commandes, ni sa commission, ni son palier :
+                uniquement sa place ici. Et les corrections survivent aux synchros.
+            </div>
+            <div id="rankList"></div>
+        </div>
+
+        <div class="sheet-body" id="extBodyLight" hidden>
             <div class="hint" style="margin-bottom:14px">
                 Ils font partie du programme et touchent la commission au <b>même barème</b>,
                 mais vendent hors boutique : rien à synchroniser, tu renseignes leur volume ici.
@@ -1154,7 +1194,11 @@ function normalize(i){
         // Les dates (sales_start, sales_checked_at) sont posées par le serveur
         // et ne transitent pas par ici — les renvoyer permettrait de faire
         // passer un chiffre périmé pour un chiffre confirmé.
-        last_synced_at: i.last_synced_at||''
+        last_synced_at: i.last_synced_at||'',
+        // Arbitrages du classement : une correction de compteur et un retrait.
+        // Ils ne touchent ni les commandes, ni la commission, ni le palier.
+        rank_adjust: Number(i.rank_adjust) || 0,
+        rank_hidden: !!i.rank_hidden
     };
     // Champs propres aux vendeurs hors boutique : ajoutés seulement pour eux,
     // pour ne pas semer des `sales_rate: 0` sur toutes les fiches.
@@ -1284,24 +1328,147 @@ function cardHtml(inf, rank){
 
    Le volume n'est jamais généré : soit un rythme journalier constaté, soit un
    total corrigé à la main. Les deux se recalculent, aucun ne se tire au sort. */
-let EXT = [], EXTMETA = {};
+let EXT = [], EXTMETA = {}, RANK = [], RANKMETA = {}, EXTTAB = 'rank';
+let EXTLOADED = false;
 
 async function openExt(){
     document.getElementById('extScrim').classList.add('open');
-    document.getElementById('extList').innerHTML = `<div class="hint">Chargement…</div>`;
-    try{
-        const r = await fetch('/api/classement/light');
-        const d = await r.json();
-        EXT = (d.entries || []).map(e => ({...e}));
-        EXTMETA = d;
-    }catch(e){
-        EXT = []; EXTMETA = {};
-        toast("Chargement impossible.", true);
+    setExtTab('rank');
+    document.getElementById('rankList').innerHTML = `<div class="hint">Chargement…</div>`;
+    document.getElementById('extList').innerHTML  = `<div class="hint">Chargement…</div>`;
+    // Les deux listes se chargent séparément : allSettled et non all, parce
+    // qu'une route en échec ne doit pas vider l'autre. Le drapeau EXTLOADED
+    // commande une réconciliation destructive à l'enregistrement — le laisser
+    // à true sur un chargement raté effacerait les vendeurs hors boutique.
+    RANK = []; EXT = []; RANKMETA = {}; EXTMETA = {}; EXTLOADED = false;
+    const [q1, q2] = await Promise.allSettled([
+        fetch('/api/classement').then(r => r.json()),
+        fetch('/api/classement/light').then(r => r.json()),
+    ]);
+    if(q1.status === 'fulfilled'){
+        RANK = (q1.value.entries || []).map(e => ({...e}));
+        RANKMETA = q1.value;
+    }else{
+        toast("Classement : chargement impossible.", true);
     }
+    if(q2.status === 'fulfilled'){
+        EXT = (q2.value.entries || []).map(e => ({...e}));
+        EXTMETA = q2.value;
+        EXTLOADED = true;
+    }else{
+        toast("Vendeurs hors boutique : chargement impossible.", true);
+    }
+    renderRank();
     renderExt();
-    if(!EXT.length) extAdd();
 }
 function closeExt(){ document.getElementById('extScrim').classList.remove('open'); }
+
+function setExtTab(t){
+    EXTTAB = t;
+    document.getElementById('tabRank').classList.toggle('on', t==='rank');
+    document.getElementById('tabLight').classList.toggle('on', t==='light');
+    document.getElementById('extBodyRank').hidden  = t!=='rank';
+    document.getElementById('extBodyLight').hidden = t!=='light';
+    const sub = document.getElementById('extSub');
+    if(sub) sub.textContent = t==='rank'
+        ? "Ce que voient tes influenceuses, et de quoi le corriger"
+        : "Dans le programme, payés au même barème, sans colis à gérer";
+    if(t==='light' && EXTLOADED && !EXT.length) extAdd();
+}
+
+/* ── Le classement, côté console ────────────────────────────────────────
+   Trois chiffres par ligne, et il faut les trois : le compteur brut venu de
+   Shopify (ou du rythme saisi), la correction manuelle, et le total retenu.
+   Sans ça, impossible de dire si un rang est celui qu'on a voulu ou celui
+   qu'on a laissé passer. */
+/* Saisie d'une correction : on met à jour la ligne sur place, sans reconstruire
+   la liste. Reclasser à chaque frappe ferait bouger le champ sous le curseur —
+   le tri se refait donc au moment où l'on quitte le champ (rankCommit). */
+function rankSet(i, v){
+    const e = RANK[i];
+    if(!e) return;
+    e.adjust = v;
+    const adj = parseInt(v, 10) || 0;
+    e.total = Math.max(0, (e.raw || 0) + adj);
+    const row = document.querySelectorAll('#rankList .rkrow')[i];
+    if(!row) return;
+    const n = row.querySelector('.rk-raw');
+    if(n) n.innerHTML = `${e.total}<span class="rk-u">ventes</span>`;
+    let calc = row.querySelector('.rk-calc');
+    if(adj !== 0){
+        const txt = `${e.raw} ${adj > 0 ? '+' : '−'} ${Math.abs(adj)} = <b>${e.total}</b>`;
+        if(calc) calc.innerHTML = txt;
+        else {
+            calc = document.createElement('span');
+            calc.className = 'rk-calc'; calc.innerHTML = txt;
+            row.appendChild(calc);
+        }
+    }else if(calc){ calc.remove(); }
+}
+function rankCommit(){ renderRank(); }
+function rankToggle(i){
+    if(!RANK[i]) return;
+    RANK[i].hidden = !RANK[i].hidden;
+    RANK[i].out = RANK[i].hidden || RANK[i].stale;
+    renderRank();
+}
+
+function renderRank(){
+    const el = document.getElementById('rankList');
+    if(!RANK.length){
+        el.innerHTML = `<div class="hint">Personne au classement pour l'instant. Il faut un code promo, ou un vendeur hors boutique.</div>`;
+        return;
+    }
+
+    // Le panneau doit montrer l'ordre exact que verront les influenceuses,
+    // arbitrages compris — sinon il ne sert à rien pour trancher. On rejoue
+    // donc ici le tri et le rang sportif du serveur, sur les valeurs à l'écran.
+    RANK.forEach(e => {
+        e.total = Math.max(0, (e.raw || 0) + (parseInt(e.adjust, 10) || 0));
+        e.out = !!e.hidden || !!e.stale;
+    });
+    RANK.sort((a, b) => (a.out - b.out)
+        || (b.total - a.total)
+        || a.pseudo.toLowerCase().localeCompare(b.pseudo.toLowerCase()));
+    let prev = null, pos = 0;
+    RANK.forEach((e, i) => {
+        if(e.out || e.total <= 0){ e.position = null; return; }
+        pos = (e.total === prev) ? pos : i + 1;
+        prev = e.total;
+        e.position = pos;
+    });
+
+    el.innerHTML = RANK.map((e,i) => {
+        const adj = parseInt(e.adjust,10) || 0;
+        const tot = Math.max(0, (e.raw||0) + adj);
+        const pos = e.out ? '—' : (tot > 0 ? (e.position || '—') : '–');
+
+        // Pourquoi cette ligne ne compte pas, quand c'est le cas.
+        const flag = e.hidden ? `<span class="rk-flag bad">Retiré du classement</span>`
+                   : e.stale  ? `<span class="rk-flag warn">Compteur en attente — hors classement</span>`
+                   : tot <= 0 ? `<span class="rk-flag">Pas encore classé</span>` : '';
+
+        // La correction n'est signalée que si elle existe : une ligne propre
+        // ne doit pas ressembler à une ligne arbitrée.
+        const detail = adj !== 0
+            ? `<span class="rk-calc">${e.raw} ${adj > 0 ? '+' : '−'} ${Math.abs(adj)} = <b>${tot}</b></span>`
+            : '';
+
+        return `<div class="rkrow${e.out ? ' out' : ''}">
+            <span class="rk-pos num">${pos}</span>
+            <span class="rk-name">${esc(e.pseudo)}${e.light ? `<span class="rk-tag">hors boutique</span>` : ''}</span>
+            <span class="rk-raw num">${tot}<span class="rk-u">ventes</span></span>
+            <span class="rk-adjw">
+                <span class="rk-adjk">corriger</span>
+                <input class="inp rk-adj num" type="number" step="1" value="${adj}"
+                       oninput="rankSet(${i},this.value)" onchange="rankCommit()">
+            </span>
+            <button class="btn sm ${e.hidden ? 'primary' : 'ghost'}" onclick="rankToggle(${i})">${e.hidden ? 'Réintégrer' : 'Retirer'}</button>
+            ${detail}${flag}
+        </div>`;
+    }).join('');
+    paintIcons(el);
+}
 
 function extAdd(){
     EXT.push({id:'', pseudo:'', mode:'rythme', rate:3, manual:0, shown:0,
@@ -1329,6 +1496,10 @@ function extShown(e){
 
 function renderExt(){
     const el = document.getElementById('extList');
+    if(!EXTLOADED){
+        el.innerHTML = `<div class="hint">Liste indisponible — rouvre le panneau. Rien ne sera modifié ici tant qu'elle n'a pas chargé.</div>`;
+        return;
+    }
     if(!EXT.length){
         el.innerHTML = `<div class="hint">Personne pour l'instant.</div>`;
         return;
@@ -1394,36 +1565,59 @@ function renderExt(){
    part : ces vendeurs SONT dans le programme. On remplace le sous-ensemble
    light et on laisse doSave() faire le reste — versioning et fusion inclus. */
 async function extSave(){
-    const rows = EXT.filter(e => (e.pseudo||'').trim());
-    const byId = {};
+    let byId = {};
     influenceurs.forEach(i => { if(i.id) byId[i.id] = i; });
 
-    const kept = new Set();
-    rows.forEach(e => {
-        const champs = {
-            pseudo: (e.pseudo||'').trim(),
-            light: true,
-            sales_mode: e.mode === 'fixe' ? 'fixe' : 'rythme',
-            sales_rate: Math.max(0, Math.min(200, parseFloat(e.rate)||0)),
-            sales_manual: Math.max(0, Math.min(100000, parseInt(e.manual,10)||0)),
-        };
-        const exist = e.id && byId[e.id];
-        if(exist){ Object.assign(exist, champs); kept.add(e.id); }
-        else {
-            const neuf = normalize({...champs, status: 0});
-            influenceurs.push(neuf);
-            kept.add(neuf.id);
-        }
+    // ── Vendeurs hors boutique ──
+    // Cette réconciliation SUPPRIME les vendeurs absents de la liste. Elle ne
+    // s'exécute donc que si la liste a réellement été chargée : sur un
+    // chargement en échec, EXT est vide, et l'appliquer les effacerait tous
+    // alors que l'admin venait peut-être juste corriger un rang.
+    const rows = EXT.filter(e => (e.pseudo||'').trim());
+    if(EXTLOADED){
+        const kept = new Set();
+        rows.forEach(e => {
+            const champs = {
+                pseudo: (e.pseudo||'').trim(),
+                light: true,
+                sales_mode: e.mode === 'fixe' ? 'fixe' : 'rythme',
+                sales_rate: Math.max(0, Math.min(200, parseFloat(e.rate)||0)),
+                sales_manual: Math.max(0, Math.min(100000, parseInt(e.manual,10)||0)),
+            };
+            const exist = e.id && byId[e.id];
+            if(exist){ Object.assign(exist, champs); kept.add(e.id); }
+            else {
+                const neuf = normalize({...champs, status: 0});
+                influenceurs.push(neuf);
+                kept.add(neuf.id);
+            }
+        });
+        // Retirés du panneau = retirés du programme. Seuls les light sont
+        // concernés : une ambassadrice ne peut pas disparaître par ce chemin.
+        influenceurs = influenceurs.filter(i => !i.light || kept.has(i.id));
+    }
+
+    // ── Arbitrages du classement ──
+    // Appliqués APRÈS, sur la liste telle qu'elle vient d'être remaniée : un
+    // vendeur recréé à l'instant a un nouvel id, et poser l'arbitrage avant
+    // l'aurait écrit sur une fiche qui n'existe plus.
+    byId = {};
+    influenceurs.forEach(i => { if(i.id) byId[i.id] = i; });
+    RANK.forEach(e => {
+        const f = byId[e.id];
+        if(!f) return;                       // fiche supprimée entre-temps
+        f.rank_adjust = parseInt(e.adjust, 10) || 0;
+        f.rank_hidden = !!e.hidden;
     });
-    // Retirés du panneau = retirés du programme. Seuls les light sont concernés :
-    // une ambassadrice ne peut pas disparaître par ce chemin.
-    influenceurs = influenceurs.filter(i => !i.light || kept.has(i.id));
 
     const btn = document.getElementById('extSave');
     btn.disabled = true;
     try{
         await doSave();
-        toast(`${rows.length} vendeur${rows.length>1?'s':''} hors boutique enregistré${rows.length>1?'s':''}.`);
+        const arb = RANK.filter(e => (parseInt(e.adjust,10)||0) !== 0 || e.hidden).length;
+        toast(arb
+            ? `Enregistré — ${arb} ligne${arb>1?'s':''} arbitrée${arb>1?'s':''} au classement.`
+            : `Classement enregistré.`);
         closeExt();
         await load();
     }catch(e){
