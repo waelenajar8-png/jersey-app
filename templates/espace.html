@@ -589,9 +589,10 @@ input,select{font-family:inherit}
 .lb-r.me .lb-pos{color:var(--accent)}
 .lb-r.me .lb-name,.lb-r.me .lb-n{color:var(--accent-2)}
 .lb-sp{flex:1 1 auto}
-.lb-soon{font-size:12px;font-weight:600;color:var(--faint);flex-shrink:0;letter-spacing:-.01em}
-.lb-r.out .lb-pos{color:var(--line-2)}
-.lb-r.me.out .lb-soon{color:var(--accent)}
+/* Zéro vente : la ligne garde sa place et son chiffre, en retrait. */
+.lb-r.out .lb-n{color:var(--faint);font-weight:700}
+.lb-r.out .lb-pos{color:var(--faint)}
+.lb-r.me.out .lb-n{color:var(--accent)}
 .lb-me-tag{font-size:8.5px;letter-spacing:.16em;text-transform:uppercase;font-weight:800;
     color:var(--accent);flex-shrink:0;padding:3px 6px;border-radius:5px;
     background:rgba(47,80,241,.1)}
@@ -1465,13 +1466,12 @@ function blockRank(){
                      (r.position === 1 && !r.unranked) ? 'p1' : '',
                      r.unranked ? 'out' : '',
                      r.anon ? 'anon' : ''].filter(Boolean).join(' ');
-        // Sans vente, ni rang ni compteur : un tiret et « Pas encore classée ».
-        // Afficher « 0 ventes » à côté des autres ne dit rien de plus et
-        // ressemble à un constat d'échec au lieu d'un point de départ.
-        const pos = r.unranked ? '–' : r.position;
-        const val = r.unranked
-            ? `<span class="lb-soon">Pas encore classé${r.is_me ? 'e' : ''}</span>`
-            : `<span class="lb-n num">${fmt(r.sales)}<span class="lb-u">vente${r.sales > 1 ? 's' : ''}</span></span>`;
+        // Tout le monde a une place, y compris à zéro vente : le classement
+        // doit ressembler à un classement. Le chiffre reste affiché dans les
+        // deux cas, simplement en retrait quand il vaut zéro — un « 0 » gris
+        // se lit comme un point de départ, pas comme un constat d'échec.
+        const pos = r.position || '–';
+        const val = `<span class="lb-n num">${fmt(r.sales || 0)}<span class="lb-u">vente${(r.sales || 0) > 1 ? 's' : ''}</span></span>`;
         // La barre part à zéro et s'anime jusqu'à sa largeur au premier rendu :
         // le tableau se remplit sous les yeux plutôt que d'apparaître figé.
         const pct = r.unranked ? 0 : Math.max(5, Math.round((r.sales / tete) * 100));
