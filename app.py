@@ -1531,7 +1531,56 @@ def r2_list_keys(prefix, suffix=".json"):
         kwargs["ContinuationToken"] = resp["NextContinuationToken"]
     return keys
 
-def r2_delete(key):
+# ══════════════════════════════════════════════════════════════════════════════
+# CLÉS R2 FOURNIES PAR LE CLIENT
+#
+# Plusieurs routes acceptent une clé R2 dans la requête pour lire ou supprimer
+# un média : une image de template, une vidéo de la file d'attente. Elles ont
+# été écrites en supposant que la clé reçue désignerait toujours un média.
+#
+# Rien ne le garantissait. Une clé est une chaîne libre, et le préfixe `meta/`
+# contient tout ce qui fait tourner la boutique : les fiches influenceuses avec
+# leurs adresses et leurs codes d'accès, le catalogue et son stock, les
+# sauvegardes de secours. Une seule requête sur une de ces routes suffisait à
+# lire ou à effacer l'un de ces fichiers, sans être authentifié.
+#
+# Le garde-fou est posé ici, au plus près de R2 plutôt que route par route :
+# c'est le seul endroit qui protège aussi les routes qui seront écrites demain.
+R2_PROTECTED_PREFIXES = ("meta/",)
+
+
+def _client_key_ok(key):
+    """
+    Une clé R2 venant du client peut-elle être touchée ?
+
+    Refuse le préfixe réservé aux données de gestion, ainsi que les formes
+    dégénérées (clé vide, absolue, ou contenant `..`) qui n'ont aucune raison
+    d'exister et signalent une tentative de sortir du périmètre prévu.
+    """
+    k = (key or "").strip()
+    if not k or k.startswith("/") or ".." in k:
+        return False
+    return not any(k.startswith(p) for p in R2_PROTECTED_PREFIXES)
+
+
+def _reject_key(key, where=""):
+    """Trace et renvoie la réponse d'erreur pour une clé refusée."""
+    print(f"[R2] Clé refusée{(' sur ' + where) if where else ''}: {key!r}")
+    return jsonify({"error": "clé non autorisée"}), 403
+
+
+def r2_delete(key, allow_protected=False):
+    """
+    Supprime un objet R2.
+
+    `allow_protected` n'est passé que par le code interne qui a de bonnes
+    raisons de toucher `meta/` (rotation des sauvegardes). Tout le reste passe
+    par le refus : une suppression déclenchée depuis une requête ne doit
+    jamais pouvoir viser les données de gestion.
+    """
+    if not allow_protected and not _client_key_ok(key):
+        print(f"[R2] Suppression refusée sur clé protégée: {key!r}")
+        return False
     r2 = get_r2()
     if not r2: return False
     try:
@@ -3310,6 +3359,15 @@ def _sync_light_seller(inf, avg_basket=None):
     history, _ = _migrate_history_keys(stats.get("commission_history"))
     key = st.get("period_start")
     if key:
+        # Même reprise que côté Shopify : si la date d'entrée a changé, l'ancienne
+        # clé calendaire du même mois couvre les mêmes jours que la nouvelle
+        # période. La laisser en place ferait payer deux fois le même mois.
+        legacy = f"{key[:7]}-01"
+        if (not key.endswith("-01") and legacy in history
+                and _period_overlaps(legacy, key)):
+            print(f"[LIGHT] Entrée calendaire {legacy} reprise par {key} "
+                  f"({inf.get('pseudo','?')})")
+            history.pop(legacy, None)
         history[key] = _compute_monthly_commission(inf, st).get("amount", 0)
     stats["commission_history"] = history
     stats["commission"] = round(
@@ -3407,15 +3465,33 @@ def sync_influencer_stats(force=False):
                                 "sales_month":   bucket["sales"],
                                 "revenue_month": bucket["revenue"],
                             }).get("amount", 0)
-                            # Une entrée héritée du découpage calendaire qui recouvre la
-                            # période recalculée doit disparaître : la garder ferait
+                            # Une entrée héritée du découpage calendaire qui recouvre
+                            # la période recalculée doit disparaître : la garder ferait
                             # compter deux fois les mêmes ventes, une fois par mois et
                             # une fois par période.
-                            for old_key in [k for k in history
-                                            if k != period_key and _period_overlaps(k, period_key)]:
-                                print(f"[SYNC] Entrée {old_key} remplacée par {period_key} "
-                                      f"({inf.get('pseudo','?')})")
-                                history.pop(old_key, None)
+                            #
+                            # Mais UNIQUEMENT celle-là. Supprimer tout ce qui « recouvre »
+                            # détruisait des périodes légitimes déjà payées : une période
+                            # d'un mois en recouvre toujours deux calendaires, si bien que
+                            # corriger la date d'entrée d'une influenceuse effaçait le mois
+                            # suivant en plus du mois courant. On ne vise donc que la clé
+                            # calendaire du même mois, et seulement quand la période
+                            # recalculée n'en est pas une elle-même.
+                            legacy = f"{period_key[:7]}-01"
+                            if (not period_key.endswith("-01")
+                                    and legacy in history
+                                    and _period_overlaps(legacy, period_key)):
+                                print(f"[SYNC] Entrée calendaire {legacy} reprise par "
+                                      f"{period_key} ({inf.get('pseudo','?')})")
+                                history.pop(legacy, None)
+                            # Tout autre recouvrement est signalé sans être touché : c'est
+                            # le cas d'une date d'entrée modifiée après coup, qui demande
+                            # un arbitrage humain, pas une suppression silencieuse.
+                            for k in history:
+                                if k != period_key and k != legacy and _period_overlaps(k, period_key):
+                                    print(f"[SYNC] ⚠️ {inf.get('pseudo','?')} : la période "
+                                          f"{k} recouvre {period_key}, montants conservés "
+                                          f"tels quels — à vérifier à la main.")
                             if amount or period_key not in history:
                                 history[period_key] = amount
 
@@ -3961,7 +4037,10 @@ def api_save_influenceurs():
                     # Ne garder que les N dernières sauvegardes
                     backups = sorted(r2_list_keys(INFLUENCEURS_BACKUP_PREFIX, suffix=".json"))
                     for old_key in backups[:-INFLUENCEURS_BACKUP_KEEP]:
-                        r2_delete(old_key)
+                        # Seul appel légitime sur meta/ : la rotation interne
+                        # des sauvegardes, dont la clé vient de r2_list_keys
+                        # et jamais d'une requête.
+                        r2_delete(old_key, allow_protected=True)
                 except Exception as e:
                     print(f"[INFLU] Backup non critique échoué: {e}")
 
@@ -4434,12 +4513,9 @@ def _espace_rewards(inf, stats):
     Le panier moyen et la valeur d'une vente ordinaire restent internes.
     """
     sales_month = _safe_int(stats.get("sales_month", 0))
+    # Ses propres ventes cumulées : sert à situer son palier. Le CA, lui, n'est
+    # plus lu ici — il ne servait qu'à un calcul de valeur par vente supprimé.
     sales_total = _safe_int(stats.get("sales", 0))
-    revenue     = _safe_float(stats.get("revenue", 0))
-
-    # Panier moyen personnel. Sans historique, on retombe sur le panier moyen
-    # du programme (38 € nets) plutôt que d'afficher zéro.
-    avg = round(revenue / sales_total, 2) if sales_total > 0 and revenue > 0 else 38.0
 
     steps = sorted(
         [(int(t["monthly_threshold"]), float(t["monthly_fixed"]))
@@ -4448,14 +4524,11 @@ def _espace_rewards(inf, stats):
         key=lambda s: s[0],
     )
 
-    def gain(n):
-        """Ce que rapporte un mois à n ventes, barème appliqué."""
-        commission = n * avg * BASE_COMMISSION_PCT / 100
-        fixed = max([f for th, f in steps if n >= th], default=0.0)
-        return max(commission, fixed)
-
-    ordinary  = round(avg * BASE_COMMISSION_PCT / 100, 2)
-    next_step = next((th for th, _ in steps if th > sales_month), None)
+    # Note : il y avait ici une seconde implémentation du barème (gain(),
+    # ordinary, next_step) dont plus rien ne se servait — le dict renvoyé n'en
+    # contenait aucune trace depuis qu'on a cessé d'exposer la valeur d'une
+    # vente. Supprimée : deux barèmes dans le même fichier finissent toujours
+    # par diverger, et c'est celui de _compute_monthly_commission qui paie.
 
     # La valeur marginale de la vente qui fait basculer n'est PAS exposée.
     # Elle motive, mais annoncer « ta 10ᵉ vente vaut 15,80 € » à côté de
@@ -4712,14 +4785,21 @@ def _light_active_days(inf, since, until):
     on enregistre des gens qui vendent déjà — et se tromper dans ce sens n'a
     aucune conséquence visible, alors que l'inverse vide le classement.
     """
+    def _jours(a, b):
+        # En jours FRACTIONNAIRES, volontairement. `.days` tronque, et la
+        # dernière synchro d'une période tombe toujours quelques minutes avant
+        # sa fin : la période se figeait donc à 29 jours au lieu de 30, et
+        # comme seule la période courante est recalculée, elle restait fausse
+        # pour toujours. À 1 vente/jour, cela faisait manquer le seuil des 30
+        # et coûtait 39,80 € à chaque période, sans rattrapage possible.
+        return max(0.0, (b - a).total_seconds() / 86400.0)
+
     if (inf.get("sales_ramp") or "installed") != "new":
-        return max(0, (until - since).days)      # régime établi : aucune montée
+        return _jours(since, until)              # régime établi : aucune montée
     start = _parse_day(inf.get("sales_start"))
     if start is None or start < since:
         start = since
-    if until <= start:
-        return 0
-    return max(0, (until - start).days)
+    return _jours(start, until)
 
 
 def _program_avg_basket(influenceurs=None):
@@ -4779,10 +4859,17 @@ def _light_stats(inf, now=None, avg_basket=None):
     sales_period = int(round(rate * _light_active_days(inf, p_start, now)))
 
     # Cumul depuis l'entrée dans le programme.
+    #
+    # Il ne peut jamais être inférieur au volume des 30 derniers jours : sinon
+    # un vendeur déjà en rythme, ajouté aujourd'hui, affichait 90 ventes au
+    # classement et 0 en cumulé. Arithmétiquement impossible, et surtout il
+    # retombait au palier Découverte avec un seuil de gifting à 10 ventes alors
+    # qu'il en fait 90.
     began = (_parse_day(inf.get("sales_start"))
              or _parse_day(inf.get("program_start_date"))
              or now)
-    total = int(round(rate * max(0, (now - began).days)))
+    total = int(round(rate * max(0.0, (now - began).total_seconds() / 86400.0)))
+    total = max(total, sales_30d)
     total += _safe_int(inf.get("baseline_sales", 0))
 
     cap = lambda v: max(0, min(LIGHT_MAX_SALES, v))
@@ -5154,6 +5241,25 @@ def api_light_sellers_get():
 # champs sensibles le réclame, la lecture reste libre.
 ESPACE_PIN_FIELDS = {"shipping"}   # champs exigeant le code
 
+# Anti-force brute du code d'accès. Tenu ici, en mémoire du processus, et non
+# dans la session : un compteur rangé dans le cookie du client se remet à zéro
+# en jetant le cookie, ce qui ne freine personne.
+ESPACE_PIN_MAX_TRIES = 5
+ESPACE_PIN_LOCK_BASE = 60        # secondes après la première salve
+ESPACE_PIN_LOCK_MAX  = 3600      # plafond, pour ne jamais bloquer indéfiniment
+ESPACE_PIN_TTL       = 6 * 3600  # oubli d'une entrée inactive
+_pin_tries = {}                  # slug -> {"n", "until", "seen"}
+_pin_lock  = threading.Lock()
+
+
+def _pin_sweep(now):
+    """Oublie les tentatives dormantes. Appelé sous _pin_lock."""
+    if len(_pin_tries) < 500:
+        return
+    for k in [k for k, v in _pin_tries.items()
+              if now - v.get("seen", 0) > ESPACE_PIN_TTL and v.get("until", 0) < now]:
+        _pin_tries.pop(k, None)
+
 
 def _espace_pin(inf):
     """Code d'accès configuré pour cet influenceur, ou '' si aucun."""
@@ -5361,9 +5467,15 @@ def _espace_payload(inf):
         "stats": {
             "views":         int(stats.get("views", 0) or 0),
             "sales":         int(stats.get("sales", 0) or 0),       # ventes cumulées
-            "sales_month":   int(stats.get("sales_month", 0) or 0), # ventes mois courant
-            "revenue":       float(stats.get("revenue", 0) or 0),   # CA cumulé net
-            "revenue_month": float(stats.get("revenue_month", 0) or 0),
+            "sales_month":   int(stats.get("sales_month", 0) or 0), # ventes de la période
+            # Le CA ne sort PAS d'ici. Le programme s'interdit d'exposer la
+            # rémunération par vente ; or le CA divisé par les ventes donne le
+            # panier moyen, et le panier moyen multiplié par le taux donne
+            # exactement ce qu'on refuse de dire. Les montants qui doivent être
+            # affichés (commission de la période, fixes atteints) sont calculés
+            # côté serveur et envoyés déjà agrégés, plus bas.
+            "revenue":       None,
+            "revenue_month": None,
             "videos":        len(my_vids),
             "commission":    float(stats.get("commission", 0) or 0),
             # Historique par mois (clé YYYY-MM), déjà alimenté à chaque synchro.
@@ -5496,11 +5608,16 @@ def api_espace_verify(slug):
     """
     Vérifie le code d'accès et ouvre la session pour les champs sensibles.
 
-    Le comptage des tentatives vit dans la session signée : un code à 4 chiffres
-    se force en quelques milliers d'essais, donc on ferme la porte au bout de
-    cinq. Le blocage n'est pas une sécurité absolue — vider ses cookies le
-    réinitialise — mais il transforme une attaque triviale en attaque bruyante,
-    ce qui suffit face au risque réel (un curieux qui a vu passer le lien).
+    Le comptage des tentatives est tenu CÔTÉ SERVEUR, pas dans la session.
+    Il l'était : le compteur vivait dans le cookie signé, donc il suffisait de
+    ne pas renvoyer le cookie pour repartir de zéro à chaque essai. Un code à
+    quatre chiffres tombait alors en dix mille requêtes, soit quelques minutes
+    de boucle — et ce code est la seule chose qui empêche de réécrire l'adresse
+    de livraison, donc de détourner un colis.
+
+    Le compteur est en mémoire du processus : il repart à zéro au
+    redéploiement, ce qui est acceptable ici (l'attaque demande des milliers de
+    requêtes d'affilée), et il ne dépend plus de rien que le client contrôle.
     """
     inf = _get_influencer_by_slug(slug)
     if not inf:
@@ -5510,29 +5627,52 @@ def api_espace_verify(slug):
     if not expected:
         return jsonify({"success": True, "pin_required": False})
 
-    tries_key = f"espace_try_{slug}"
-    tries = int(session.get(tries_key, 0) or 0)
-    if tries >= 5:
-        return jsonify({
-            "success": False,
-            "error": "Trop de tentatives. Contacte l'équipe Volakits.",
-            "locked": True,
-        }), 429
+    ip = (request.headers.get("X-Forwarded-For", "").split(",")[0].strip()
+          or request.remote_addr or "?")
+    now = time.time()
+    with _pin_lock:
+        _pin_sweep(now)
+        entry = _pin_tries.get(slug) or {"n": 0, "until": 0.0}
+        if entry["until"] > now:
+            reste = int(entry["until"] - now)
+            print(f"[ESPACE] Code refusé (verrouillé) sur {slug} depuis {ip}")
+            return jsonify({
+                "success": False,
+                "error": f"Trop de tentatives. Réessaie dans {max(1, reste // 60 + 1)} min.",
+                "locked": True,
+            }), 429
 
     given = str((request.json or {}).get("pin") or "").strip()
     # Comparaison à temps constant : un code court ne doit pas se déduire
     # de la durée de la réponse.
     if given and hmac.compare_digest(given, expected):
-        session[tries_key] = 0
+        with _pin_lock:
+            _pin_tries.pop(slug, None)
         session[f"espace_pin_{slug}"] = True
         session.permanent = True
         return jsonify({"success": True, "pin_required": True})
 
-    session[tries_key] = tries + 1
+    with _pin_lock:
+        entry = _pin_tries.get(slug) or {"n": 0, "until": 0.0}
+        entry["n"] += 1
+        entry["seen"] = now
+        if entry["n"] >= ESPACE_PIN_MAX_TRIES:
+            # Verrouillage qui double à chaque salve : cinq essais de plus
+            # coûtent deux fois plus longtemps que les cinq précédents, ce qui
+            # rend une recherche exhaustive impraticable sans jamais bloquer
+            # définitivement quelqu'un qui s'est simplement trompé.
+            palier = entry["n"] // ESPACE_PIN_MAX_TRIES
+            entry["until"] = now + min(ESPACE_PIN_LOCK_MAX,
+                                       ESPACE_PIN_LOCK_BASE * (2 ** (palier - 1)))
+            print(f"[ESPACE] {entry['n']} codes faux sur {slug} depuis {ip} — "
+                  f"verrouillé {int(entry['until'] - now)}s")
+        _pin_tries[slug] = entry
+        reste = max(0, ESPACE_PIN_MAX_TRIES - (entry["n"] % ESPACE_PIN_MAX_TRIES or ESPACE_PIN_MAX_TRIES))
+
     return jsonify({
         "success": False,
         "error": "Code incorrect.",
-        "remaining": max(0, 5 - (tries + 1)),
+        "remaining": reste,
     }), 401
 
 
@@ -5701,11 +5841,19 @@ def _gifting_public_view(cat):
         })
     return out
 
+# Le catalogue commande le stock physique des maillots : ce qui est
+# promettable aux influenceuses, et ce qui est décrémenté à chaque expédition.
+# Il était modifiable et effaçable sans être authentifié — une seule requête
+# vidait le catalogue et remettait toutes les quantités à zéro, sans qu'aucune
+# sauvegarde n'existe pour le rattraper. Ces routes passent donc derrière la
+# même session admin que la console.
 @app.route("/catalogue")
+@_require_admin_page
 def catalogue_page():
     return render_template("catalogue.html")
 
 @app.route("/api/gifting/catalog", methods=["GET"])
+@_require_admin_api
 def api_gifting_catalog_get():
     """Catalogue complet (back-office) avec URLs d'images signées."""
     cat = _load_gifting_catalog()
@@ -5714,6 +5862,7 @@ def api_gifting_catalog_get():
     return jsonify(cat)
 
 @app.route("/api/gifting/catalog", methods=["POST"])
+@_require_admin_api
 def api_gifting_catalog_save():
     """Sauvegarde le catalogue (mode + liste des maillots)."""
     payload = request.json or {}
@@ -5741,6 +5890,7 @@ def api_gifting_catalog_save():
     return jsonify({"success": ok, "count": len(cat["jerseys"])})
 
 @app.route("/api/gifting/upload", methods=["POST"])
+@_require_admin_api
 def api_gifting_upload():
     """Upload d'une photo de maillot vers R2."""
     f = request.files.get("image")
@@ -5770,6 +5920,7 @@ def api_gifting_upload():
     })
 
 @app.route("/api/gifting/delete_image", methods=["POST"])
+@_require_admin_api
 def api_gifting_delete_image():
     """Supprime une photo de maillot du stockage."""
     key = (request.json or {}).get("r2_key")
@@ -7560,6 +7711,7 @@ def api_template2_image():
     """Retourne une image template v2 en base64"""
     key = request.args.get("key")
     if not key: return jsonify({"error": "key requis"}), 400
+    if not _client_key_ok(key): return _reject_key(key, "api_template2_image")
     r2 = get_r2()
     if not r2: return jsonify({"error": "R2 non configuré"}), 500
     try:
@@ -7746,6 +7898,7 @@ def api_templates2_delete():
     """Supprime une template v2"""
     key = (request.json or {}).get("key")
     if not key: return jsonify({"error": "key requis"}), 400
+    if not _client_key_ok(key): return _reject_key(key, "templates2/delete")
     r2 = get_r2()
     if not r2: return jsonify({"error": "R2 non configuré"}), 500
     try:
@@ -7765,6 +7918,7 @@ def api_templates_delete():
 def api_template_image():
     key = request.args.get("key")
     if not key: return jsonify({"error":"key requis"}),400
+    if not _client_key_ok(key): return _reject_key(key, "api_template_image")
     r2 = get_r2()
     if not r2: return jsonify({"error":"R2 non configuré"}),500
     try:
