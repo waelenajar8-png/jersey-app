@@ -3293,6 +3293,33 @@ def _aggregate_orders(orders, inf=None, now=None):
     }
 
 
+def _sync_light_seller(inf, avg_basket=None):
+    """
+    Met à jour un vendeur hors boutique : stats recalculées + ledger de
+    commission de sa période en cours.
+
+    Une seule période est écrite, la courante, et c'est volontaire. Les
+    périodes closes gardent le montant arrêté au moment où elles se sont
+    terminées : si l'admin corrige un rythme aujourd'hui, il ne doit pas
+    réécrire rétroactivement ce qu'il a déjà payé le mois dernier.
+    """
+    st = _light_stats(inf, avg_basket=avg_basket)
+    stats = dict(inf.get("stats") or {})
+    stats.update(st)
+
+    history, _ = _migrate_history_keys(stats.get("commission_history"))
+    key = st.get("period_start")
+    if key:
+        history[key] = _compute_monthly_commission(inf, st).get("amount", 0)
+    stats["commission_history"] = history
+    stats["commission"] = round(
+        _safe_float(inf.get("baseline_commission", 0)) + sum(history.values()), 2)
+
+    inf["stats"] = stats
+    inf["last_synced_at"] = datetime.now(timezone.utc).isoformat()
+    return inf
+
+
 def sync_influencer_stats(force=False):
     """
     Synchronise les stats de TOUS les influenceurs ayant un code promo.
@@ -3312,7 +3339,21 @@ def sync_influencer_stats(force=False):
                 if not isinstance(influenceurs, list):
                     influenceurs = []
 
+                avg_basket = _program_avg_basket(influenceurs)
+
                 for inf in influenceurs:
+                    # Vendeurs hors boutique : rien à interroger côté Shopify,
+                    # mais leur ledger de commission doit vivre comme celui des
+                    # autres — sinon leur historique et leur cumul resteraient
+                    # vides alors qu'ils sont payés au même barème.
+                    if _is_light(inf):
+                        try:
+                            _sync_light_seller(inf, avg_basket)
+                            synced += 1
+                        except Exception as e:
+                            errors.append(f"{inf.get('pseudo','?')} (hors boutique): {e}")
+                        continue
+
                     code = (inf.get("promo_code") or "").strip()
                     if not code:
                         skipped += 1
@@ -3501,17 +3542,22 @@ def api_get_influenceurs():
         if not isinstance(influenceurs, list):
             influenceurs = []
 
-        # Migration de l'échelle des statuts, une seule fois, puis persistée.
-        if _migrate_status_scale(influenceurs):
+        # Migrations, une seule fois chacune, puis persistées ensemble.
+        migrated = _migrate_status_scale(influenceurs)
+        migrated = _migrate_external_ranked(influenceurs) or migrated
+        if migrated:
             try:
                 with _influenceurs_lock:
                     data["influenceurs"] = influenceurs
                     data["version"] = data.get("version", 0) + 1
                     data["updated_at"] = datetime.now(timezone.utc).isoformat()
                     r2_put_json(INFLUENCEURS_R2_KEY, data)
-                print("[INFLU] Statuts migrés vers l'échelle 2")
             except Exception as e:
-                print(f"[INFLU] Migration des statuts non persistée: {e}")
+                print(f"[INFLU] Migration non persistée: {e}")
+
+        # Les vendeurs hors boutique n'ont pas de chiffre stocké qui vaille :
+        # leur volume dépend de la date du jour. Recalculé à chaque lecture.
+        _refresh_light_stats(influenceurs)
 
         # Enrichissement côté serveur : ajouter _espace_url + mapper stats depuis sous-objet
         base_url = request.host_url.rstrip("/")
@@ -3540,6 +3586,55 @@ def api_get_influenceurs():
     except Exception as e:
         print(f"[INFLU] Erreur lecture: {e}")
         return jsonify({"influenceurs": [], "version": 0, "updated_at": ""})
+
+def _stamp_light_sellers(stored, incoming):
+    """
+    Pose les dates des vendeurs hors boutique côté serveur, jamais depuis le
+    client. Deux règles, et elles comptent toutes les deux :
+
+    `sales_checked_at` ne se rafraîchit QUE si le volume change vraiment.
+    Sinon corriger une faute de frappe dans un nom ferait passer un chiffre
+    vieux de six semaines pour un chiffre confirmé du jour — et c'est cette
+    date qui décide qu'on continue à le payer.
+
+    `sales_start` est le point de départ de la montée en régime. Conservée
+    tant que le rythme tient, redémarrée quand il change : quelqu'un qui passe
+    de 2 à 4 ventes par jour n'a pas trente jours de ventes à 4 derrière lui,
+    et le créditer d'un coup fausserait à la fois son classement et sa paie.
+    """
+    now = datetime.now(timezone.utc)
+    now_iso, today = now.isoformat(), _period_key(now)
+    before = {i.get("id"): i for i in stored
+              if isinstance(i, dict) and i.get("id")}
+
+    for inf in incoming:
+        if not _is_light(inf):
+            continue
+        mode = "fixe" if inf.get("sales_mode") == "fixe" else "rythme"
+        try:
+            rate = round(max(0.0, min(float(LIGHT_MAX_RATE),
+                                      float(inf.get("sales_rate") or 0))), 2)
+        except (TypeError, ValueError):
+            rate = 0.0
+        manual = max(0, min(LIGHT_MAX_SALES, _safe_int(inf.get("sales_manual", 0))))
+        inf["sales_mode"], inf["sales_rate"], inf["sales_manual"] = mode, rate, manual
+
+        old = before.get(inf.get("id")) or {}
+        same_mode = (old.get("sales_mode") or "rythme") == mode if old else False
+        unchanged = same_mode and (
+            round(float(old.get("sales_rate") or 0), 2) == rate if mode == "rythme"
+            else _safe_int(old.get("sales_manual", 0)) == manual
+        )
+        inf["sales_checked_at"] = (old.get("sales_checked_at") or now_iso) \
+                                  if (old and unchanged) else now_iso
+        keep_start = bool(old.get("sales_start")) and unchanged
+        inf["sales_start"] = old.get("sales_start") if keep_start else today
+        # Sa période de rémunération démarre le jour de son entrée, comme pour
+        # tout le monde : sans ancrage, le barème retomberait sur le mois
+        # calendaire et il serait payé sur une période qui n'est pas la sienne.
+        if not inf.get("program_start_date"):
+            inf["program_start_date"] = inf["sales_start"]
+
 
 def _merge_influenceurs(stored, incoming):
     """
@@ -3806,6 +3901,7 @@ def api_save_influenceurs():
             # Un remplacement brut les effacerait à chaque enregistrement.
             stored_list = current.get("influenceurs", [])
             prev_status = {i.get("id"): i.get("status") for i in stored_list if isinstance(i, dict)}
+            _stamp_light_sellers(stored_list, influenceurs)
             influenceurs = _merge_influenceurs(stored_list, influenceurs)
 
             # ── Sortie de stock automatique ─────────────────────────────
@@ -4191,8 +4287,15 @@ def _get_influencer_by_slug(slug):
     """Retrouve un influenceur via son slug public (pseudo-hash)."""
     try:
         data = r2_get_json(INFLUENCEURS_R2_KEY) or {}
-        for inf in data.get("influenceurs", []):
+        liste = data.get("influenceurs", [])
+        for inf in liste:
             if _public_slug(inf) == slug:
+                # Un vendeur hors boutique n'a pas de stats stockées qui
+                # vaillent : son volume se déduit de son rythme et de la date
+                # du jour. Recalculé ici, sinon son espace afficherait les
+                # chiffres de la dernière écriture.
+                if _is_light(inf):
+                    _apply_light_stats(inf, avg_basket=_program_avg_basket(liste))
                 return inf
     except Exception as e:
         print(f"[ESPACE] Erreur lecture influenceur: {e}")
@@ -4439,46 +4542,6 @@ LEADERBOARD_PODIUM_MIN = 6     # « 3e sur 4 » ne se met pas en avant
 LEADERBOARD_TOP        = 5     # lignes affichées avant le repli sur soi
 LEADERBOARD_STALE_DAYS = 3     # au-delà, le compteur 30 j n'est plus fiable
 
-# ── Participants hors programme ─────────────────────────────────────────────
-# Des vendeurs suivis à la main : ils n'ont pas de fiche, pas de colis, pas
-# d'espace — juste un nom et un chiffre de ventes saisis par l'admin, pour
-# qu'ils apparaissent au classement comme tout le monde.
-#
-# Le chiffre saisi est vu par toutes les ambassadrices, et il les situe par
-# rapport à lui : ce doit être leur vrai nombre de ventes sur 30 jours, pas
-# une estimation. Un chiffre laissé en place trop longtemps ne décrit plus
-# une fenêtre de 30 jours — passé ce délai l'entrée sort du classement d'elle
-# -même, et la console la signale à remettre à jour.
-EXTERNAL_RANK_R2_KEY   = "meta/classement_externes.json"
-EXTERNAL_STALE_DAYS    = 30    # au-delà, le chiffre saisi ne veut plus rien dire
-EXTERNAL_MAX_ENTRIES   = 60
-EXTERNAL_MAX_SALES     = 100000
-
-
-def _load_external_ranked():
-    """Entrées hors programme, telles qu'enregistrées."""
-    try:
-        data = r2_get_json(EXTERNAL_RANK_R2_KEY) or {}
-        rows = data.get("entries") or []
-        return [r for r in rows if isinstance(r, dict)]
-    except Exception as e:
-        print(f"[CLASSEMENT] Entrées externes illisibles: {e}")
-        return []
-
-
-def _external_age_days(row, now=None):
-    """Jours écoulés depuis la dernière mise à jour du chiffre. None si inconnu."""
-    at = (row.get("updated_at") or "").strip()
-    if not at:
-        return None
-    try:
-        seen = datetime.fromisoformat(at.replace("Z", "+00:00"))
-        if seen.tzinfo is None:
-            seen = seen.replace(tzinfo=timezone.utc)
-    except Exception:
-        return None
-    return max(0, ((now or datetime.now(timezone.utc)) - seen).days)
-
 
 def _rank_sales(x):
     """
@@ -4514,6 +4577,257 @@ def _rank_fresh(x, now=None):
     return (now - seen) <= timedelta(days=LEADERBOARD_STALE_DAYS)
 
 
+# ── Vendeurs hors boutique ──────────────────────────────────────────────────
+# Des vendeurs qui font partie du programme et touchent une commission au même
+# barème que les ambassadrices, mais dont les ventes ne passent PAS par la
+# boutique : closing en direct, DM, WhatsApp. Aucun code promo à interroger,
+# donc aucune synchro Shopify possible — leur volume est renseigné à la main.
+#
+# Ce sont de vrais influenceurs dans meta/influenceurs.json, marqués
+# `light: True`. C'est ce qui leur donne gratuitement tout le reste : la
+# commission, le ledger par période, le classement, leur espace. Une liste
+# parallèle aurait obligé à réécrire chacune de ces mécaniques.
+# « Allégé » ne porte que sur la logistique : pas de colis, pas d'adresse, pas
+# de maillots, pas de missions — rien à gérer, comme demandé.
+#
+# Deux façons de renseigner le volume :
+#
+#   • « rythme » — un nombre de ventes PAR JOUR, connu parce que ces vendeurs
+#                  tiennent un objectif journalier (2/jour, 3/jour). Tout le
+#                  reste s'en déduit à la lecture.
+#   • « fixe »   — un total sur 30 jours tapé à la main. C'est le mode de
+#                  correction : en fin de mois, l'admin compare et rectifie.
+#
+# Le mode rythme est un calcul, jamais un tirage : à données égales il rend
+# toujours le même nombre. Rien n'est incrémenté jour après jour, tout est
+# recalculé — il n'y a donc aucune dérive accumulée à rattraper, seulement un
+# rythme à réajuster quand la réalité s'en écarte.
+#
+# Point non évident, et c'est le cœur du calcul : le classement mesure une
+# FENÊTRE GLISSANTE de 30 jours, pas un cumul depuis le début du mois. Pour
+# quelqu'un qui vend 3 par jour, ce nombre ne grimpe pas indéfiniment — il
+# monte pendant 30 jours puis se stabilise à 90, parce que chaque vente qui
+# entre dans la fenêtre en chasse une qui en sort.
+LIGHT_WARN_DAYS   = 30     # console : « à vérifier »
+LIGHT_STALE_DAYS  = 45     # au-delà, le vendeur sort du classement
+LIGHT_MAX_SALES   = 100000
+LIGHT_MAX_RATE    = 200    # ventes/jour ; garde-fou de saisie
+RANK_WINDOW_DAYS  = 30
+DEFAULT_BASKET    = 38.0   # panier moyen net de repli, cohérent avec _espace_rewards
+
+# Ancienne liste parallèle, absorbée dans meta/influenceurs.json au premier
+# chargement (voir _migrate_external_ranked).
+EXTERNAL_RANK_R2_KEY = "meta/classement_externes.json"
+
+
+def _is_light(inf):
+    return bool(isinstance(inf, dict) and inf.get("light"))
+
+
+def _light_age_days(inf, now=None):
+    """
+    Jours depuis la dernière confirmation du volume par l'admin. None si
+    inconnu. C'est cette date qui décide qu'un vendeur est périmé : un rythme
+    non revérifié pendant six semaines n'est plus un rythme constaté, c'est
+    une hypothèse — et on ne paie pas une hypothèse.
+    """
+    at = (inf.get("sales_checked_at") or "").strip()
+    if not at:
+        return None
+    try:
+        seen = datetime.fromisoformat(at.replace("Z", "+00:00"))
+        if seen.tzinfo is None:
+            seen = seen.replace(tzinfo=timezone.utc)
+    except Exception:
+        return None
+    return max(0, ((now or datetime.now(timezone.utc)) - seen).days)
+
+
+def _light_daily_rate(inf):
+    """
+    Ventes par jour, quel que soit le mode de saisie.
+
+    Le mode « fixe » donne un total sur 30 jours : le ramener à un rythme
+    journalier est ce qui permet ensuite de le découper sur n'importe quelle
+    période — celle de rémunération, qui ne fait pas 30 jours et ne commence
+    pas le 1er.
+    """
+    if (inf.get("sales_mode") or "rythme") == "fixe":
+        total = max(0, min(LIGHT_MAX_SALES, _safe_int(inf.get("sales_manual", 0))))
+        return total / float(RANK_WINDOW_DAYS)
+    try:
+        rate = float(inf.get("sales_rate") or 0)
+    except (TypeError, ValueError):
+        rate = 0.0
+    return max(0.0, min(float(LIGHT_MAX_RATE), rate))
+
+
+def _light_active_days(inf, since, until):
+    """
+    Jours réellement travaillés entre deux bornes.
+
+    Un vendeur ajouté il y a six jours n'a pas un mois de ventes derrière lui :
+    l'afficher à plein régime le placerait devant des ambassadrices qui, elles,
+    ont réellement produit ce chiffre. La date de départ borne donc toujours
+    l'intervalle par la gauche.
+    """
+    start = _parse_day(inf.get("sales_start")) or since
+    if start < since:
+        start = since
+    if until <= start:
+        return 0
+    return max(0, (until - start).days)
+
+
+def _program_avg_basket(influenceurs=None):
+    """
+    Panier moyen net du programme, mesuré sur les ventes réellement suivies.
+
+    Il sert à convertir en euros le volume d'un vendeur hors boutique, dont on
+    connaît le nombre de ventes mais aucun montant. Mesuré plutôt que fixé :
+    une estimation qui s'appuie sur les vraies ventes de la boutique vaut mieux
+    qu'une constante qui vieillit en silence.
+    """
+    try:
+        if influenceurs is None:
+            data = r2_get_json(INFLUENCEURS_R2_KEY) or {}
+            influenceurs = data.get("influenceurs", []) or []
+        sales = revenue = 0.0
+        for x in influenceurs:
+            if not isinstance(x, dict) or _is_light(x):
+                continue                       # pas de CA réel : ne pas biaiser
+            st = x.get("stats") or {}
+            n, r = _safe_int(st.get("sales", 0)), _safe_float(st.get("revenue", 0))
+            if n > 0 and r > 0:
+                sales += n
+                revenue += r
+        if sales >= 10 and revenue > 0:        # sous 10 ventes, la moyenne est du bruit
+            return round(revenue / sales, 2)
+    except Exception as e:
+        print(f"[LIGHT] Panier moyen indisponible: {e}")
+    return DEFAULT_BASKET
+
+
+def _light_stats(inf, now=None, avg_basket=None):
+    """
+    Statistiques d'un vendeur hors boutique, recalculées de bout en bout.
+
+    Trois horizons, trois usages :
+      - `sales_30d`   : fenêtre glissante commune → le classement ;
+      - `sales_month` : SA période de rémunération → le barème et la commission ;
+      - `sales`       : cumul depuis son entrée → son palier et son historique.
+
+    Les euros sont dérivés du panier moyen du programme. C'est une estimation
+    assumée, et elle pèse moins qu'il n'y paraît : au-delà de 30 ventes dans la
+    période, c'est le fixe de 350 € qui s'applique, et le fixe ne dépend que du
+    NOMBRE de ventes. L'estimation ne décide du montant que pour les petits
+    volumes, là où l'écart en euros reste faible.
+    """
+    now = now or datetime.now(timezone.utc)
+    avg = float(avg_basket if avg_basket is not None else _program_avg_basket())
+    rate = _light_daily_rate(inf)
+
+    # Fenêtre glissante de 30 jours (classement).
+    win_start = now - timedelta(days=RANK_WINDOW_DAYS)
+    sales_30d = int(round(rate * _light_active_days(inf, win_start, now)))
+
+    # Période de rémunération personnelle (barème et commission).
+    p_start, p_end, _ = _period_bounds(inf, now)
+    sales_period = int(round(rate * _light_active_days(inf, p_start, now)))
+
+    # Cumul depuis l'entrée dans le programme.
+    began = (_parse_day(inf.get("sales_start"))
+             or _parse_day(inf.get("program_start_date"))
+             or now)
+    total = int(round(rate * max(0, (now - began).days)))
+    total += _safe_int(inf.get("baseline_sales", 0))
+
+    cap = lambda v: max(0, min(LIGHT_MAX_SALES, v))
+    sales_30d, sales_period, total = cap(sales_30d), cap(sales_period), cap(total)
+
+    return {
+        "sales":         total,
+        "revenue":       round(total * avg, 2),
+        "sales_month":   sales_period,
+        "revenue_month": round(sales_period * avg, 2),
+        "sales_30d":     sales_30d,
+        "sales_30d_at":  now.isoformat(),
+        "avg_basket":    avg,
+        "period_start":  _period_key(p_start),
+        "period_end":    _period_key(p_end),
+    }
+
+
+def _apply_light_stats(inf, now=None, avg_basket=None):
+    """
+    Pose les stats calculées sur la fiche, sans écraser ce qui ne se recalcule
+    pas (commission cumulée, historique par période). Modifie et retourne inf.
+    """
+    if not _is_light(inf):
+        return inf
+    st = dict(inf.get("stats") or {})
+    st.update(_light_stats(inf, now, avg_basket))
+    inf["stats"] = st
+    return inf
+
+
+def _refresh_light_stats(influenceurs, now=None):
+    """
+    Rafraîchit tous les vendeurs hors boutique d'une liste, avec un seul calcul
+    de panier moyen pour tout le monde. À appeler sur les chemins de LECTURE :
+    leurs chiffres dépendent de la date du jour, ils seraient périmés dès le
+    lendemain de la dernière écriture.
+    """
+    if not influenceurs:
+        return influenceurs
+    now = now or datetime.now(timezone.utc)
+    avg = _program_avg_basket(influenceurs)
+    for inf in influenceurs:
+        if _is_light(inf):
+            _apply_light_stats(inf, now, avg)
+    return influenceurs
+
+
+def _migrate_external_ranked(influenceurs):
+    """
+    Absorbe l'ancienne liste parallèle `meta/classement_externes.json` dans la
+    liste des influenceurs. Idempotent : une entrée déjà migrée porte le même
+    id et n'est pas réimportée. Retourne True si quelque chose a bougé.
+    """
+    try:
+        data = r2_get_json(EXTERNAL_RANK_R2_KEY) or {}
+        rows = [r for r in (data.get("entries") or []) if isinstance(r, dict)]
+        if not rows:
+            return False
+        known = {i.get("id") for i in influenceurs if isinstance(i, dict)}
+        now_iso = datetime.now(timezone.utc).isoformat()
+        added = 0
+        for r in rows:
+            rid = (r.get("id") or "").strip()
+            name = (r.get("pseudo") or "").strip()
+            if not rid or not name or rid in known:
+                continue
+            mode = "fixe" if (r.get("mode") == "fixe") else "rythme"
+            influenceurs.append({
+                "id": rid, "pseudo": name, "light": True,
+                "status": 0, "platform": "", "promo_code": "",
+                "sales_mode":       mode,
+                "sales_rate":       float(r.get("rate") or 0),
+                "sales_manual":     _safe_int(r.get("sales", 0)),
+                "sales_start":      r.get("start") or _period_key(datetime.now(timezone.utc)),
+                "sales_checked_at": r.get("checked_at") or r.get("updated_at") or now_iso,
+                "addedAt": now_iso, "lastModified": now_iso,
+                "stats": {},
+            })
+            added += 1
+        if added:
+            print(f"[LIGHT] {added} vendeur(s) hors boutique repris depuis l'ancienne liste")
+        return added > 0
+    except Exception as e:
+        print(f"[LIGHT] Migration de l'ancienne liste impossible: {e}")
+        return False
+
+
 def _leaderboard(inf, influenceurs=None, now=None):
     """
     Classement des influenceurs sur les 30 derniers jours glissants.
@@ -4534,38 +4848,42 @@ def _leaderboard(inf, influenceurs=None, now=None):
 
         my_id = (inf or {}).get("id")
 
-        # Deux sources, un seul classement : les ambassadeurs du programme
-        # (chiffre synchronisé depuis Shopify) et les vendeurs suivis à la main
-        # (chiffre saisi en console). Elles sont réduites ici à la même forme
-        # — un nom, un nombre — pour que la suite n'ait plus à les distinguer.
+        # Un seul classement, deux façons d'y entrer : un code promo suivi par
+        # Shopify, ou un volume renseigné à la main pour les vendeurs hors
+        # boutique. Rien ne distingue les deux ensuite — c'est le programme
+        # entier qui se compare, pas deux tableaux côte à côte.
+        # Les vendeurs hors boutique n'ont de chiffre que recalculé : leur
+        # volume dépend de la date du jour, il serait périmé dès le lendemain
+        # de la dernière écriture. Le calcul est arithmétique et idempotent,
+        # on le refait donc systématiquement plutôt que de risquer un zéro.
+        _refresh_light_stats(influenceurs, now)
+
         pool = []
         for x in influenceurs:
-            if not isinstance(x, dict) or not (x.get("promo_code") or "").strip():
+            if not isinstance(x, dict):
+                continue
+            mine = bool(my_id) and x.get("id") == my_id
+
+            if _is_light(x):
+                if not (x.get("pseudo") or "").strip():
+                    continue
+                # Un volume que l'admin n'a pas reconfirmé depuis six semaines
+                # ne décrit plus rien : mieux vaut l'absence qu'une place fausse.
+                age = _light_age_days(x, now)
+                if age is not None and age > LIGHT_STALE_DAYS and not mine:
+                    continue
+            elif not (x.get("promo_code") or "").strip():
                 continue
             # Ma propre ligne reste toujours là : un classement dont on est
             # absent est illisible, et mon chiffre n'est pas une révélation
             # pour moi.
-            if not _rank_fresh(x, now) and x.get("id") != my_id:
+            elif not _rank_fresh(x, now) and not mine:
                 continue
+
             pool.append({
                 "pseudo": (x.get("pseudo") or "").strip() or "Sans pseudo",
                 "sales":  _rank_sales(x),
-                "is_me":  bool(my_id) and x.get("id") == my_id,
-            })
-
-        for e in _load_external_ranked():
-            name = (e.get("pseudo") or "").strip()
-            if not name:
-                continue
-            age = _external_age_days(e, now)
-            # Un chiffre saisi il y a plus de 30 jours ne décrit plus une
-            # fenêtre de 30 jours : on préfère l'absence à une place fausse.
-            if age is not None and age > EXTERNAL_STALE_DAYS:
-                continue
-            pool.append({
-                "pseudo": name,
-                "sales":  max(0, min(EXTERNAL_MAX_SALES, _safe_int(e.get("sales", 0)))),
-                "is_me":  False,
+                "is_me":  mine,
             })
 
         if len(pool) < LEADERBOARD_MIN_POOL:
@@ -4614,86 +4932,61 @@ def _leaderboard(inf, influenceurs=None, now=None):
         return None
 
 
-@app.route("/api/classement/externes", methods=["GET"])
+@app.route("/api/classement/light", methods=["GET"])
 @_require_admin_api
-def api_external_ranked_get():
+def api_light_sellers_get():
     """
-    Participants hors programme, pour la console.
+    Vendeurs hors boutique, pour la console.
 
-    Chaque entrée repart avec l'âge de son chiffre : c'est la seule information
-    qui dit à l'admin ce qu'il doit faire — un nombre saisi il y a cinq
-    semaines est sorti du classement, et il est le seul à pouvoir le corriger.
+    Chaque fiche repart avec ce que l'admin ne peut pas deviner : le volume
+    effectivement affiché au classement, ce qu'il doit en commission sur la
+    période, et depuis combien de temps le chiffre n'a pas été confirmé.
     """
     now = datetime.now(timezone.utc)
+    data = r2_get_json(INFLUENCEURS_R2_KEY) or {}
+    influenceurs = data.get("influenceurs", []) or []
+    avg = _program_avg_basket(influenceurs)
+
     out = []
-    for e in _load_external_ranked():
-        age = _external_age_days(e, now)
+    for inf in influenceurs:
+        if not _is_light(inf):
+            continue
+        st  = _light_stats(inf, now, avg)
+        age = _light_age_days(inf, now)
+        start = _parse_day(inf.get("sales_start"))
+        ramp = None
+        if start is not None:
+            elapsed = max(0, (now - start).days)
+            if elapsed < RANK_WINDOW_DAYS:
+                # Encore en montée : l'admin doit savoir que le nombre affiché
+                # va continuer de grimper tout seul jusqu'à son régime.
+                ramp = {"day": elapsed, "of": RANK_WINDOW_DAYS}
+        com = _compute_monthly_commission(inf, st)
         out.append({
-            "id":         e.get("id") or "",
-            "pseudo":     (e.get("pseudo") or "").strip(),
-            "sales":      _safe_int(e.get("sales", 0)),
-            "updated_at": e.get("updated_at") or "",
+            "id":         inf.get("id") or "",
+            "pseudo":     (inf.get("pseudo") or "").strip(),
+            "mode":       inf.get("sales_mode") or "rythme",
+            "rate":       float(inf.get("sales_rate") or 0),
+            "manual":     _safe_int(inf.get("sales_manual", 0)),
+            "start":      inf.get("sales_start") or "",
+            "shown":      st["sales_30d"],
+            "ramp":       ramp,
+            "period":     {"sales": st["sales_month"],
+                           "from":  st["period_start"], "to": st["period_end"]},
+            "commission": {"amount": com.get("amount", 0), "type": com.get("type")},
+            "espace_url": f"{request.host_url.rstrip('/')}/espace/{_public_slug(inf)}",
             "age_days":   age,
-            "stale":      bool(age is not None and age > EXTERNAL_STALE_DAYS),
+            "warn":       bool(age is not None and age > LIGHT_WARN_DAYS),
+            "stale":      bool(age is not None and age > LIGHT_STALE_DAYS),
         })
-    out.sort(key=lambda r: (-r["sales"], r["pseudo"].lower()))
-    return jsonify({"entries": out, "stale_days": EXTERNAL_STALE_DAYS})
-
-
-@app.route("/api/classement/externes", methods=["POST"])
-@_require_admin_api
-def api_external_ranked_save():
-    """
-    Enregistre la liste complète des participants hors programme.
-
-    `updated_at` n'est pas fourni par le client : il est posé ici, et
-    uniquement quand le chiffre change vraiment. Renommer quelqu'un ou
-    réenregistrer sans rien toucher ne doit pas faire passer un nombre périmé
-    pour un nombre frais — c'est précisément ce que cette date sert à empêcher.
-    """
-    try:
-        payload = request.json or {}
-        rows = payload.get("entries")
-        if not isinstance(rows, list):
-            return jsonify({"success": False, "error": "format invalide"}), 400
-        if len(rows) > EXTERNAL_MAX_ENTRIES:
-            return jsonify({"success": False,
-                            "error": f"{EXTERNAL_MAX_ENTRIES} entrées au maximum"}), 400
-
-        before = {e.get("id"): e for e in _load_external_ranked() if e.get("id")}
-        now_iso = datetime.now(timezone.utc).isoformat()
-        seen, out = set(), []
-
-        for r in rows:
-            if not isinstance(r, dict):
-                continue
-            name = (r.get("pseudo") or "").strip()[:40]
-            if not name:
-                continue                      # une entrée sans nom n'existe pas
-            rid = (r.get("id") or "").strip() or f"ex_{secrets.token_hex(6)}"
-            if rid in seen:
-                continue
-            seen.add(rid)
-            sales = max(0, min(EXTERNAL_MAX_SALES, _safe_int(r.get("sales", 0))))
-            old = before.get(rid)
-            keep_date = bool(old) and _safe_int(old.get("sales", 0)) == sales
-            out.append({
-                "id":         rid,
-                "pseudo":     name,
-                "sales":      sales,
-                "updated_at": (old.get("updated_at") or now_iso) if keep_date else now_iso,
-            })
-
-        ok = r2_put_json(EXTERNAL_RANK_R2_KEY, {
-            "entries": out,
-            "updated_at": now_iso,
-        })
-        if not ok:
-            return jsonify({"success": False, "error": "écriture impossible"}), 500
-        return jsonify({"success": True, "count": len(out)})
-    except Exception as e:
-        print(f"[CLASSEMENT] Enregistrement externes impossible: {e}")
-        return jsonify({"success": False, "error": "erreur serveur"}), 500
+    out.sort(key=lambda r: (-r["shown"], r["pseudo"].lower()))
+    return jsonify({
+        "entries":    out,
+        "avg_basket": avg,
+        "warn_days":  LIGHT_WARN_DAYS,
+        "stale_days": LIGHT_STALE_DAYS,
+        "window":     RANK_WINDOW_DAYS,
+    })
 
 
 # ── Code d'accès de l'espace ────────────────────────────────────────────────
@@ -4889,6 +5182,9 @@ def _espace_payload(inf):
             "pseudo": inf.get("pseudo") or "",
             "platform": inf.get("platform") or "",
             "promo_code": inf.get("promo_code") or "",
+            # Vendeur hors boutique : son espace n'a ni colis, ni maillots, ni
+            # missions à afficher — il n'a rien de tout ça à gérer.
+            "light": _is_light(inf),
             # Lien prêt à coller en bio : la réduction s'applique toute seule.
             "share_link": _espace_share_link(inf),
             "address": inf.get("address") or "",
