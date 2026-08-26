@@ -4964,43 +4964,37 @@ def _leaderboard(inf, influenceurs=None, now=None):
             })
 
         me = next((r for r in rows if r["is_me"]), None)
-        top = rows[:LEADERBOARD_TOP]
 
-        if not me:
-            # Elle ne figure pas encore au classement (pas de code promo, ou
-            # compteur en attente). On lui montre quand même le tableau : c'est
-            # en voyant des ventes réelles en face qu'on a envie d'y entrer.
-            # Sa ligne est ajoutée en bas, sans place ni chiffre — elle n'a
-            # rien produit, lui inventer un rang serait faux.
-            if me_out:
-                top = top + [{"gap": True},
-                             {"pseudo": me_out["pseudo"], "is_me": True,
-                              "unranked": True}]
-            return {
-                "rows":     top,
-                "position": None,
-                "sales":    0,
-                "total":    len(rows),
-                "podium":   False,
-                "unranked": True,
-                "window":   30,
-            }
-
-        # Hors du top : on ajoute sa propre ligne en dessous, avec un trou
-        # explicite. Voir la marche à franchir vaut mieux que ne pas figurer.
-        if not any(r.get("is_me") for r in top):
-            top = top + [{"gap": True}, me]
-
-        return {
-            "rows":     top,
-            "position": me["position"],
-            "sales":    me["sales"],
+        # Le classement COMPLET part vers l'interface, pas seulement le haut du
+        # tableau : chacune doit pouvoir dérouler la liste entière et voir tout
+        # le monde. L'affichage réduit (top + sa propre ligne) est une décision
+        # de mise en page, pas une restriction — la trancher côté serveur
+        # empêcherait de la défaire côté écran.
+        #
+        # Ce qui part reste un pseudo et un nombre de ventes. Aucun euro : le
+        # CA et la commission d'un tiers se déduiraient l'un de l'autre.
+        payload = {
+            "rows":     rows,
+            "top":      LEADERBOARD_TOP,
             "total":    len(rows),
-            "podium":   me["position"] <= 3 and me["sales"] > 0
-                        and len(rows) >= LEADERBOARD_PODIUM_MIN,
-            "unranked": me["sales"] <= 0,
             "window":   30,
+            # Ligne de celle qui ne figure pas encore au classement : ajoutée
+            # à part, sans place ni chiffre. Lui inventer un rang serait faux.
+            "me_row":   ({"pseudo": me_out["pseudo"], "is_me": True,
+                          "unranked": True} if (not me and me_out) else None),
         }
+        if not me:
+            payload.update({"position": None, "sales": 0,
+                            "podium": False, "unranked": True})
+        else:
+            payload.update({
+                "position": me["position"],
+                "sales":    me["sales"],
+                "podium":   me["position"] <= 3 and me["sales"] > 0
+                            and len(rows) >= LEADERBOARD_PODIUM_MIN,
+                "unranked": me["sales"] <= 0,
+            })
+        return payload
     except Exception as e:
         print(f"[ESPACE] Classement indisponible: {e}")
         return None
