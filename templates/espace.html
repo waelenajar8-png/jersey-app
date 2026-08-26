@@ -552,6 +552,21 @@ input,select{font-family:inherit}
    faire croire au voisinage. */
 .lb-gap{display:flex;justify-content:center;padding:7px 0;border-top:1px solid var(--line);
     color:var(--line-2);font-size:13px;letter-spacing:.3em;line-height:1}
+/* Pagination : discrète, elle ne doit pas peser autant que le tableau. */
+.lb-pager{display:flex;align-items:center;gap:5px;margin-top:12px;flex-wrap:wrap}
+.lb-p{min-width:32px;height:32px;padding:0 8px;border-radius:9px;
+    border:1px solid var(--line);background:var(--surface);
+    font-size:12.5px;font-weight:700;color:var(--ink-2);
+    font-variant-numeric:tabular-nums;transition:all .14s ease}
+.lb-p:hover:not(:disabled){border-color:var(--line-2);color:var(--ink)}
+.lb-p.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.lb-p.nav{font-size:16px;line-height:1;color:var(--muted)}
+.lb-p:disabled{opacity:.35;cursor:default}
+.lb-pdots{color:var(--faint);font-weight:700;padding:0 2px}
+.lb-prange{margin-left:auto;font-size:11.5px;font-weight:600;color:var(--faint)}
+@media(max-width:420px){
+    .lb-prange{flex:1 1 100%;margin-left:0;margin-top:4px}
+}
 .lb-foot{font-size:12.5px;color:var(--muted);font-weight:500;margin-top:12px;line-height:1.55}
 @media(max-width:860px){
     .lb-r{padding:13px 16px;gap:11px}
@@ -1139,6 +1154,35 @@ function blockGains(){
     </section>`;
 }
 
+/* Barre de pagination. Au-delà de cinq pages on n'affiche plus tous les
+   numéros : la page courante, ses voisines, les extrémités, et des points de
+   suspension. Une rangée de vingt chiffres serait illisible sur téléphone. */
+function lbPager(pages, b){
+    const cur = LB_PAGE;
+    let nums = [];
+    if(pages <= 5){
+        for(let i = 0; i < pages; i++) nums.push(i);
+    }else{
+        const near = [0, cur - 1, cur, cur + 1, pages - 1]
+            .filter(i => i >= 0 && i < pages);
+        nums = [...new Set(near)].sort((a, b2) => a - b2);
+    }
+    let out = '', prev = -1;
+    nums.forEach(i => {
+        if(prev >= 0 && i - prev > 1) out += `<span class="lb-pdots">…</span>`;
+        out += `<button class="lb-p${i === cur ? ' on' : ''}" data-lbp="${i}">${i + 1}</button>`;
+        prev = i;
+    });
+    const de = cur * LB_PER + 1;
+    const a  = Math.min(b.rows.length, (cur + 1) * LB_PER);
+    return `<div class="lb-pager">
+        <button class="lb-p nav" data-lbp="${cur - 1}" ${cur === 0 ? 'disabled' : ''} aria-label="Page précédente">‹</button>
+        ${out}
+        <button class="lb-p nav" data-lbp="${cur + 1}" ${cur === pages - 1 ? 'disabled' : ''} aria-label="Page suivante">›</button>
+        <span class="lb-prange num">${de}–${a} sur ${fmt(b.total)}</span>
+    </div>`;
+}
+
 // ── Objectif : ce qu'il reste à faire, et ce que ça débloque ────────────
 function blockGoal(){
     const c = D.commission_month, g = D.gifting_month, t = D.tier;
@@ -1297,6 +1341,11 @@ function blockPromo(){
 
 
 // ── Classement ──────────────────────────────────────────────────────────
+// Le tableau complet est toujours chargé ; la pagination ne décide que de ce
+// qui tient à l'écran. Dix par page : au-delà, le classement écraserait
+// l'objectif et le colis qui le suivent sur l'accueil.
+const LB_PER = 10;
+let LB_PAGE = 0;
 // Fenêtre de 30 jours glissants, la même pour tout le monde — surtout pas la
 // période de rémunération personnelle, qui commence au jour d'inscription :
 // comparer une période entamée le 3 à une période entamée le 27 classerait
@@ -1324,7 +1373,22 @@ function blockRank(){
 
     if(!b.rows || !b.rows.length) return '';
 
-    const rows = b.rows.map(r => {
+    // Pagination : dix par page, et on peut naviguer. Le classement complet
+    // reste consultable sans que cinquante lignes s'empilent sur l'accueil.
+    const pages = Math.max(1, Math.ceil(b.rows.length / LB_PER));
+    if(LB_PAGE >= pages) LB_PAGE = pages - 1;
+    if(LB_PAGE < 0) LB_PAGE = 0;
+
+    let vue = b.rows.slice(LB_PAGE * LB_PER, (LB_PAGE + 1) * LB_PER);
+
+    // Sa propre ligne reste visible où qu'on soit dans le tableau : épinglée
+    // en bas quand elle n'est pas sur la page affichée. Naviguer dans le
+    // classement ne doit jamais faire perdre de vue sa propre place.
+    const moi = b.rows.find(r => r.is_me);
+    if(b.me_row) vue = vue.concat([{gap:true}, b.me_row]);
+    else if(moi && vue.indexOf(moi) === -1) vue = vue.concat([{gap:true}, moi]);
+
+    const rows = vue.map(r => {
         if(r.gap) return `<div class="lb-gap">•••</div>`;
         const cls = [r.is_me ? 'me' : '', r.position === 1 ? 'p1' : '',
                      r.unranked ? 'out' : ''].filter(Boolean).join(' ');
@@ -1348,7 +1412,7 @@ function blockRank(){
     // sans avoir à compter les lignes. Sans vente, il dit ce qui l'attend.
     // Quand personne n'a encore vendu, le tableau est une grille de départ :
     // le dire ainsi vaut mieux que d'annoncer une place que personne n'occupe.
-    const aucune = b.rows.every(r => r.gap || r.unranked);
+    const aucune = b.rows.every(r => r.unranked);
     const titre = (b.position && !b.unranked)
         ? `Ta ${b.position === 1 ? '1ʳᵉ place' : b.position + 'ᵉ place'} sur ${fmt(b.total)}`
         : aucune
@@ -1359,6 +1423,7 @@ function blockRank(){
         <div class="sec-k">Classement</div>
         <div class="sec-t">${esc(titre)}</div>
         <div class="lb">${rows}</div>
+        ${pages > 1 ? lbPager(pages, b) : ''}
         <div class="lb-foot">Sur les ventes des 30 derniers jours, la même fenêtre pour tout le monde.</div>
     </section>`;
 }
@@ -1779,6 +1844,26 @@ function viewContenus(){
 
 // ── Interactions ────────────────────────────────────────────────────────
 function bindDynamic(){
+    // Changement de page du classement. On ne re-rend que ce bloc : reconstruire
+    // tout l'écran ferait rejouer les animations d'entrée et sauter la page.
+    document.querySelectorAll('[data-lbp]').forEach(btn=>{
+        btn.onclick = ()=>{
+            const n = Number(btn.getAttribute('data-lbp'));
+            if(!Number.isFinite(n) || n === LB_PAGE) return;
+            LB_PAGE = n;
+            const sec = btn.closest('section');
+            const tmp = document.createElement('div');
+            tmp.innerHTML = blockRank();
+            const neuf = tmp.firstElementChild;
+            if(neuf && sec){
+                neuf.classList.remove('rise');
+                neuf.style.animation = 'none';
+                sec.replaceWith(neuf);
+                bindDynamic();
+            }
+        };
+    });
+
     document.querySelectorAll('[data-copy]').forEach(b=>{
         b.onclick = ()=>{
             navigator.clipboard.writeText(b.getAttribute('data-copy'));
