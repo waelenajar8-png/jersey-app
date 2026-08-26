@@ -1207,6 +1207,7 @@ function normalize(i){
         base.sales_mode   = i.sales_mode || 'rythme';
         base.sales_rate   = Number(i.sales_rate) || 0;
         base.sales_manual = Number(i.sales_manual) || 0;
+        base.sales_ramp   = i.sales_ramp === 'new' ? 'new' : 'installed';
     }
     return base;
 }
@@ -1472,7 +1473,7 @@ function renderRank(){
 
 function extAdd(){
     EXT.push({id:'', pseudo:'', mode:'rythme', rate:3, manual:0, shown:0,
-              ramp:null, period:null, commission:null,
+              ramp:null, ramp_mode:'installed', period:null, commission:null,
               age_days:null, warn:false, stale:false});
     renderExt();
     setTimeout(()=>{
@@ -1483,6 +1484,10 @@ function extAdd(){
 function extDel(i){ EXT.splice(i,1); renderExt(); }
 function extSet(i, k, v){ if(EXT[i]){ EXT[i][k] = v; if(k!=='pseudo') renderExt(); } }
 function extMode(i, m){ if(EXT[i] && EXT[i].mode !== m){ EXT[i].mode = m; renderExt(); } }
+/* Déjà en rythme, ou démarre maintenant ? La distinction n'a l'air de rien et
+   décide de tout : quelqu'un qui vend depuis des mois compte à plein tout de
+   suite, quelqu'un qui débute part de zéro et monte sur 30 jours. */
+function extRamp(i, r){ if(EXT[i] && EXT[i].ramp_mode !== r){ EXT[i].ramp_mode = r; renderExt(); } }
 
 /* Ce que le classement affichera, calculé ici comme côté serveur : l'admin ne
    doit pas avoir à deviner ce que « 3 par jour » donne. */
@@ -1490,7 +1495,11 @@ function extShown(e){
     const rate = e.mode === 'rythme'
         ? Math.max(0, Math.min(200, parseFloat(e.rate) || 0))
         : Math.max(0, Math.min(100000, parseInt(e.manual,10) || 0)) / 30;
-    const days = e.ramp ? e.ramp.day : (e.id ? 30 : 0);
+    // Déjà en rythme = plein régime tout de suite. C'est le cas courant : on
+    // enregistre quelqu'un qui vend depuis des mois, pas un débutant.
+    const days = e.ramp_mode === 'new'
+        ? (e.ramp ? e.ramp.day : 0)
+        : 30;
     return Math.round(rate * days);
 }
 
@@ -1506,6 +1515,7 @@ function renderExt(){
     }
     el.innerHTML = EXT.map((e,i) => {
         const rythme = e.mode === 'rythme';
+        const neuf   = e.ramp_mode === 'new';
         const shown  = extShown(e);
         const plein  = Math.round((rythme
             ? (parseFloat(e.rate)||0)
@@ -1524,7 +1534,9 @@ function renderExt(){
         // être visible au moment où on règle le chiffre.
         let calc = '';
         if(!e.id){
-            calc = `<span class="extcalc">Démarre à 0 et montera jusqu'à <b>${plein}</b> ventes en 30 jours</span>`;
+            calc = neuf
+                ? `<span class="extcalc">Démarre à 0 et montera jusqu'à <b>${plein}</b> ventes en 30 jours</span>`
+                : `<span class="extcalc">Entrera au classement avec <b>${plein}</b> ventes sur 30 j, dès l'enregistrement</span>`;
         }else{
             const r = e.ramp;
             const com = e.commission
@@ -1554,6 +1566,10 @@ function renderExt(){
                 <button class="${rythme?'':'on'}" onclick="extMode(${i},'fixe')">Total</button>
             </div>
             ${champ}
+            <div class="extseg">
+                <button class="${neuf?'':'on'}" onclick="extRamp(${i},'installed')">Déjà en rythme</button>
+                <button class="${neuf?'on':''}" onclick="extRamp(${i},'new')">Débute</button>
+            </div>
             <button class="icon-btn" onclick="extDel(${i})" title="Retirer" data-i="trash"></button>
             ${calc}${age}${lien}
         </div>`;
@@ -1583,6 +1599,7 @@ async function extSave(){
                 sales_mode: e.mode === 'fixe' ? 'fixe' : 'rythme',
                 sales_rate: Math.max(0, Math.min(200, parseFloat(e.rate)||0)),
                 sales_manual: Math.max(0, Math.min(100000, parseInt(e.manual,10)||0)),
+                sales_ramp: e.ramp_mode === 'new' ? 'new' : 'installed',
             };
             const exist = e.id && byId[e.id];
             if(exist){ Object.assign(exist, champs); kept.add(e.id); }
