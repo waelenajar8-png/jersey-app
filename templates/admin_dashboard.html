@@ -148,6 +148,16 @@ h1{font-size:27px;font-weight:800;letter-spacing:-.035em;line-height:1.1}
 .board-value small{font-size:15px;font-weight:700;color:var(--faint);margin-left:3px;letter-spacing:-.02em}
 
 /* ── Filtres ─────────────────────────────────────────────────────────── */
+/* Ligne des vendeurs hors boutique : à part, en retrait, jamais additionnée
+   aux chiffres de la boutique juste au-dessus. */
+.hb-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:12px;
+    padding:11px 16px;border:1px dashed var(--line-2);border-radius:12px;
+    font-size:12.5px;font-weight:600;color:var(--ink-2);background:var(--surface)}
+.hb-bar svg{width:15px;height:15px;color:var(--muted);flex:none}
+.hb-bar b{font-weight:800;color:var(--ink);font-variant-numeric:tabular-nums}
+.hb-bar .d{width:3px;height:3px;border-radius:50%;background:var(--line-2)}
+.hb-note{color:var(--muted);font-weight:500}
+.hb-bar .btn{margin-left:auto}
 .filters{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:20px}
 .chip{
     display:inline-flex;align-items:center;gap:7px;height:32px;padding:0 13px;border-radius:100px;
@@ -652,6 +662,8 @@ select.inp{cursor:pointer}
                     <div class="board-value num" id="bCom">—</div>
                 </div>
             </div>
+
+            <div class="hb-bar" id="boardHB" hidden></div>
 
             <div class="filters" id="filters"></div>
             <div class="grid" id="grid"></div>
@@ -1208,6 +1220,10 @@ function normalize(i){
         base.sales_rate   = Number(i.sales_rate) || 0;
         base.sales_manual = Number(i.sales_manual) || 0;
         base.sales_ramp   = i.sales_ramp === 'new' ? 'new' : 'installed';
+        // Le volume 30 j est recalculé par le serveur à chaque lecture, mais
+        // normalize() ne garde pas le sous-objet stats : on l'aplatit ici,
+        // sinon le bandeau hors boutique afficherait toujours zéro vente.
+        base.stats_sales_30d = (i.stats && i.stats.sales_30d) || 0;
     }
     return base;
 }
@@ -1227,22 +1243,50 @@ async function load(){
     renderAll();
 }
 
+/* ── Deux populations, deux comptes ─────────────────────────────────────
+   Les ambassadeurs du programme d'un côté, les vendeurs hors boutique de
+   l'autre. Ils partagent le classement — c'est tout l'intérêt — mais rien
+   d'autre : leurs ventes ne passent pas par la boutique et leur paie est
+   gérée à la main. Les mélanger dans « ventes cumulées » ou « commissions
+   versées » donnait un chiffre qui ne correspondait à aucune réalité :
+   ni à ce que la boutique a encaissé, ni à ce qu'il reste à verser. */
+const ambassadeurs = () => influenceurs.filter(i => !i.light);
+const horsBoutique = () => influenceurs.filter(i => i.light);
+
 function renderAll(){
-    const sales = influenceurs.reduce((s,i)=>s+(i.stats_sales||0),0);
-    const month = influenceurs.reduce((s,i)=>s+(i.stats_sales_month||0),0);
-    const com   = influenceurs.reduce((s,i)=>s+(i.stats_commission||0),0);
-    document.getElementById('bCount').textContent = influenceurs.length;
+    const amb   = ambassadeurs();
+    const sales = amb.reduce((s,i)=>s+(i.stats_sales||0),0);
+    const month = amb.reduce((s,i)=>s+(i.stats_sales_month||0),0);
+    const com   = amb.reduce((s,i)=>s+(i.stats_commission||0),0);
+    document.getElementById('bCount').textContent = amb.length;
     document.getElementById('bSales').textContent = sales;
     document.getElementById('bMonth').textContent = month;
     document.getElementById('bCom').textContent   = euro(com);
+
+    // Les vendeurs hors boutique ont leur propre ligne : à part des chiffres
+    // de la boutique, mais visibles — les cacher ferait douter qu'ils existent.
+    const hb = horsBoutique();
+    const el = document.getElementById('boardHB');
+    if(el){
+        el.hidden = !hb.length;
+        if(hb.length){
+            const v30 = hb.reduce((s,i)=>s+(i.stats_sales_30d||0),0);
+            el.innerHTML = `${ico('trophy')}<span><b>${hb.length}</b> vendeur${hb.length>1?'s':''}
+                hors boutique</span><span class="d"></span><span><b>${v30}</b> vente${v30>1?'s':''}
+                sur 30 j au classement</span><span class="d"></span>
+                <span class="hb-note">comptés au classement, pas dans les chiffres ci-dessus</span>
+                <button class="btn ghost sm" onclick="openExt();setExtTab('light')">Gérer</button>`;
+            paintIcons(el);
+        }
+    }
     renderFilters();
     renderGrid();
 }
 
 function renderFilters(){
-    const c = {};
-    influenceurs.forEach(i => c[i.status] = (c[i.status]||0)+1);
-    let h = `<button class="chip ${filterStatus===''?'on':''}" onclick="setFilter('')">Tous <span class="n num">${influenceurs.length}</span></button>`;
+    const amb = ambassadeurs(), c = {};
+    amb.forEach(i => c[i.status] = (c[i.status]||0)+1);
+    let h = `<button class="chip ${filterStatus===''?'on':''}" onclick="setFilter('')">Tous <span class="n num">${amb.length}</span></button>`;
     STATUSES.forEach((label, idx) => {
         const n = c[idx] || 0;
         h += `<button class="chip ${filterStatus===String(idx)?'on':''} ${n===0?'zero':''}" onclick="setFilter('${idx}')">${esc(label)} <span class="n num">${n}</span></button>`;
@@ -1253,7 +1297,10 @@ function setFilter(v){ filterStatus = v; renderFilters(); renderGrid(); }
 
 function renderGrid(){
     const q = document.getElementById('q').value.toLowerCase().trim();
-    let list = influenceurs.slice().sort((a,b)=>(b.stats_sales||0)-(a.stats_sales||0));
+    // Les vendeurs hors boutique n'ont pas de fiche à gérer — ni colis, ni
+    // adresse, ni maillots. Leur place est le panneau « Hors boutique », pas
+    // cette grille, où ils ajoutaient des cartes vides et faussaient le compte.
+    let list = ambassadeurs().sort((a,b)=>(b.stats_sales||0)-(a.stats_sales||0));
     if(filterStatus !== '') list = list.filter(i => String(i.status) === filterStatus);
     if(q) list = list.filter(i => (i.pseudo||'').toLowerCase().includes(q) || (i.promo_code||'').toLowerCase().includes(q));
 
@@ -2292,9 +2339,10 @@ async function deleteVideo(id){
 let vPendingFile = null;
 
 function openVidUpload(){
-    if(!influenceurs.length){ toast("Ajoute d'abord un influenceur", true); return; }
-    document.getElementById('vInflu').innerHTML = influenceurs
-        .slice().sort((a,b)=>(a.pseudo||'').localeCompare(b.pseudo||''))
+    const amb = ambassadeurs();
+    if(!amb.length){ toast("Ajoute d'abord un influenceur", true); return; }
+    document.getElementById('vInflu').innerHTML = amb
+        .sort((a,b)=>(a.pseudo||'').localeCompare(b.pseudo||''))
         .map(i=>`<option value="${esc(i.id)}">${esc(i.pseudo||'Sans nom')}</option>`).join('');
     document.getElementById('vType').value = 'unboxing';
     document.getElementById('vAds').value = '';
@@ -2720,12 +2768,16 @@ function csvCell(v){
     return /[",;\n]/.test(s) ? '"' + s.replace(/"/g,'""') + '"' : s;
 }
 function exportCsv(){
-    if(!influenceurs.length){ toast('Rien à exporter', true); return; }
+    // Les vendeurs hors boutique ne sont pas exportés : le fichier sert à
+    // suivre le programme et sa facturation, or leurs ventes ne passent pas
+    // par la boutique et leur paie est gérée à part.
+    const amb = ambassadeurs();
+    if(!amb.length){ toast('Rien à exporter', true); return; }
     const head = ['Pseudo','Plateforme','Statut','Code promo','Début programme',
                   'Ventes cumulées','Ventes ce mois','CA net','Commissions',
                   'Palier','Relances','Profil','WhatsApp','Adresse','Notes'];
     const lines = [head.join(';')];
-    influenceurs.slice().sort((a,b)=>(b.stats_sales||0)-(a.stats_sales||0)).forEach(i => {
+    amb.sort((a,b)=>(b.stats_sales||0)-(a.stats_sales||0)).forEach(i => {
         lines.push([
             i.pseudo, (i.platform_list && i.platform_list.length ? i.platform_list.join(' / ') : i.platform),
             STATUSES[i.status]||'', i.promo_code, i.program_start_date,
@@ -2741,7 +2793,7 @@ function exportCsv(){
     a.download = `volakits-ambassadeurs-${new Date().toISOString().slice(0,10)}.csv`;
     a.click();
     URL.revokeObjectURL(a.href);
-    toast(`${influenceurs.length} ligne${influenceurs.length>1?'s':''} exportée${influenceurs.length>1?'s':''}`);
+    toast(`${amb.length} ligne${amb.length>1?'s':''} exportée${amb.length>1?'s':''}`);
 }
 
 /* ── Init ───────────────────────────────────────────────────────────── */
