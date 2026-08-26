@@ -4958,20 +4958,27 @@ def _migrate_external_ranked(influenceurs):
         return False
 
 
-def _rank_label(x):
-    """
-    Ce qui remplace le pseudo d'un tiers au classement : son palier.
+RANK_MASK_KEEP = 2       # lettres visibles du pseudo d'un tiers
+RANK_MASK_DOTS = "•••"   # longueur fixe : la taille du pseudo ne se déduit pas
 
-    Le palier est une vraie information — il dit où en est la personne dans le
-    programme — sans permettre de la reconnaître. Il donne aussi au tableau une
-    raison d'exister au-delà du chiffre : voir « VIP » en tête rend le palier
-    désirable, ce qu'un simple numéro ne fait pas.
+
+def _rank_label(nom):
     """
-    try:
-        idx, _next, _pct, _det = _compute_tier_progress(x.get("stats") or {})
-        return f"Ambassadrice · {INFLUENCER_TIERS[idx]['name']}"
-    except Exception:
-        return "Ambassadrice"
+    Ce qui remplace le pseudo d'un tiers au classement : ses deux premières
+    lettres, le reste masqué.
+
+    Le masquage se fait ICI, côté serveur, et pas à l'affichage : caché en CSS,
+    le pseudo complet resterait dans la réponse de l'API, donc lisible par
+    quiconque ouvre les outils du navigateur. Ce qui part vers l'écran d'une
+    influenceuse ne contient jamais le nom entier d'une autre.
+
+    Le nombre de points ne suit pas la longueur réelle : « Ly••• » ne dit pas
+    si le pseudo fait quatre lettres ou douze.
+    """
+    n = (nom or "").strip()
+    if not n:
+        return "Participante"
+    return n[:RANK_MASK_KEEP] + RANK_MASK_DOTS
 
 
 def _leaderboard(inf, influenceurs=None, now=None):
@@ -5056,7 +5063,7 @@ def _leaderboard(inf, influenceurs=None, now=None):
             # elles, elles identifient presque à coup sûr. Un demi-anonymat qui
             # se décode est pire que pas d'anonymat du tout.
             pool.append({
-                "pseudo": name if mine else _rank_label(x),
+                "pseudo": name if mine else _rank_label(name),
                 "sales":  _rank_sales(x),
                 "is_me":  mine,
                 "anon":   not mine,
