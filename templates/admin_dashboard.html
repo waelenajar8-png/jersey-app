@@ -1084,9 +1084,11 @@ select.inp{cursor:pointer}
                 mais vendent hors boutique : rien à synchroniser, tu renseignes leur volume ici.
                 Ils n'ont ni colis, ni adresse, ni maillots, ni missions à gérer, et reçoivent
                 un espace allégé (gains, objectif, classement).<br><br>
-                <b>Rythme</b> — son nombre de ventes par jour ; tout le reste s'en déduit et
-                reste à jour sans que tu y touches. <b>Total</b> — tu tapes toi-même son total
-                sur 30 jours ; c'est le mode de correction de fin de mois.<br><br>
+                <b>Total</b> — tu tapes son nombre de ventes sur les 30 derniers jours.
+                C'est le mode le plus simple, et celui avec lequel tu corriges chaque mois.
+                <b>Rythme</b> — tu donnes ses ventes par jour et l'app multiplie par 30 ;
+                utile quand tu connais sa cadence plutôt que son total. Les deux aboutissent
+                au même chiffre, choisis celui que tu as sous la main.<br><br>
                 Ce volume sert à deux choses : sa place au classement, que toutes tes
                 ambassadrices voient, et <b>sa commission</b>. Il doit décrire des ventes
                 réelles. Repasse une fois par mois corriger l'écart — au-delà de 45 jours
@@ -1219,7 +1221,6 @@ function normalize(i){
         base.sales_mode   = i.sales_mode || 'rythme';
         base.sales_rate   = Number(i.sales_rate) || 0;
         base.sales_manual = Number(i.sales_manual) || 0;
-        base.sales_ramp   = i.sales_ramp === 'new' ? 'new' : 'installed';
         // Le volume 30 j est recalculé par le serveur à chaque lecture, mais
         // normalize() ne garde pas le sous-objet stats : on l'aplatit ici,
         // sinon le bandeau hors boutique afficherait toujours zéro vente.
@@ -1520,7 +1521,7 @@ function renderRank(){
 
 function extAdd(){
     EXT.push({id:'', pseudo:'', mode:'rythme', rate:3, manual:0, shown:0,
-              ramp:null, ramp_mode:'installed', period:null, commission:null,
+              period:null, commission:null,
               age_days:null, warn:false, stale:false});
     renderExt();
     setTimeout(()=>{
@@ -1531,10 +1532,12 @@ function extAdd(){
 function extDel(i){ EXT.splice(i,1); renderExt(); }
 function extSet(i, k, v){ if(EXT[i]){ EXT[i][k] = v; if(k!=='pseudo') renderExt(); } }
 function extMode(i, m){ if(EXT[i] && EXT[i].mode !== m){ EXT[i].mode = m; renderExt(); } }
-/* Déjà en rythme, ou démarre maintenant ? La distinction n'a l'air de rien et
-   décide de tout : quelqu'un qui vend depuis des mois compte à plein tout de
-   suite, quelqu'un qui débute part de zéro et monte sur 30 jours. */
-function extRamp(i, r){ if(EXT[i] && EXT[i].ramp_mode !== r){ EXT[i].ramp_mode = r; renderExt(); } }
+
+/* La bascule « Déjà en rythme / Débute » a été retirée : elle demandait un
+   choix dont la conséquence était invisible, et les deux réponses menaient au
+   même endroit dans l'usage réel. Le nombre saisi EST le volume des 30
+   derniers jours — s'il vient de commencer, ce nombre est petit, et c'est
+   déjà l'information juste. Toute fiche compte donc immédiatement. */
 
 /* Ce que le classement affichera, calculé ici comme côté serveur : l'admin ne
    doit pas avoir à deviner ce que « 3 par jour » donne. */
@@ -1542,12 +1545,8 @@ function extShown(e){
     const rate = e.mode === 'rythme'
         ? Math.max(0, Math.min(200, parseFloat(e.rate) || 0))
         : Math.max(0, Math.min(100000, parseInt(e.manual,10) || 0)) / 30;
-    // Déjà en rythme = plein régime tout de suite. C'est le cas courant : on
-    // enregistre quelqu'un qui vend depuis des mois, pas un débutant.
-    const days = e.ramp_mode === 'new'
-        ? (e.ramp ? e.ramp.day : 0)
-        : 30;
-    return Math.round(rate * days);
+    // Le volume compte à plein dès l'enregistrement.
+    return Math.round(rate * 30);
 }
 
 function renderExt(){
@@ -1562,7 +1561,6 @@ function renderExt(){
     }
     el.innerHTML = EXT.map((e,i) => {
         const rythme = e.mode === 'rythme';
-        const neuf   = e.ramp_mode === 'new';
         const shown  = extShown(e);
         const plein  = Math.round((rythme
             ? (parseFloat(e.rate)||0)
@@ -1581,18 +1579,13 @@ function renderExt(){
         // être visible au moment où on règle le chiffre.
         let calc = '';
         if(!e.id){
-            calc = neuf
-                ? `<span class="extcalc">Démarre à 0 et montera jusqu'à <b>${plein}</b> ventes en 30 jours</span>`
-                : `<span class="extcalc">Entrera au classement avec <b>${plein}</b> ventes sur 30 j, dès l'enregistrement</span>`;
+            calc = `<span class="extcalc">Entrera au classement avec <b>${plein}</b> ventes sur 30 j, dès l'enregistrement</span>`;
         }else{
-            const r = e.ramp;
             const com = e.commission
                 ? ` · commission période : <b>${euro(e.commission.amount)}</b>`
                 : '';
             const per = e.period ? ` · ${e.period.sales} vente${e.period.sales>1?'s':''} sur sa période` : '';
-            calc = r
-                ? `<span class="extcalc">Affiché : <b>${shown}</b> · en montée, jour ${r.day}/${r.of} → <b>${plein}</b> au régime${per}${com}</span>`
-                : `<span class="extcalc">Affiché : <b>${shown}</b> ventes sur 30 j${per}${com}</span>`;
+            calc = `<span class="extcalc">Affiché : <b>${shown}</b> ventes sur 30 j${per}${com}</span>`;
         }
 
         const age = (e.age_days === null || e.age_days === undefined) ? ''
@@ -1613,10 +1606,7 @@ function renderExt(){
                 <button class="${rythme?'':'on'}" onclick="extMode(${i},'fixe')">Total</button>
             </div>
             ${champ}
-            <div class="extseg">
-                <button class="${neuf?'':'on'}" onclick="extRamp(${i},'installed')">Déjà en rythme</button>
-                <button class="${neuf?'on':''}" onclick="extRamp(${i},'new')">Débute</button>
-            </div>
+
             <button class="icon-btn" onclick="extDel(${i})" title="Retirer" data-i="trash"></button>
             ${calc}${age}${lien}
         </div>`;
@@ -1646,7 +1636,6 @@ async function extSave(){
                 sales_mode: e.mode === 'fixe' ? 'fixe' : 'rythme',
                 sales_rate: Math.max(0, Math.min(200, parseFloat(e.rate)||0)),
                 sales_manual: Math.max(0, Math.min(100000, parseInt(e.manual,10)||0)),
-                sales_ramp: e.ramp_mode === 'new' ? 'new' : 'installed',
             };
             const exist = e.id && byId[e.id];
             if(exist){ Object.assign(exist, champs); kept.add(e.id); }
@@ -1738,7 +1727,10 @@ function renderAPlats(sel){
 }
 
 /* ── Plateformes : sélection multiple ─────────────────────────────────── */
-const PLATFORMS = ['TikTok','Instagram','Snapchat','YouTube'];
+// Mêmes plateformes que dans l'espace influenceur : les deux listes
+// alimentent le même indicateur au classement, elles ne peuvent pas diverger.
+const PLATFORMS = ['TikTok','Instagram','Snapchat','YouTube',
+                   'X','Facebook','Pinterest','Threads'];
 let PLATS_SEL = [];
 
 function renderPlats(sel){
