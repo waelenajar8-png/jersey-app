@@ -4,6 +4,7 @@ import json
 import time
 import uuid
 import hmac
+import hashlib
 import secrets
 from urllib.parse import quote
 import threading
@@ -4986,27 +4987,45 @@ def _rank_platforms(x):
     return [p for p in RANK_PLATFORMS if p in trouve]
 
 
-RANK_MASK_KEEP = 2       # lettres visibles du pseudo d'un tiers
-RANK_MASK_DOTS = "•••"   # longueur fixe : la taille du pseudo ne se déduit pas
+RANK_MASK_KEEP = 2       # lettres réellement visibles du pseudo d'un tiers
+RANK_MASK_MAX  = 14      # au-delà, on n'allonge plus : une ligne reste une ligne
+_RANK_ALPHA    = "abcdefghijklmnopqrstuvwxyz"
 
 
-def _rank_label(nom):
+def _rank_label(nom, seed=""):
     """
-    Ce qui remplace le pseudo d'un tiers au classement : ses deux premières
-    lettres, le reste masqué.
+    Ce qui part vers l'écran d'une influenceuse à la place du pseudo d'une
+    autre : les deux premières lettres, puis un LEURRE de même longueur que la
+    fin du pseudo, destiné à être flouté à l'affichage.
 
-    Le masquage se fait ICI, côté serveur, et pas à l'affichage : caché en CSS,
-    le pseudo complet resterait dans la réponse de l'API, donc lisible par
-    quiconque ouvre les outils du navigateur. Ce qui part vers l'écran d'une
-    influenceuse ne contient jamais le nom entier d'une autre.
+    Le point essentiel : les vraies lettres ne sortent pas du serveur. Flouter
+    le pseudo réel en CSS aurait exactement le même rendu, mais le nom entier
+    serait dans la réponse de l'API — lisible en trois clics dans les outils du
+    navigateur, et récupérable en désactivant une ligne de style. Un flou n'est
+    pas un masquage, c'est un effet visuel.
 
-    Le nombre de points ne suit pas la longueur réelle : « Ly••• » ne dit pas
-    si le pseudo fait quatre lettres ou douze.
+    Le leurre est tiré d'une empreinte de l'identifiant : stable dans le temps
+    (la même personne garde la même silhouette d'un chargement à l'autre) et
+    sans aucun rapport avec son vrai pseudo.
+
+    Ce qui reste déductible, et c'est assumé parce que c'est ce qui rend
+    l'affichage crédible : la longueur du pseudo.
     """
     n = (nom or "").strip()
     if not n:
-        return "Participante"
-    return n[:RANK_MASK_KEEP] + RANK_MASK_DOTS
+        return "Participante", ""
+
+    # Deux lettres visibles sur un pseudo court, ce n'est plus un masquage :
+    # « Lo » se donnerait en entier, « Abcd » aux trois quarts. Ce qu'on montre
+    # se réduit donc avec la longueur, jusqu'à ne rien montrer du tout, et il
+    # reste toujours au moins deux caractères brouillés.
+    garde = RANK_MASK_KEEP if len(n) >= 5 else (1 if len(n) == 4 else 0)
+    reste = max(2, min(RANK_MASK_MAX, len(n) - garde))
+    visible = n[:garde]
+
+    h = hashlib.sha256(f"{seed}|{len(n)}".encode()).digest()
+    leurre = "".join(_RANK_ALPHA[h[i % len(h)] % 26] for i in range(reste))
+    return visible, leurre
 
 
 def _leaderboard(inf, influenceurs=None, now=None):
@@ -5090,8 +5109,10 @@ def _leaderboard(inf, influenceurs=None, now=None):
             # un programme d'une dizaine de personnes qui se suivent entre
             # elles, elles identifient presque à coup sûr. Un demi-anonymat qui
             # se décode est pire que pas d'anonymat du tout.
+            visible, leurre = (name, "") if mine else _rank_label(name, x.get("id") or name)
             pool.append({
-                "pseudo": name if mine else _rank_label(name),
+                "pseudo": visible,
+                "blur":   leurre,
                 "sales":  _rank_sales(x),
                 "is_me":  mine,
                 "anon":   not mine,
@@ -5140,6 +5161,7 @@ def _leaderboard(inf, influenceurs=None, now=None):
                 "sales":    n,
                 "is_me":    x["is_me"],
                 "anon":     x.get("anon", False),
+                "blur":     x.get("blur", ""),
                 "plats":    x.get("plats") or [],
                 # Sert uniquement à nuancer l'affichage du chiffre : la place,
                 # elle, est attribuée à tout le monde.
