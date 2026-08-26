@@ -1,0 +1,371 @@
+<!doctype html><html lang="fr"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Classement — quatre façons de masquer les noms</title>
+<style>@import url('https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&display=swap');
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+    /* Surfaces — crème neutre, jamais bleuté : un fond légèrement bleu fait
+       basculer l'ensemble du côté « tableau de bord ». */
+    --bg:#F4F4F1;
+    --surface:#FFFFFF;
+    --surface-2:#FAFAF8;
+    /* Navigation : bleu très sombre, de la famille de la marque. Plus jamais
+       de noir — un noir neutre concurrence l'aplat bleu au lieu de le porter. */
+    --sidebar:#141D52;
+    --sidebar-2:#1B2664;
+
+    /* Texte */
+    --ink:#101322;
+    --ink-2:#3B3E4C;
+    --muted:#8A8C84;
+    --faint:#A0A198;
+    --on-dark:#E8ECFA;
+    --on-dark-dim:#7182BC;
+
+    /* Accent */
+    /* #2F50F1 : couleur signature Volakits, en aplat PLEIN (aucun dégradé —
+       un dégradé date, et il brouille la frontière de la surface). */
+    --accent:#2F50F1;
+    --accent-2:#2846DC;
+    --accent-soft:#E7EBFE;
+    --accent-ring:rgba(47,80,241,.16);
+    --accent-grad:#2F50F1;
+    /* Texte posé SUR l'aplat bleu */
+    --on-accent:#C7D3FF;
+    --on-accent-dim:#A8B8FF;
+    --on-accent-lab:#B9C6FF;
+
+    /* Statuts — désaturés pour ne pas rivaliser avec le bleu de marque */
+    --ok:#1F8A5B;      --ok-soft:#E4F3EC;
+    --warn:#B87A18;    --warn-soft:#FBF1DF;
+    --info:#2F50F1;    --info-soft:#E7EBFE;
+    --danger:#C0392B;  --danger-soft:#FBEBE9;
+    --gold:#B08A1E;    --gold-soft:#F8F1DF;
+
+    /* Traits */
+    --line:#E2E1DA;
+    --line-2:#DEDDD5;
+
+    /* Ombres */
+    /* Plus aucune ombre : la hiérarchie vient de l'espace et de la
+       typographie. Les variables restent pour ne rien casser ailleurs. */
+    --sh-xs:none; --sh-sm:none; --sh-md:none; --sh-lg:none; --sh-accent:none;
+
+    /* Rayons */
+    --r-sm:10px; --r:14px; --r-lg:20px; --r-xl:26px;
+}
+body{background:var(--bg);color:var(--ink);font-family:'Archivo',system-ui,sans-serif;
+  -webkit-font-smoothing:antialiased;padding:44px 24px 80px}
+.wrap{max-width:1180px;margin:0 auto}
+h1{font-size:27px;font-weight:800;letter-spacing:-.035em}
+.sub{font-size:15px;color:var(--ink-2);margin-top:10px;max-width:760px;line-height:1.6;font-weight:500}
+.warn{margin:26px 0 34px;padding:16px 18px;background:#FFF8E6;border:1px solid #F0DFB0;
+  border-radius:14px;font-size:14px;line-height:1.6;color:#6B5310;max-width:860px;font-weight:500}
+.warn b{font-weight:800}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(430px,1fr));gap:26px}
+.opt-h{display:flex;gap:13px;align-items:flex-start;margin-bottom:12px}
+.opt-l{width:28px;height:28px;flex:none;border-radius:9px;background:var(--ink);color:#fff;
+  display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800}
+.opt-t{font-size:16px;font-weight:700;letter-spacing:-.02em}
+.opt-e{font-size:13px;color:var(--accent);font-weight:600;margin-top:2px}
+.opt-n{font-size:13px;color:var(--muted);margin-top:11px;line-height:1.55;font-weight:500}
+.num{font-variant-numeric:tabular-nums}
+/* ══ CLASSEMENT ═══════════════════════════════════════════════════════════
+   Une table de résultats, pas une liste. Trois choses la sortent du tableau
+   administratif : une pastille d'initiale qui donne un visage à chaque ligne,
+   une barre de fond proportionnelle au leader qui rend l'écart lisible sans
+   qu'on ait à comparer des chiffres, et une hiérarchie typographique qui met
+   le nombre de ventes au même niveau qu'un montant.
+
+   La barre reste à très basse opacité : l'aplat fort de l'écran est le bloc
+   de gains, et rien ici ne doit venir le concurrencer. */
+.lb{background:var(--surface);border-radius:20px;overflow:hidden;margin-top:14px;
+    border:1px solid var(--line)}
+.lb-r{display:flex;align-items:center;gap:13px;padding:13px 18px;
+    border-top:1px solid var(--line)}
+.lb-r:first-child{border-top:0}
+/* La mesure, sous le nom. Deux essais avant celui-ci : un aplat sur toute la
+   hauteur se lisait comme un surlignage, et un filet collé au bas de la ligne
+   se confondait avec le séparateur — dans les deux cas, ça ressemblait à un
+   défaut d'affichage. Rattachée au nom, dans sa propre piste, la barre ne peut
+   plus se lire que pour ce qu'elle est : une longueur qu'on compare. */
+.lb-mid{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:6px}
+.lb-nrow{display:flex;align-items:center;gap:8px;min-width:0}
+.lb-track{height:3px;border-radius:3px;background:var(--line);overflow:hidden}
+/* Une seule couleur pour toutes les barres : c'est la longueur qui distingue,
+   pas la teinte. Le doré du premier reste sur son rang et sa pastille — deux
+   couleurs de mesure dans le même tableau feraient croire à deux échelles. */
+.lb-bar{display:block;height:100%;width:0;border-radius:3px;background:var(--accent);
+    opacity:.42;transition:width .55s cubic-bezier(.22,1,.36,1)}
+.lb-r.p1 .lb-bar{opacity:.7}
+.lb-r.me .lb-bar{opacity:1}
+
+.lb-pos{width:20px;flex-shrink:0;font-size:12.5px;font-weight:700;color:var(--faint);
+    font-variant-numeric:tabular-nums;letter-spacing:-.02em;text-align:right}
+/* Le premier se distingue par la couleur de son rang et l'anneau de sa
+   pastille — pas par une médaille, qui ferait jeu-concours. */
+.lb-r.p1 .lb-pos{color:var(--gold)}
+
+.lb-av{width:34px;height:34px;flex-shrink:0;border-radius:50%;
+    display:flex;align-items:center;justify-content:center;
+    background:var(--surface-2);border:1px solid var(--line);
+    font-size:13px;font-weight:700;color:var(--ink-2);letter-spacing:-.01em}
+.lb-r.p1 .lb-av{border-color:var(--gold);color:var(--gold)}
+.lb-r.me .lb-av{background:var(--accent);border-color:var(--accent);color:#fff}
+.lb-r.out .lb-av{color:var(--faint)}
+
+.lb-name{flex:0 1 auto;min-width:0;font-size:14.5px;font-weight:650;letter-spacing:-.02em;
+    color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lb-r.out .lb-name{color:var(--ink-2);font-weight:600}
+.lb-n{font-size:17px;font-weight:800;color:var(--ink);font-variant-numeric:tabular-nums;
+    letter-spacing:-.035em;flex-shrink:0;line-height:1}
+.lb-u{font-size:11px;font-weight:600;color:var(--muted);margin-left:5px;
+    letter-spacing:-.01em}
+/* Ma ligne : l'accent, et lui seul. */
+.lb-r.me{background:var(--accent-soft)}
+.lb-r.me .lb-pos{color:var(--accent)}
+.lb-r.me .lb-name,.lb-r.me .lb-n{color:var(--accent-2)}
+.lb-sp{flex:1 1 auto}
+.lb-soon{font-size:12px;font-weight:600;color:var(--faint);flex-shrink:0;letter-spacing:-.01em}
+.lb-r.out .lb-pos{color:var(--line-2)}
+.lb-r.me.out .lb-soon{color:var(--accent)}
+.lb-me-tag{font-size:8.5px;letter-spacing:.16em;text-transform:uppercase;font-weight:800;
+    color:var(--accent);flex-shrink:0;padding:3px 6px;border-radius:5px;
+    background:rgba(47,80,241,.1)}
+/* Le trou entre la page et sa propre ligne : montrer la marche plutôt que
+
+</style></head><body><div class="wrap">
+<h1>Masquer les noms — quatre options</h1>
+<p class="sub">Le même classement, rendu quatre fois. Ta ligne garde toujours ton vrai pseudo ;
+seules celles des autres changent.</p>
+<div class="warn"><b>Ce qu'il faut savoir avant de choisir.</b> Sur onze participantes qui évoluent
+dans le même milieu, une initiale suffit presque toujours à reconnaître quelqu'un — et trois lettres
+ne laissent aucun doute. Les options A et B protègent donc l'apparence, pas l'identité : le jour où
+quelqu'un les décode, le masquage se retourne contre toi et donne l'impression d'avoir voulu cacher
+quelque chose. Si ton but est vraiment qu'elles ne sachent pas qui est qui, seules C et D tiennent.</div>
+<div class="grid">
+    <section class="opt">
+        <div class="opt-h"><span class="opt-l">A</span>
+          <div><div class="opt-t">Initiale seule</div><div class="opt-e">M•••</div></div></div>
+        <div class="lb">
+        <div class="lb-r p1">
+            <span class="lb-pos num">1</span>
+            <span class="lb-av">M</span>
+            <div class="lb-mid">
+                <div class="lb-nrow"><span class="lb-name">M•••</span>
+                </div>
+                <div class="lb-track"><i class="lb-bar" style="width:100%"></i></div>
+            </div>
+            <span class="lb-n num">13<span class="lb-u">ventes</span></span>
+        </div>
+        <div class="lb-r">
+            <span class="lb-pos num">2</span>
+            <span class="lb-av">Y</span>
+            <div class="lb-mid">
+                <div class="lb-nrow"><span class="lb-name">Y•••</span>
+                </div>
+                <div class="lb-track"><i class="lb-bar" style="width:69%"></i></div>
+            </div>
+            <span class="lb-n num">9<span class="lb-u">ventes</span></span>
+        </div>
+        <div class="lb-r">
+            <span class="lb-pos num">3</span>
+            <span class="lb-av">K</span>
+            <div class="lb-mid">
+                <div class="lb-nrow"><span class="lb-name">K•••</span>
+                </div>
+                <div class="lb-track"><i class="lb-bar" style="width:46%"></i></div>
+            </div>
+            <span class="lb-n num">6<span class="lb-u">ventes</span></span>
+        </div>
+        <div class="lb-r me">
+            <span class="lb-pos num">4</span>
+            <span class="lb-av">E</span>
+            <div class="lb-mid">
+                <div class="lb-nrow"><span class="lb-name">Elsouuu</span>
+                <span class="lb-me-tag">Toi</span></div>
+                <div class="lb-track"><i class="lb-bar" style="width:31%"></i></div>
+            </div>
+            <span class="lb-n num">4<span class="lb-u">ventes</span></span>
+        </div>
+        <div class="lb-r">
+            <span class="lb-pos num">5</span>
+            <span class="lb-av">M</span>
+            <div class="lb-mid">
+                <div class="lb-nrow"><span class="lb-name">M•••</span>
+                </div>
+                <div class="lb-track"><i class="lb-bar" style="width:15%"></i></div>
+            </div>
+            <span class="lb-n num">2<span class="lb-u">ventes</span></span>
+        </div></div>
+        <div class="opt-n">Une lettre, longueur masquée. C'est la version la plus discrète qui garde une trace d'identité.</div>
+    </section>
+    <section class="opt">
+        <div class="opt-h"><span class="opt-l">B</span>
+          <div><div class="opt-t">Trois premières lettres</div><div class="opt-e">Mel•••</div></div></div>
+        <div class="lb">
+        <div class="lb-r p1">
+            <span class="lb-pos num">1</span>
+            <span class="lb-av">M</span>
+            <div class="lb-mid">
+                <div class="lb-nrow"><span class="lb-name">Mel•••</span>
+                </div>
+                <div class="lb-track"><i class="lb-bar" style="width:100%"></i></div>
+            </div>
+            <span class="lb-n num">13<span class="lb-u">ventes</span></span>
+        </div>
+        <div class="lb-r">
+            <span class="lb-pos num">2</span>
+            <span class="lb-av">Y</span>
+            <div class="lb-mid">
+                <div class="lb-nrow"><span class="lb-name">You•••</span>
+                </div>
+                <div class="lb-track"><i class="lb-bar" style="width:69%"></i></div>
+            </div>
+            <span class="lb-n num">9<span class="lb-u">ventes</span></span>
+        </div>
+        <div class="lb-r">
+            <span class="lb-pos num">3</span>
+            <span class="lb-av">K</span>
+            <div class="lb-mid">
+                <div class="lb-nrow"><span class="lb-name">KNZ•••</span>
+                </div>
+                <div class="lb-track"><i class="lb-bar" style="width:46%"></i></div>
+            </div>
+            <span class="lb-n num">6<span class="lb-u">ventes</span></span>
+        </div>
+        <div class="lb-r me">
+            <span class="lb-pos num">4</span>
+            <span class="lb-av">E</span>
+            <div class="lb-mid">
+                <div class="lb-nrow"><span class="lb-name">Elsouuu</span>
+                <span class="lb-me-tag">Toi</span></div>
+                <div class="lb-track"><i class="lb-bar" style="width:31%"></i></div>
+            </div>
+            <span class="lb-n num">4<span class="lb-u">ventes</span></span>
+        </div>
+        <div class="lb-r">
+            <span class="lb-pos num">5</span>
+            <span class="lb-av">M</span>
+            <div class="lb-mid">
+                <div class="lb-nrow"><span class="lb-name">MAY•••</span>
+                </div>
+                <div class="lb-track"><i class="lb-bar" style="width:15%"></i></div>
+            </div>
+            <span class="lb-n num">2<span class="lb-u">ventes</span></span>
+        </div></div>
+        <div class="opt-n">On reconnaît le pseudo au premier coup d'œil. C'est le plus chaleureux — et le moins protecteur.</div>
+    </section>
+    <section class="opt">
+        <div class="opt-h"><span class="opt-l">C</span>
+          <div><div class="opt-t">Le palier, aucune lettre</div><div class="opt-e">Ambassadrice · Partenaire</div></div></div>
+        <div class="lb">
+        <div class="lb-r p1">
+            <span class="lb-pos num">1</span>
+            <span class="lb-av">•</span>
+            <div class="lb-mid">
+                <div class="lb-nrow"><span class="lb-name">Ambassadrice · Ambassadeur</span>
+                </div>
+                <div class="lb-track"><i class="lb-bar" style="width:100%"></i></div>
+            </div>
+            <span class="lb-n num">13<span class="lb-u">ventes</span></span>
+        </div>
+        <div class="lb-r">
+            <span class="lb-pos num">2</span>
+            <span class="lb-av">•</span>
+            <div class="lb-mid">
+                <div class="lb-nrow"><span class="lb-name">Ambassadrice · Partenaire</span>
+                </div>
+                <div class="lb-track"><i class="lb-bar" style="width:69%"></i></div>
+            </div>
+            <span class="lb-n num">9<span class="lb-u">ventes</span></span>
+        </div>
+        <div class="lb-r">
+            <span class="lb-pos num">3</span>
+            <span class="lb-av">•</span>
+            <div class="lb-mid">
+                <div class="lb-nrow"><span class="lb-name">Ambassadrice · Partenaire</span>
+                </div>
+                <div class="lb-track"><i class="lb-bar" style="width:46%"></i></div>
+            </div>
+            <span class="lb-n num">6<span class="lb-u">ventes</span></span>
+        </div>
+        <div class="lb-r me">
+            <span class="lb-pos num">4</span>
+            <span class="lb-av">E</span>
+            <div class="lb-mid">
+                <div class="lb-nrow"><span class="lb-name">Elsouuu</span>
+                <span class="lb-me-tag">Toi</span></div>
+                <div class="lb-track"><i class="lb-bar" style="width:31%"></i></div>
+            </div>
+            <span class="lb-n num">4<span class="lb-u">ventes</span></span>
+        </div>
+        <div class="lb-r">
+            <span class="lb-pos num">5</span>
+            <span class="lb-av">•</span>
+            <div class="lb-mid">
+                <div class="lb-nrow"><span class="lb-name">Ambassadrice · Découverte</span>
+                </div>
+                <div class="lb-track"><i class="lb-bar" style="width:15%"></i></div>
+            </div>
+            <span class="lb-n num">2<span class="lb-u">ventes</span></span>
+        </div></div>
+        <div class="opt-n">Aucune identité, mais chaque ligne dit quelque chose de vrai sur la personne.</div>
+    </section>
+    <section class="opt">
+        <div class="opt-h"><span class="opt-l">D</span>
+          <div><div class="opt-t">Rien du tout</div><div class="opt-e">Ambassadrice</div></div></div>
+        <div class="lb">
+        <div class="lb-r p1">
+            <span class="lb-pos num">1</span>
+            <span class="lb-av">•</span>
+            <div class="lb-mid">
+                <div class="lb-nrow"><span class="lb-name">Ambassadrice</span>
+                </div>
+                <div class="lb-track"><i class="lb-bar" style="width:100%"></i></div>
+            </div>
+            <span class="lb-n num">13<span class="lb-u">ventes</span></span>
+        </div>
+        <div class="lb-r">
+            <span class="lb-pos num">2</span>
+            <span class="lb-av">•</span>
+            <div class="lb-mid">
+                <div class="lb-nrow"><span class="lb-name">Ambassadrice</span>
+                </div>
+                <div class="lb-track"><i class="lb-bar" style="width:69%"></i></div>
+            </div>
+            <span class="lb-n num">9<span class="lb-u">ventes</span></span>
+        </div>
+        <div class="lb-r">
+            <span class="lb-pos num">3</span>
+            <span class="lb-av">•</span>
+            <div class="lb-mid">
+                <div class="lb-nrow"><span class="lb-name">Ambassadrice</span>
+                </div>
+                <div class="lb-track"><i class="lb-bar" style="width:46%"></i></div>
+            </div>
+            <span class="lb-n num">6<span class="lb-u">ventes</span></span>
+        </div>
+        <div class="lb-r me">
+            <span class="lb-pos num">4</span>
+            <span class="lb-av">E</span>
+            <div class="lb-mid">
+                <div class="lb-nrow"><span class="lb-name">Elsouuu</span>
+                <span class="lb-me-tag">Toi</span></div>
+                <div class="lb-track"><i class="lb-bar" style="width:31%"></i></div>
+            </div>
+            <span class="lb-n num">4<span class="lb-u">ventes</span></span>
+        </div>
+        <div class="lb-r">
+            <span class="lb-pos num">5</span>
+            <span class="lb-av">•</span>
+            <div class="lb-mid">
+                <div class="lb-nrow"><span class="lb-name">Ambassadrice</span>
+                </div>
+                <div class="lb-track"><i class="lb-bar" style="width:15%"></i></div>
+            </div>
+            <span class="lb-n num">2<span class="lb-u">ventes</span></span>
+        </div></div>
+        <div class="opt-n">Anonymat complet. Restent la place et les ventes, qui suffisent à montrer que c'est réel.</div>
+    </section></div>
+</div></body></html>
