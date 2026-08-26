@@ -246,6 +246,7 @@ input,select{font-family:inherit}
    qu'à deux paragraphes voisins. */
 .sec + .sec,
 .gains + .sec, .goal + .sec, .promo + .sec,
+.card + .sec,
 .sec + .gains, .sec + .goal{margin-top:52px}
 .gains + .goal{margin-top:16px}
 .sec-k{font-size:11px;font-weight:700;letter-spacing:.13em;text-transform:uppercase;
@@ -631,6 +632,31 @@ input,select{font-family:inherit}
     font-variant-numeric:tabular-nums}
 @media(max-width:420px){
     .lb-prange{flex:1 1 100%;margin-left:0;margin-top:4px}
+}
+/* ══ GUIDE DE PUBLICATION ═════════════════════════════════════════════════
+   Une consigne opérationnelle : elle doit se lire vite et se refermer vite.
+   Un rail numéroté à gauche, du texte serré, et le seul élément fort est la
+   ligne à copier — c'est la seule chose qu'on vient vraiment y chercher. */
+.gd{background:var(--surface);border:1px solid var(--line);border-radius:20px;
+    padding:6px 20px;margin-top:14px}
+.gd-s{display:flex;gap:14px;padding:16px 0;border-top:1px solid var(--line)}
+.gd-s:first-child{border-top:0}
+.gd-n{flex:none;width:23px;height:23px;border-radius:50%;margin-top:1px;
+    display:flex;align-items:center;justify-content:center;
+    background:var(--accent-soft);color:var(--accent);
+    font-size:11.5px;font-weight:800;letter-spacing:-.02em}
+.gd-b{min-width:0;flex:1}
+.gd-t{font-size:14.5px;font-weight:700;letter-spacing:-.02em;color:var(--ink)}
+.gd-d{font-size:13px;font-weight:500;color:var(--muted);line-height:1.55;margin-top:3px}
+.gd-copy{display:flex;align-items:center;gap:12px;margin-top:11px;padding:11px 13px;
+    background:var(--surface-2);border:1px solid var(--line);border-radius:12px}
+.gd-txt{flex:1;min-width:0;font-size:13px;font-weight:600;color:var(--ink);
+    line-height:1.45;word-break:break-word}
+.gd-foot{font-size:12.5px;color:var(--muted);font-weight:500;margin-top:12px}
+@media(max-width:860px){
+    .gd{padding:4px 15px}
+    .gd-s{gap:11px;padding:14px 0}
+    .gd-copy{flex-direction:column;align-items:stretch;gap:9px}
 }
 .lb-foot{font-size:12.5px;color:var(--muted);font-weight:500;margin-top:12px;line-height:1.55}
 @media(max-width:860px){
@@ -1668,7 +1694,59 @@ function viewMissions(){
             <span class="badge ${done===D.missions.length?'b-ok':'b-info'}">${Math.round(done/D.missions.length*100)}%</span>
         </div>
         ${D.missions.map(missionRow).join('')}
-    </div>`;
+    </div>
+    ${blockGuide()}`;
+}
+
+/* ── Comment publier ────────────────────────────────────────────────────
+   Le guide vit sous les missions plutôt que dans un onglet à lui : c'est ici
+   qu'on vient quand on se demande « je fais quoi maintenant ? », et une
+   consigne rangée ailleurs n'est jamais lue.
+
+   Volontairement dense et court. Chaque étape tient sur une ligne, la
+   description est prête à copier avec son propre code — recopier un texte à
+   la main, c'est l'endroit exact où le code promo se perd. */
+function blockGuide(){
+    const code = (D.influencer.promo_code || '').trim();
+    const copySvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>`;
+    const legende = code
+        ? `Maillot @volakits 🔥 −15 % avec le code ${code}`
+        : `Maillot @volakits 🔥 −15 % avec mon code`;
+
+    const etapes = [
+        {t:'Filme avec le maillot',
+         d:'Porte-le, montre-le en gros plan au moins une fois. Un plan où on lit le flocage vaut mieux qu\'un plan large.'},
+        {t:'Colle la description',
+         d:'Copie le texte ci-dessous tel quel. Ton code doit y figurer, sinon aucune vente ne te sera attribuée.',
+         copie: legende},
+        {t:'Active la Collaboration et identifie @volakits',
+         d:'Dans l\'écran de publication : « Ajouter un lien » → « Collaboration ». Ta vidéo apparaît alors aussi sur notre compte, donc devant notre audience en plus de la tienne.'},
+        {t:'Mets ton lien en bio',
+         d:'Une vidéo finit par ne plus tourner. Ton lien, lui, reste actif — et c\'est lui qui convertit entre deux publications.'},
+        {t:'Déclare ta vidéo ici',
+         d:'Onglet Mes contenus. C\'est ce qui valide ta mission et nous permet de la relayer.'},
+    ];
+
+    return `<section class="sec rise" style="animation-delay:.1s">
+        <div class="sec-k">À faire à chaque publication</div>
+        <div class="sec-t">Comment publier ta vidéo</div>
+        <div class="gd">
+            ${etapes.map((e,i)=>`
+                <div class="gd-s">
+                    <span class="gd-n num">${i+1}</span>
+                    <div class="gd-b">
+                        <div class="gd-t">${esc(e.t)}</div>
+                        <div class="gd-d">${esc(e.d)}</div>
+                        ${e.copie ? `
+                        <div class="gd-copy">
+                            <span class="gd-txt">${esc(e.copie)}</span>
+                            <button class="copy-btn ghost" data-copy="${escAttr(e.copie)}">${copySvg}<span>Copier</span></button>
+                        </div>` : ''}
+                    </div>
+                </div>`).join('')}
+        </div>
+        <div class="gd-foot">Une question sur une étape ? Écris-nous, on répond vite.</div>
+    </section>`;
 }
 
 // ── Colis ───────────────────────────────────────────────────────────────
