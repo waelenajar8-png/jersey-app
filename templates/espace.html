@@ -1303,7 +1303,28 @@ function blockPromo(){
 // montant permettrait de remonter à ce que touche l'autre.
 function blockRank(){
     const b = D.leaderboard;
-    if(!b || !b.rows || !b.rows.length) return '';
+    if(!b) return '';
+
+    // Pas encore de classement : on l'annonce quand même. Faire disparaître
+    // le bloc laisserait croire à une fonction absente ou cassée, alors qu'il
+    // ne manque qu'une vente ou un participant.
+    if(b.empty){
+        const t = b.reason === 'pool'
+            ? {t:'Ton classement arrive', d:`Il s'affichera dès que le programme comptera ${fmt(b.need || 3)} participants.`}
+            : b.reason === 'not_in'
+            ? {t:'Ton classement arrive', d:'Il s\'affichera dès ta première vente — tu y prendras ta place avec les autres.'}
+            : {t:'Ton classement arrive', d:'Il s\'affichera dès les premières ventes du mois. À toi d\'ouvrir le bal.'};
+        return `<section class="sec rise" style="animation-delay:.21s">
+            <div class="sec-k">Classement</div>
+            <div class="sec-t">${esc(t.t)}</div>
+            <div class="chart-empty" style="margin-top:12px">
+                <div class="chart-empty-t">Où tu te situes face aux autres</div>
+                <div class="chart-empty-d">${esc(t.d)}</div>
+            </div>
+        </section>`;
+    }
+
+    if(!b.rows || !b.rows.length) return '';
 
     const rows = b.rows.map(r => {
         if(r.gap) return `<div class="lb-gap">•••</div>`;
