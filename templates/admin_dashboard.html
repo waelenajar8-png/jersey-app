@@ -1582,7 +1582,20 @@ function extAdd(){
     }, 40);
 }
 function extDel(i){ EXT.splice(i,1); renderExt(); }
-function extSet(i, k, v){ if(EXT[i]){ EXT[i][k] = v; if(k!=='pseudo') renderExt(); } }
+/* Ne JAMAIS re-rendre la liste pendant la frappe : réécrire l'input sous les
+   doigts fait perdre le focus et le curseur, et on ne peut plus taper qu'un
+   chiffre à la fois. On met à jour le modèle, puis seulement la ligne de calcul
+   qui en dépend. */
+function extSet(i, k, v){
+    if(!EXT[i]) return;
+    EXT[i][k] = v;
+    if(k !== 'pseudo') extPaintCalc(i);
+}
+function extPaintCalc(i){
+    const row  = document.querySelectorAll('#extList .extrow')[i];
+    const span = row && row.querySelector('.extcalc');
+    if(span) span.outerHTML = extCalcHtml(EXT[i]);
+}
 function extMode(i, m){ if(EXT[i] && EXT[i].mode !== m){ EXT[i].mode = m; renderExt(); } }
 
 /* La bascule « Déjà en rythme / Débute » a été retirée : elle demandait un
@@ -1601,6 +1614,24 @@ function extShown(e){
     return Math.round(rate * 30);
 }
 
+/* Ce que verront les ambassadrices, où en est la montée, et surtout ce que tu
+   lui dois sur sa période en cours : c'est de l'argent, il doit être visible au
+   moment où on règle le chiffre. Isolé ici pour être réécrit seul à la frappe. */
+function extCalcHtml(e){
+    const rythme = e.mode === 'rythme';
+    const plein  = Math.round((rythme
+        ? (parseFloat(e.rate)||0)
+        : (parseInt(e.manual,10)||0)/30) * 30);
+    if(!e.id){
+        return `<span class="extcalc">Entrera au classement avec <b>${plein}</b> ventes sur 30 j, dès l'enregistrement</span>`;
+    }
+    const com = e.commission
+        ? ` · commission période : <b>${euro(e.commission.amount)}</b>`
+        : '';
+    const per = e.period ? ` · ${e.period.sales} vente${e.period.sales>1?'s':''} sur sa période` : '';
+    return `<span class="extcalc">Affiché : <b>${extShown(e)}</b> ventes sur 30 j${per}${com}</span>`;
+}
+
 function renderExt(){
     const el = document.getElementById('extList');
     if(!EXTLOADED){
@@ -1613,32 +1644,22 @@ function renderExt(){
     }
     el.innerHTML = EXT.map((e,i) => {
         const rythme = e.mode === 'rythme';
-        const shown  = extShown(e);
-        const plein  = Math.round((rythme
-            ? (parseFloat(e.rate)||0)
-            : (parseInt(e.manual,10)||0)/30) * 30);
 
+        // `value` reprend la saisie telle quelle : la normaliser en nombre
+        // remettrait un 0 dans un champ qu'on vient de vider.
+        const brut = rythme ? e.rate : e.manual;
+        const val  = (brut === null || brut === undefined) ? '' : String(brut);
         const champ = rythme
             ? `<input class="inp extnum num" type="number" min="0" max="200" step="0.5"
-                      value="${Number(e.rate)||0}" oninput="extSet(${i},'rate',this.value)">
+                      value="${esc(val)}" oninput="extSet(${i},'rate',this.value)"
+                      onfocus="this.select()">
                <span class="extunit">ventes / jour</span>`
             : `<input class="inp extnum num" type="number" min="0" max="100000"
-                      value="${Number(e.manual)||0}" oninput="extSet(${i},'manual',this.value)">
+                      value="${esc(val)}" oninput="extSet(${i},'manual',this.value)"
+                      onfocus="this.select()">
                <span class="extunit">ventes / 30 j</span>`;
 
-        // Ce que verront les ambassadrices, où en est la montée, et surtout ce
-        // que tu lui dois sur sa période en cours : c'est de l'argent, il doit
-        // être visible au moment où on règle le chiffre.
-        let calc = '';
-        if(!e.id){
-            calc = `<span class="extcalc">Entrera au classement avec <b>${plein}</b> ventes sur 30 j, dès l'enregistrement</span>`;
-        }else{
-            const com = e.commission
-                ? ` · commission période : <b>${euro(e.commission.amount)}</b>`
-                : '';
-            const per = e.period ? ` · ${e.period.sales} vente${e.period.sales>1?'s':''} sur sa période` : '';
-            calc = `<span class="extcalc">Affiché : <b>${shown}</b> ventes sur 30 j${per}${com}</span>`;
-        }
+        const calc = extCalcHtml(e);
 
         const age = (e.age_days === null || e.age_days === undefined) ? ''
                   : e.stale ? `<span class="extage bad">Non vérifié depuis ${e.age_days} j — sorti du classement</span>`
