@@ -637,10 +637,26 @@ input,select{font-family:inherit}
    Une consigne opérationnelle : elle doit se lire vite et se refermer vite.
    Un rail numéroté à gauche, du texte serré, et le seul élément fort est la
    ligne à copier — c'est la seule chose qu'on vient vraiment y chercher. */
-.gd{background:var(--surface);border:1px solid var(--line);border-radius:20px;
-    padding:6px 20px;margin-top:14px}
+/* Les deux formats, côte à côte : ce sont deux choix, pas deux étapes. */
+.gd-two{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px}
+.gd-f{background:var(--surface);border:1px solid var(--line);border-radius:20px;
+    padding:18px 20px 20px}
+.gd-fk{font-size:10.5px;font-weight:800;letter-spacing:.09em;text-transform:uppercase;
+    color:var(--accent)}
+.gd-ft{font-size:16px;font-weight:800;letter-spacing:-.025em;color:var(--ink);margin-top:7px}
+.gd-fd{font-size:13px;font-weight:500;color:var(--muted);line-height:1.55;margin-top:5px}
+.gd-fl{list-style:none;margin:13px 0 0;padding:0;display:flex;flex-direction:column;gap:8px}
+.gd-fl li{position:relative;padding-left:16px;font-size:13px;font-weight:500;
+    color:var(--ink);line-height:1.5}
+.gd-fl li::before{content:"";position:absolute;left:1px;top:8px;width:5px;height:5px;
+    border-radius:50%;background:var(--accent);opacity:.55}
+/* Le tronc commun : le seul endroit où il y a quelque chose à copier. */
+.gd-common{background:var(--surface);border:1px solid var(--line);border-radius:20px;
+    padding:2px 20px 6px;margin-top:12px}
+.gd-ck{font-size:10.5px;font-weight:800;letter-spacing:.09em;text-transform:uppercase;
+    color:var(--faint);padding:17px 0 1px}
 .gd-s{display:flex;gap:14px;padding:16px 0;border-top:1px solid var(--line)}
-.gd-s:first-child{border-top:0}
+.gd-s:first-child,.gd-ck + .gd-s{border-top:0}
 .gd-n{flex:none;width:23px;height:23px;border-radius:50%;margin-top:1px;
     display:flex;align-items:center;justify-content:center;
     background:var(--accent-soft);color:var(--accent);
@@ -654,7 +670,10 @@ input,select{font-family:inherit}
     line-height:1.45;word-break:break-word}
 .gd-foot{font-size:12.5px;color:var(--muted);font-weight:500;margin-top:12px}
 @media(max-width:860px){
-    .gd{padding:4px 15px}
+    .gd-two{grid-template-columns:1fr;gap:10px}
+    .gd-f{padding:16px 16px 18px}
+    .gd-ft{font-size:15.5px}
+    .gd-common{padding:0 15px 4px}
     .gd-s{gap:11px;padding:14px 0}
     .gd-copy{flex-direction:column;align-items:stretch;gap:9px}
 }
@@ -1560,7 +1579,8 @@ function blockRank(){
     }).join('');
 
     // Le sous-titre dit la place, pas la performance : « 4e sur 12 » se lit
-    // sans avoir à compter les lignes. Sans vente, il dit ce qui l'attend.
+    // sans avoir à compter les lignes. Sans vente, il annonce simplement ce
+    // que le tableau montre : les meilleurs du moment.
     // Quand personne n'a encore vendu, le tableau est une grille de départ :
     // le dire ainsi vaut mieux que d'annoncer une place que personne n'occupe.
     const aucune = b.rows.every(r => r.unranked);
@@ -1568,7 +1588,7 @@ function blockRank(){
         ? `Ta ${b.position === 1 ? '1ʳᵉ place' : b.position + 'ᵉ place'} sur ${fmt(b.total)}`
         : aucune
         ? 'Tout le monde est à égalité — la première vente prend la tête'
-        : 'Ta première vente te fait entrer';
+        : 'Les meilleurs influenceurs du moment';
 
     return `<section class="sec rise" style="animation-delay:.21s">
         <div class="sec-k">Classement</div>
@@ -1699,51 +1719,86 @@ function viewMissions(){
 }
 
 /* ── Comment publier ────────────────────────────────────────────────────
+   Deux formats, deux façons de faire, et une seule description.
+
    Le guide vit sous les missions plutôt que dans un onglet à lui : c'est ici
    qu'on vient quand on se demande « je fais quoi maintenant ? », et une
    consigne rangée ailleurs n'est jamais lue.
 
-   Volontairement dense et court. Chaque étape tient sur une ligne, la
-   description est prête à copier avec son propre code — recopier un texte à
-   la main, c'est l'endroit exact où le code promo se perd. */
+   La description n'est écrite qu'UNE fois, en bas, parce qu'elle est la même
+   pour les deux formats. La répéter dans chaque carte doublerait le texte et
+   ferait douter qu'il s'agisse bien du même contenu à coller. */
 function blockGuide(){
     const code = (D.influencer.promo_code || '').trim();
     const copySvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>`;
-    const legende = code
-        ? `Maillot @volakits 🔥 −15 % avec le code ${code}`
-        : `Maillot @volakits 🔥 −15 % avec mon code`;
+    // Le code vient de sa fiche : elle n'a jamais à le retaper, donc jamais
+    // l'occasion de se tromper. C'est là que les ventes se perdent.
+    const legende = `@Volakits ⚽️ / -15% avec mon code ${code || 'XXXX15'}`;
 
-    const etapes = [
-        {t:'Filme avec le maillot',
-         d:'Porte-le, montre-le en gros plan au moins une fois. Un plan où on lit le flocage vaut mieux qu\'un plan large.'},
-        {t:'Colle la description',
-         d:'Copie le texte ci-dessous tel quel. Ton code doit y figurer, sinon aucune vente ne te sera attribuée.',
-         copie: legende},
-        {t:'Active la Collaboration et identifie @volakits',
-         d:'Dans l\'écran de publication : « Ajouter un lien » → « Collaboration ». Ta vidéo apparaît alors aussi sur notre compte, donc devant notre audience en plus de la tienne.'},
-        {t:'Mets ton lien en bio',
-         d:'Une vidéo finit par ne plus tourner. Ton lien, lui, reste actif — et c\'est lui qui convertit entre deux publications.'},
-        {t:'Déclare ta vidéo ici',
-         d:'Onglet Mes contenus. C\'est ce qui valide ta mission et nous permet de la relayer.'},
+    const formats = [
+        {
+            k: 'Format 1',
+            t: 'Unboxing',
+            d: 'Ta vidéo de réception : tu ouvres le colis devant la caméra.',
+            l: ['Filme l\'ouverture du colis',
+                'Montre les maillots, essaie-en au moins un',
+                'Un plan où on lit le flocage vaut mieux qu\'un plan large'],
+        },
+        {
+            k: 'Format 2',
+            t: 'Playback ou autre vidéo',
+            d: 'Le format est libre : playback, tuto, vlog, ce que tu fais d\'habitude.',
+            l: ['Porte le maillot pendant la vidéo',
+                'Aucune contrainte sur le contenu ni la durée',
+                'Tu peux en publier autant que tu veux'],
+        },
     ];
 
     return `<section class="sec rise" style="animation-delay:.1s">
         <div class="sec-k">À faire à chaque publication</div>
         <div class="sec-t">Comment publier ta vidéo</div>
-        <div class="gd">
-            ${etapes.map((e,i)=>`
-                <div class="gd-s">
-                    <span class="gd-n num">${i+1}</span>
-                    <div class="gd-b">
-                        <div class="gd-t">${esc(e.t)}</div>
-                        <div class="gd-d">${esc(e.d)}</div>
-                        ${e.copie ? `
-                        <div class="gd-copy">
-                            <span class="gd-txt">${esc(e.copie)}</span>
-                            <button class="copy-btn ghost" data-copy="${escAttr(e.copie)}">${copySvg}<span>Copier</span></button>
-                        </div>` : ''}
-                    </div>
+
+        <div class="gd-two">
+            ${formats.map(f=>`
+                <div class="gd-f">
+                    <div class="gd-fk">${esc(f.k)}</div>
+                    <div class="gd-ft">${esc(f.t)}</div>
+                    <div class="gd-fd">${esc(f.d)}</div>
+                    <ul class="gd-fl">${f.l.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>
                 </div>`).join('')}
+        </div>
+
+        ${/* Commun aux deux formats : c'est ce qui rattache la vidéo au
+             programme, et sans quoi rien n'est comptabilisé. */''}
+        <div class="gd-common">
+            <div class="gd-ck">Dans les deux cas</div>
+            <div class="gd-s">
+                <span class="gd-n num">1</span>
+                <div class="gd-b">
+                    <div class="gd-t">Colle cette description</div>
+                    <div class="gd-d">Telle quelle, avec ton code. ${code
+                        ? 'Sans lui, la vente ne t\'est pas attribuée.'
+                        : 'Ton code arrive avec ton colis — tu pourras le coller ici.'}</div>
+                    <div class="gd-copy">
+                        <span class="gd-txt">${esc(legende)}</span>
+                        <button class="copy-btn ghost" data-copy="${escAttr(legende)}">${copySvg}<span>Copier</span></button>
+                    </div>
+                </div>
+            </div>
+            <div class="gd-s">
+                <span class="gd-n num">2</span>
+                <div class="gd-b">
+                    <div class="gd-t">Active la Collaboration et identifie @Volakits</div>
+                    <div class="gd-d">Dans l'écran de publication TikTok : « Ajouter un lien » → « Collaboration ». Ta vidéo apparaît alors aussi sur notre compte, donc devant notre audience en plus de la tienne.</div>
+                </div>
+            </div>
+            <div class="gd-s">
+                <span class="gd-n num">3</span>
+                <div class="gd-b">
+                    <div class="gd-t">Déclare ta vidéo ici</div>
+                    <div class="gd-d">Onglet Mes contenus. C'est ce qui valide ta mission et nous permet de la relayer.</div>
+                </div>
+            </div>
         </div>
         <div class="gd-foot">Une question sur une étape ? Écris-nous, on répond vite.</div>
     </section>`;
