@@ -341,6 +341,19 @@ h1{font-size:27px;font-weight:800;letter-spacing:-.035em;line-height:1.1}
 .sz-who{font-size:11.5px;color:var(--muted);font-weight:500;margin-top:7px;line-height:1.5}
 .sz-who b{color:var(--ink-2);font-weight:700}
 .jinactive{opacity:.5}
+/* Le nombre saisi est ce qu'il reste. Les maillots déjà promis se lisent sur
+   la ligne « Réservé par », pas en soustraction dans la pastille : une case de
+   saisie doit contenir la valeur qu'on veut y mettre, rien de plus. */
+.sz-res{font-size:11px;color:var(--muted);font-weight:700;
+    font-variant-numeric:tabular-nums}
+.cat-bar{
+    display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+    background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);
+    padding:16px 18px;margin-bottom:18px;
+}
+.cat-txt{flex:1 1 260px;min-width:0}
+.cat-t{font-size:14px;font-weight:800;letter-spacing:-.025em}
+.cat-d{font-size:12px;color:var(--muted);font-weight:500;margin-top:3px;line-height:1.5}
 
 /* ── Squelette de chargement ─────────────────────────────────────────── */
 .skel{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);height:290px;overflow:hidden;position:relative}
@@ -495,10 +508,10 @@ select.inp{cursor:pointer}
 .extrow:first-child{border-top:0}
 /* Un numéro d'ordre par ligne : la dernière valeur dit combien ils sont, sans
    avoir à compter. */
-.extno{flex:0 0 22px;text-align:right;font-size:11.5px;font-weight:700;
-    color:var(--faint);font-variant-numeric:tabular-nums;letter-spacing:-.02em}
-.extcount{font-size:11.5px;font-weight:700;color:var(--muted);
-    padding:0 0 9px;letter-spacing:-.01em}
+.extno{flex:0 0 24px;text-align:right;font-size:13px;font-weight:800;
+    color:var(--ink-2);font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.extcount{font-size:12px;font-weight:800;color:var(--ink);
+    padding:0 0 10px;letter-spacing:-.01em}
 .extname{flex:1 1 160px;min-width:0}
 .extnum{flex:0 0 90px;text-align:right;font-weight:700}
 .extunit{font-size:11.5px;color:var(--muted);font-weight:600;white-space:nowrap}
@@ -696,7 +709,7 @@ select.inp{cursor:pointer}
             <div class="topline">
                 <div>
                     <h1>Stock maillots</h1>
-                    <p class="subtitle">Le stock physique se décrémente au passage à « Colis envoyé ».</p>
+                    <p class="subtitle">Tu saisis ce qu'il te reste. Les maillots déjà promis restent comptés à part.</p>
                 </div>
                 <div class="toolbar">
                     <div class="search"><span data-i="search"></span>
@@ -704,6 +717,19 @@ select.inp{cursor:pointer}
                     <button class="btn" id="stockRefresh" data-i="sync">Actualiser</button>
                     <a class="btn" href="/catalogue" target="_blank" data-i="ext">Modifier le catalogue</a>
                 </div>
+            </div>
+
+            <!-- Le catalogue partagé : un lien qui ne se périme pas, et le PDF du
+                 moment quand il faut vraiment un fichier. -->
+            <div class="cat-bar">
+                <div class="cat-txt">
+                    <div class="cat-t">Catalogue à envoyer</div>
+                    <div class="cat-d">Le lien montre toujours l'état réel du stock : une taille prise
+                        disparaît d'elle-même, personne ne choisit un maillot déjà parti.</div>
+                </div>
+                <button class="btn" onclick="copyCatLink(this)" data-i="link">Copier le lien</button>
+                <button class="btn" onclick="openCatLink()" data-i="ext">Ouvrir</button>
+                <button class="btn primary" onclick="dlCatPdf(this)" data-i="download">Télécharger le PDF</button>
             </div>
 
             <div class="banner" id="stockBanner"></div>
@@ -1153,6 +1179,7 @@ const I = {
   inbox:'<path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"/>',
   upload:'<path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/>',
   download:'<path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/>',
+  link:'<path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/>',
 };
 function ico(n, cls){
   if(!I[n]) return '';
@@ -2616,12 +2643,12 @@ function renderStock(){
                 <div class="jtot num">${j.physical} en stock · ${j.reserved} réservé${j.reserved>1?'s':''} · <b>${j.available} disponible${j.available>1?'s':''}</b></div>
                 <div class="jsizes">
                     ${j.sizes.map(x => `
-                        <span class="sz ${x.available<=0 ? 'out' : x.available<=1 ? 'low' : ''}" title="Physique ${x.physical} · réservé ${x.reserved} · disponible ${x.available}">
+                        <span class="sz ${x.available<=0 ? 'out' : x.available<=1 ? 'low' : ''}" title="Disponible ${x.available}${x.reserved ? ` · ${x.reserved} déjà promis (dans le stock physique de ${x.physical})` : ''}">
                             ${esc(x.size)}
-                            <input class="sz-in num" type="number" min="0" value="${x.physical}"
-                                   data-jid="${esc(j.id)}" data-size="${esc(x.size)}" title="Stock physique — modifiable">
-                            ${x.reserved ? `<span class="r num">−${x.reserved}</span>` : ''}
-                            <span class="sz-av num">= ${x.available}</span>
+                            <input class="sz-in num" type="number" min="0" value="${x.available}"
+                                   data-jid="${esc(j.id)}" data-size="${esc(x.size)}"
+                                   title="Ce qu'il te reste — modifiable">
+                            ${x.reserved ? `<span class="sz-res num">+${x.reserved} promis</span>` : ''}
                         </span>`).join('')}
                 </div>
                 ${renderHolders(j)}
@@ -2631,9 +2658,12 @@ function renderStock(){
     bindStockInputs();
 }
 
-// Le stock physique se corrige directement depuis la pastille.
+// Ce qu'il reste se corrige directement depuis la pastille. Le serveur
+// rajoute les maillots déjà promis pour retrouver le stock physique : ils sont
+// encore dans le carton, ils ne doivent pas s'évaporer parce qu'on a recompté.
 function bindStockInputs(){
     document.querySelectorAll('.sz-in').forEach(inp => {
+        inp.onfocus = () => inp.select();
         inp.onchange = async () => {
             const jid = inp.dataset.jid, size = inp.dataset.size;
             const qty = Math.max(0, parseInt(inp.value) || 0);
@@ -2641,19 +2671,75 @@ function bindStockInputs(){
             try{
                 const r = await fetch('/api/stock/set', {
                     method:'POST', headers:{'Content-Type':'application/json'},
-                    body: JSON.stringify({jersey_id: jid, size, qty})
+                    body: JSON.stringify({jersey_id: jid, size, qty, mode:'available'})
                 });
                 const d = await r.json();
                 if(!d.success) throw new Error(d.error || '');
                 stockData = null; catalog = null;      // forcer une relecture
                 await loadStock();
-                toast(`${size} → ${qty} en stock`);
+                toast(`${size} → ${qty} dispo`);
             }catch(e){
                 toast('Mise à jour du stock impossible', true);
                 await loadStock();
             }
         };
     });
+}
+
+/* ── Catalogue partageable ──────────────────────────────────────────────
+   Le lien est le même pour tout le monde et à vie : il n'y a rien à
+   régénérer, c'est la page qui lit le stock au moment où elle s'ouvre. Le PDF
+   sert quand il faut un fichier — il fige l'état du moment. */
+let CATLINK = null;
+
+async function catLink(){
+    if(CATLINK) return CATLINK;
+    const r = await fetch('/api/catalogue/lien');
+    const d = await r.json();
+    if(!d.success || !d.url) throw new Error(d.error || 'lien indisponible');
+    CATLINK = d.url;
+    return CATLINK;
+}
+
+async function copyCatLink(btn){
+    const av = btn.innerHTML;
+    try{
+        const url = await catLink();
+        await navigator.clipboard.writeText(url);
+        btn.innerHTML = ico('check') + '<span>Copié</span>';
+        toast('Lien copié — il restera à jour tout seul');
+    }catch(e){
+        toast('Copie impossible', true);
+    }
+    setTimeout(()=>{ btn.innerHTML = av; paintIcons(btn.parentElement); }, 1600);
+}
+
+async function openCatLink(){
+    try{ window.open(await catLink(), '_blank', 'noopener'); }
+    catch(e){ toast('Lien indisponible', true); }
+}
+
+async function dlCatPdf(btn){
+    const av = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span>Génération…</span>';
+    try{
+        const r = await fetch('/api/catalogue/pdf');
+        if(!r.ok) throw new Error(r.status);
+        const blob = await r.blob();
+        const u = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = u;
+        a.download = `catalogue-volakits-${new Date().toISOString().slice(0,10)}.pdf`;
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(()=>URL.revokeObjectURL(u), 4000);
+        toast('PDF généré sur le stock du moment');
+    }catch(e){
+        toast('Génération du PDF impossible', true);
+    }
+    btn.disabled = false;
+    btn.innerHTML = av;
+    paintIcons(btn.parentElement);
 }
 
 // Qui retient quoi : utile pour savoir à qui réclamer un envoi.
