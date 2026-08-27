@@ -1482,36 +1482,80 @@ function setExtTab(t){
    Shopify (ou du rythme saisi), la correction manuelle, et le total retenu.
    Sans ça, impossible de dire si un rang est celui qu'on a voulu ou celui
    qu'on a laissé passer. */
-/* Saisie d'une correction : on met à jour la ligne sur place, sans reconstruire
-   la liste. Reclasser à chaque frappe ferait bouger le champ sous le curseur —
-   le tri se refait donc au moment où l'on quitte le champ (rankCommit). */
+/* Saisie d'une correction : rien ne bouge sous le curseur. Les lignes gardent
+   l'ordre où on les a trouvées ; seuls les nombres et les rangs affichés se
+   mettent à jour. Reclasser ici — même à la sortie du champ — renverrait la
+   ligne qu'on vient de corriger tout en haut, et il faudrait la retrouver dans
+   la liste pour finir de taper. L'ordre se remet en place à la réouverture. */
 function rankSet(i, v){
     const e = RANK[i];
     if(!e) return;
     e.adjust = v;
-    const adj = parseInt(v, 10) || 0;
-    e.total = Math.max(0, (e.raw || 0) + adj);
-    const row = document.querySelectorAll('#rankList .rkrow')[i];
-    if(!row) return;
-    const n = row.querySelector('.rk-raw');
-    if(n) n.innerHTML = `${e.total}<span class="rk-u">ventes</span>`;
-    let calc = row.querySelector('.rk-calc');
-    if(adj !== 0){
-        const txt = `${e.raw} ${adj > 0 ? '+' : '−'} ${Math.abs(adj)} = <b>${e.total}</b>`;
-        if(calc) calc.innerHTML = txt;
-        else {
-            calc = document.createElement('span');
-            calc.className = 'rk-calc'; calc.innerHTML = txt;
-            row.appendChild(calc);
-        }
-    }else if(calc){ calc.remove(); }
+    rankRecalc();
 }
-function rankCommit(){ renderRank(); }
+function rankCommit(){ rankRecalc(); }
+
+/* Les rangs se calculent sur une copie triée : le tableau affiché, lui, ne
+   change pas d'ordre. */
+function rankPositions(){
+    RANK.forEach(e => {
+        e.total = Math.max(0, (e.raw || 0) + (parseInt(e.adjust, 10) || 0));
+        e.out = !!e.hidden || !!e.stale;
+        e.position = null;
+    });
+    const tri = RANK.filter(e => !e.out && e.total > 0)
+        .sort((a, b) => (b.total - a.total)
+            || a.pseudo.toLowerCase().localeCompare(b.pseudo.toLowerCase()));
+    let prev = null, pos = 0;
+    tri.forEach((e, i) => {
+        pos = (e.total === prev) ? pos : i + 1;
+        prev = e.total;
+        e.position = pos;
+    });
+}
+
+/* Repeint chaque ligne sur place — sans jamais toucher aux champs de saisie. */
+function rankRecalc(){
+    rankPositions();
+    const rows = document.querySelectorAll('#rankList .rkrow');
+    RANK.forEach((e, i) => {
+        const row = rows[i];
+        if(!row) return;
+        const adj = parseInt(e.adjust, 10) || 0;
+        row.classList.toggle('out', !!e.out);
+
+        const p = row.querySelector('.rk-pos');
+        if(p) p.textContent = e.out ? '—' : (e.total > 0 ? (e.position || '—') : '–');
+        const n = row.querySelector('.rk-raw');
+        if(n) n.innerHTML = `${e.total}<span class="rk-u">ventes</span>`;
+
+        const bt = row.querySelector('button.btn');
+        if(bt){
+            bt.textContent = e.hidden ? 'Réintégrer' : 'Retirer';
+            bt.classList.toggle('primary', !!e.hidden);
+            bt.classList.toggle('ghost', !e.hidden);
+        }
+
+        rankTail(row, 'rk-calc', adj !== 0
+            ? `${e.raw} ${adj > 0 ? '+' : '−'} ${Math.abs(adj)} = <b>${e.total}</b>` : '');
+        rankTail(row, 'rk-flag', e.hidden ? 'Retiré du classement'
+                              : e.stale  ? 'Compteur en attente — hors classement'
+                              : e.total <= 0 ? 'Pas encore classé' : '',
+                 e.hidden ? 'bad' : e.stale ? 'warn' : '');
+    });
+}
+function rankTail(row, cls, html, extra){
+    let el = row.querySelector('.' + cls);
+    if(!html){ if(el) el.remove(); return; }
+    if(!el){ el = document.createElement('span'); row.appendChild(el); }
+    el.className = cls + (extra ? ' ' + extra : '');
+    el.innerHTML = html;
+}
+
 function rankToggle(i){
     if(!RANK[i]) return;
     RANK[i].hidden = !RANK[i].hidden;
-    RANK[i].out = RANK[i].hidden || RANK[i].stale;
-    renderRank();
+    rankRecalc();
 }
 
 function renderRank(){
@@ -1524,20 +1568,10 @@ function renderRank(){
     // Le panneau doit montrer l'ordre exact que verront les influenceuses,
     // arbitrages compris — sinon il ne sert à rien pour trancher. On rejoue
     // donc ici le tri et le rang sportif du serveur, sur les valeurs à l'écran.
-    RANK.forEach(e => {
-        e.total = Math.max(0, (e.raw || 0) + (parseInt(e.adjust, 10) || 0));
-        e.out = !!e.hidden || !!e.stale;
-    });
+    rankPositions();
     RANK.sort((a, b) => (a.out - b.out)
         || (b.total - a.total)
         || a.pseudo.toLowerCase().localeCompare(b.pseudo.toLowerCase()));
-    let prev = null, pos = 0;
-    RANK.forEach((e, i) => {
-        if(e.out || e.total <= 0){ e.position = null; return; }
-        pos = (e.total === prev) ? pos : i + 1;
-        prev = e.total;
-        e.position = pos;
-    });
 
     el.innerHTML = RANK.map((e,i) => {
         const adj = parseInt(e.adjust,10) || 0;
@@ -1562,7 +1596,8 @@ function renderRank(){
             <span class="rk-adjw">
                 <span class="rk-adjk">corriger</span>
                 <input class="inp rk-adj num" type="number" step="1" value="${adj}"
-                       oninput="rankSet(${i},this.value)" onchange="rankCommit()">
+                       oninput="rankSet(${i},this.value)" onchange="rankCommit()"
+                       onfocus="this.select()">
             </span>
             <button class="btn sm ${e.hidden ? 'primary' : 'ghost'}" onclick="rankToggle(${i})">${e.hidden ? 'Réintégrer' : 'Retirer'}</button>
             ${detail}${flag}
