@@ -493,6 +493,12 @@ select.inp{cursor:pointer}
 .extrow{display:flex;align-items:center;gap:9px;flex-wrap:wrap;
     padding:9px 0;border-top:1px solid var(--line)}
 .extrow:first-child{border-top:0}
+/* Un numéro d'ordre par ligne : la dernière valeur dit combien ils sont, sans
+   avoir à compter. */
+.extno{flex:0 0 22px;text-align:right;font-size:11.5px;font-weight:700;
+    color:var(--faint);font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.extcount{font-size:11.5px;font-weight:700;color:var(--muted);
+    padding:0 0 9px;letter-spacing:-.01em}
 .extname{flex:1 1 160px;min-width:0}
 .extnum{flex:0 0 90px;text-align:right;font-weight:700}
 .extunit{font-size:11.5px;color:var(--muted);font-weight:600;white-space:nowrap}
@@ -1624,7 +1630,13 @@ function extDel(i){ EXT.splice(i,1); renderExt(); }
 function extSet(i, k, v){
     if(!EXT[i]) return;
     EXT[i][k] = v;
-    if(k !== 'pseudo') extPaintCalc(i);
+    if(k === 'pseudo') extPaintCount(); else extPaintCalc(i);
+}
+function extPaintCount(){
+    const el = document.querySelector('#extList .extcount');
+    if(!el) return;
+    const n = EXT.filter(e => (e.pseudo||'').trim()).length;
+    el.textContent = `${n} vendeur${n>1?'s':''} hors boutique`;
 }
 function extPaintCalc(i){
     const row  = document.querySelectorAll('#extList .extrow')[i];
@@ -1677,7 +1689,9 @@ function renderExt(){
         el.innerHTML = `<div class="hint">Personne pour l'instant.</div>`;
         return;
     }
-    el.innerHTML = EXT.map((e,i) => {
+    const nommes = EXT.filter(e => (e.pseudo||'').trim()).length;
+    el.innerHTML = `<div class="extcount">${nommes} vendeur${nommes>1?'s':''} hors boutique</div>`
+    + EXT.map((e,i) => {
         const rythme = e.mode === 'rythme';
 
         // `value` reprend la saisie telle quelle : la normaliser en nombre
@@ -1706,6 +1720,7 @@ function renderExt(){
             ? `<a class="extlink" href="${esc(e.espace_url)}" target="_blank" rel="noopener">Son espace</a>` : '';
 
         return `<div class="extrow${e.stale?' stale':''}">
+            <span class="extno num">${i+1}</span>
             <input class="inp extname" value="${esc(e.pseudo)}" placeholder="Nom ou pseudo"
                    maxlength="40" autocomplete="off"
                    oninput="extSet(${i},'pseudo',this.value)">
