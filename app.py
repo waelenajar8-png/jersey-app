@@ -1600,6 +1600,18 @@ def r2_put_image(key, img_bytes, mime="image/png"):
         print(f"[R2 put_image error] {key}: {e}")
         return False
 
+def r2_get_bytes(key):
+    """Contenu brut d'un objet R2 — utilisé pour composer le catalogue PDF."""
+    r2 = get_r2()
+    if not r2:
+        return None
+    try:
+        return r2.get_object(Bucket=R2_BUCKET, Key=key)["Body"].read()
+    except Exception as e:
+        print(f"[R2 get_bytes] {key}: {e}")
+        return None
+
+
 def r2_presigned(key, expires=86400):  # 24h
     r2 = get_r2()
     if not r2: return None
@@ -3835,11 +3847,22 @@ def _undo_shipment(inf, cat):
 @app.route("/api/stock/set", methods=["POST"])
 @_require_admin_api
 def api_stock_set():
-    """Fixe directement la quantité physique d'une taille (contrôle total admin)."""
+    """
+    Fixe la quantité d'une taille.
+
+    Deux lectures possibles du nombre saisi, et une seule est naturelle côté
+    console : l'admin compte ce qu'il a réellement sous la main, donc il saisit
+    le DISPONIBLE. Le stock physique stocké redevient `dispo + réservés` — les
+    maillots promis à quelqu'un mais pas encore expédiés existent toujours dans
+    le carton, ils ne doivent pas disparaître parce qu'on a recompté.
+
+    `mode="physical"` conserve l'ancien comportement pour tout appel interne.
+    """
     try:
         d = request.json or {}
         jid, size = d.get("jersey_id"), (d.get("size") or "").strip()
         qty = max(0, _safe_int(d.get("qty"), 0))
+        mode = (d.get("mode") or "available").strip()
         if not jid or not size:
             return jsonify({"success": False, "error": "maillot ou taille manquant"}), 400
 
@@ -3848,10 +3871,16 @@ def api_stock_set():
         if not target:
             return jsonify({"success": False, "error": "maillot introuvable"}), 404
 
-        target.setdefault("sizes", {})[size] = qty
+        reserved = 0
+        if mode != "physical":
+            data = r2_get_json(INFLUENCEURS_R2_KEY) or {}
+            reserved = _reserved_map(data.get("influenceurs", []) or []).get((jid, size), 0)
+
+        target.setdefault("sizes", {})[size] = qty + reserved
         if not _save_gifting_catalog(cat):
             return jsonify({"success": False, "error": "écriture catalogue échouée"}), 500
-        return jsonify({"success": True, "qty": qty})
+        return jsonify({"success": True, "qty": qty,
+                        "reserved": reserved, "physical": qty + reserved})
     except Exception as e:
         print(f"[STOCK] Erreur mise à jour: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
@@ -5935,13 +5964,34 @@ def _save_gifting_catalog(cat):
         print(f"[GIFTING] Erreur écriture catalogue: {e}")
         return False
 
-def _gifting_public_view(cat):
-    """Version publique : uniquement les maillots actifs avec au moins une taille dispo."""
+def _gifting_public_view(cat, except_id=None, with_image=True):
+    """
+    Version publique : maillots actifs, tailles réellement disponibles.
+
+    « Disponible » = physique − déjà choisi par quelqu'un d'autre. Sans cette
+    soustraction, deux influenceuses peuvent réserver le dernier exemplaire
+    d'une taille : la première le reçoit, la seconde apprend qu'il n'y en a
+    plus. `except_id` laisse une influenceuse voir la taille qu'elle a
+    elle-même retenue, sinon son propre choix disparaîtrait sous ses yeux.
+    """
+    try:
+        data = r2_get_json(INFLUENCEURS_R2_KEY) or {}
+        influenceurs = [i for i in (data.get("influenceurs", []) or [])
+                        if not (except_id and isinstance(i, dict) and i.get("id") == except_id)]
+        reserved = _reserved_map(influenceurs)
+    except Exception as e:
+        print(f"[GIFTING] Réservations illisibles, stock physique utilisé: {e}")
+        reserved = {}
+
     out = []
     for j in cat.get("jerseys", []):
         if not j.get("active", True):
             continue
-        sizes = {s: q for s, q in (j.get("sizes") or {}).items() if int(q or 0) > 0}
+        sizes = {}
+        for s, q in (j.get("sizes") or {}).items():
+            reste = _safe_int(q, 0) - reserved.get((j.get("id"), s), 0)
+            if reste > 0:
+                sizes[s] = reste
         if not sizes:
             continue
         out.append({
@@ -5949,9 +5999,46 @@ def _gifting_public_view(cat):
             "name": j.get("name", ""),
             "sub": j.get("sub", ""),
             "sizes": sizes,
-            "image": r2_presigned(j["r2_key"], expires=604800) if j.get("r2_key") else "",
+            "r2_key": j.get("r2_key") or "",
+            "image": (r2_presigned(j["r2_key"], expires=604800)
+                      if (with_image and j.get("r2_key")) else ""),
         })
     return out
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# CATALOGUE PARTAGEABLE
+# Le PDF envoyé à la main se périme dès la première sélection : deux
+# influenceuses reçoivent le même document et choisissent le même maillot. Le
+# lien ci-dessous montre l'état réel du stock au moment où il est ouvert, et le
+# PDF n'est plus qu'une photographie de ce même état, générée à la demande.
+# ══════════════════════════════════════════════════════════════════════════════
+CATALOGUE_TOKEN_KEY = "meta/catalogue_public.json"
+
+
+def _paris_now():
+    """Heure locale, pour dater le catalogue comme le lit l'admin."""
+    try:
+        from zoneinfo import ZoneInfo
+        return datetime.now(ZoneInfo("Europe/Paris"))
+    except Exception:
+        return datetime.now(timezone.utc)
+
+
+_catalogue_lock = threading.Lock()
+
+
+def _catalogue_token(create=True):
+    """Jeton du lien public, créé une seule fois puis réutilisé."""
+    with _catalogue_lock:
+        data = r2_get_json(CATALOGUE_TOKEN_KEY) or {}
+        tok = (data.get("token") or "").strip()
+        if tok or not create:
+            return tok or ""
+        tok = secrets.token_urlsafe(16)
+        r2_put_json(CATALOGUE_TOKEN_KEY, {
+            "token": tok, "created_at": datetime.now(timezone.utc).isoformat()})
+        return tok
 
 # Le catalogue commande le stock physique des maillots : ce qui est
 # promettable aux influenceuses, et ce qui est décrémenté à chaque expédition.
@@ -6048,7 +6135,199 @@ def api_espace_jerseys(slug):
     if not inf:
         return jsonify({"error": "introuvable"}), 404
     cat = _load_gifting_catalog()
-    return jsonify({"mode": cat["mode"], "jerseys": _gifting_public_view(cat)})
+    return jsonify({"mode": cat["mode"],
+                    "jerseys": _gifting_public_view(cat, except_id=inf.get("id"))})
+
+def _build_catalogue_pdf(jerseys):
+    """
+    Le catalogue au format A4, tel qu'il est envoyé aux influenceuses.
+
+    Trois colonnes, une carte par maillot, la photo au-dessus du nom : c'est un
+    document qu'on parcourt des yeux avant de répondre « le #3 en M », donc la
+    photo doit primer et le numéro doit être trouvable d'un coup d'œil. Les
+    tailles imprimées sont celles encore libres — c'est tout l'intérêt de le
+    régénérer plutôt que de renvoyer le même fichier.
+    """
+    from io import BytesIO
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.utils import ImageReader
+    from reportlab.pdfgen import canvas as rl_canvas
+
+    ENCRE, GRIS, OR = (0.043, 0.063, 0.125), (0.46, 0.50, 0.60), (0.78, 0.60, 0.11)
+    FOND, CARTE, TRAIT = (0.957, 0.965, 0.976), (1, 1, 1), (0.90, 0.92, 0.95)
+
+    W, H = A4
+    MARGE, GAP = 38, 12
+    COLS = 3
+    LARG = (W - 2 * MARGE - (COLS - 1) * GAP) / COLS
+    HAUT_IMG, HAUT_TXT = 92, 54
+    HAUT = HAUT_IMG + HAUT_TXT
+
+    buf = BytesIO()
+    c = rl_canvas.Canvas(buf, pagesize=A4)
+    c.setTitle("Catalogue Volakits")
+
+    # Les photos vivent dans R2 : on les charge une fois, en tolérant l'échec —
+    # un catalogue sans une vignette reste utilisable, un catalogue en erreur non.
+    photos = {}
+    for j in jerseys:
+        cle = j.get("r2_key")
+        if not cle:
+            continue
+        raw = r2_get_bytes(cle)
+        if not raw:
+            continue
+        try:
+            photos[j["id"]] = ImageReader(BytesIO(raw))
+        except Exception:
+            pass
+
+    def fond():
+        c.setFillColorRGB(*FOND)
+        c.rect(0, 0, W, H, stroke=0, fill=1)
+
+    def entete(y):
+        c.setFillColorRGB(*ENCRE)
+        c.setFont("Helvetica-Bold", 26)
+        c.drawCentredString(W / 2, y, "VOLAKITS")
+        c.setFillColorRGB(*GRIS)
+        c.setFont("Helvetica", 8.5)
+        c.drawCentredString(W / 2, y - 15, "CATALOGUE STOCK  ·  SÉLECTION GIFTING")
+        c.setStrokeColorRGB(*OR)
+        c.setLineWidth(1.6)
+        c.line(MARGE + 40, y - 26, W - MARGE - 40, y - 26)
+        c.setFillColorRGB(*ENCRE)
+        c.setFont("Helvetica", 9.5)
+        c.drawCentredString(W / 2, y - 42,
+                            "Sélectionnez 2 maillots  ·  Indiquez le numéro et la taille")
+        return y - 62
+
+    def pied():
+        c.setFillColorRGB(*GRIS)
+        c.setFont("Helvetica", 7.5)
+        c.drawCentredString(W / 2, 34, "Exemple de commande : #3 en M  +  #7 en S")
+        marque, site = "VOLAKITS", "volakits.com  ·  @Volakits"
+        wm = c.stringWidth(marque, "Helvetica-Bold", 8)
+        ws = c.stringWidth(site, "Helvetica", 7.5)
+        x = (W - (wm + 9 + ws)) / 2
+        c.setFillColorRGB(*ENCRE)
+        c.setFont("Helvetica-Bold", 8)
+        c.drawString(x, 22, marque)
+        c.setFillColorRGB(*GRIS)
+        c.setFont("Helvetica", 7.5)
+        c.drawString(x + wm + 9, 22, site)
+
+    def carte(x, y, n, j):
+        """(x, y) = coin haut gauche de la carte."""
+        c.setFillColorRGB(*CARTE)
+        c.setStrokeColorRGB(*TRAIT)
+        c.setLineWidth(0.7)
+        c.roundRect(x, y - HAUT, LARG, HAUT, 9, stroke=1, fill=1)
+
+        img = photos.get(j.get("id"))
+        if img:
+            try:
+                iw, ih = img.getSize()
+                boite_w, boite_h = LARG - 30, HAUT_IMG - 14
+                ech = min(boite_w / iw, boite_h / ih)
+                w, h = iw * ech, ih * ech
+                c.drawImage(img, x + (LARG - w) / 2, y - 10 - h, w, h,
+                            mask="auto", preserveAspectRatio=True)
+            except Exception:
+                pass
+
+        ty = y - HAUT_IMG - 6
+        c.setFillColorRGB(*ENCRE)
+        c.setFont("Helvetica-Bold", 8.5)
+        titre = f"#{n} {j.get('name') or ''}".strip()
+        while c.stringWidth(titre, "Helvetica-Bold", 8.5) > LARG - 14 and len(titre) > 4:
+            titre = titre[:-2] + "…"
+        c.drawCentredString(x + LARG / 2, ty, titre)
+
+        sub = (j.get("sub") or "").strip()
+        if sub:
+            c.setFillColorRGB(*GRIS)
+            c.setFont("Helvetica", 7)
+            while c.stringWidth(sub, "Helvetica", 7) > LARG - 14 and len(sub) > 4:
+                sub = sub[:-2] + "…"
+            c.drawCentredString(x + LARG / 2, ty - 11, sub)
+
+        tailles = "     ".join(f"{s} · {q}" for s, q in _ordre_tailles(j.get("sizes") or {}))
+        c.setFillColorRGB(*ENCRE)
+        c.setFont("Helvetica-Bold", 8)
+        c.drawCentredString(x + LARG / 2, ty - 27, tailles)
+
+    fond()
+    y = entete(H - 52)
+    for idx, j in enumerate(jerseys):
+        col = idx % COLS
+        if col == 0 and idx:
+            y -= HAUT + GAP
+        if y - HAUT < 52:
+            pied()
+            c.showPage()
+            fond()
+            y = entete(H - 52)
+        carte(MARGE + col * (LARG + GAP), y, idx + 1, j)
+
+    if not jerseys:
+        c.setFillColorRGB(*GRIS)
+        c.setFont("Helvetica", 11)
+        c.drawCentredString(W / 2, H / 2, "Plus aucun maillot disponible pour le moment.")
+    pied()
+    c.save()
+    return buf.getvalue()
+
+
+def _ordre_tailles(sizes):
+    """S, M, L, XL… puis le reste par ordre alphabétique."""
+    ordre = {"XS": 0, "S": 1, "M": 2, "L": 3, "XL": 4, "XXL": 5}
+    return sorted(sizes.items(),
+                  key=lambda kv: (ordre.get(str(kv[0]).strip().upper(), 9), str(kv[0])))
+
+
+@app.route("/catalogue-live/<token>")
+def catalogue_live(token):
+    """
+    Le catalogue tel qu'il est maintenant. Lien unique, sans session : il est
+    fait pour être envoyé. Il n'expose que ce qu'une influenceuse doit voir —
+    un nom, une photo, des tailles encore libres — jamais les réservations ni
+    l'identité de qui a pris quoi.
+    """
+    vrai = _catalogue_token(create=False)
+    if not vrai or not secrets.compare_digest(token or "", vrai):
+        return render_template("espace_404.html"), 404
+    cat = _load_gifting_catalog()
+    jerseys = _gifting_public_view(cat)
+    for j in jerseys:
+        j["sizes_ord"] = _ordre_tailles(j.get("sizes") or {})
+    return render_template("catalogue_live.html", jerseys=jerseys,
+                           maj=_paris_now().strftime("%d/%m/%Y à %Hh%M"))
+
+
+@app.route("/api/catalogue/lien", methods=["GET"])
+@_require_admin_api
+def api_catalogue_lien():
+    tok = _catalogue_token()
+    if not tok:
+        return jsonify({"success": False, "error": "jeton indisponible"}), 500
+    return jsonify({"success": True, "url": request.host_url.rstrip("/") + "/catalogue-live/" + tok})
+
+
+@app.route("/api/catalogue/pdf", methods=["GET"])
+@_require_admin_api
+def api_catalogue_pdf():
+    cat = _load_gifting_catalog()
+    jerseys = _gifting_public_view(cat, with_image=False)
+    try:
+        pdf = _build_catalogue_pdf(jerseys)
+    except Exception as e:
+        print(f"[CATALOGUE PDF] {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+    nom = f"catalogue-volakits-{_paris_now().strftime('%Y-%m-%d')}.pdf"
+    return Response(pdf, mimetype="application/pdf",
+                    headers={"Content-Disposition": f'attachment; filename="{nom}"'})
+
 
 @app.route("/queue_ig")
 def page_queue_ig(): return render_template("queue_ig.html")
