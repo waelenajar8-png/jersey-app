@@ -6,3 +6,4 @@ piexif
 cryptography
 Pillow
 tzdata
+reportlab
