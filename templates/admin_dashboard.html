@@ -1257,7 +1257,7 @@ function normalize(i){
         stats_revenue: i.stats_revenue||0, stats_revenue_month: i.stats_revenue_month||0,
         stats_commission: (i.stats && i.stats.commission) || 0,
         baseline_sales: i.baseline_sales||0, baseline_revenue: i.baseline_revenue||0,
-        jerseys: Array.isArray(i.jerseys) ? i.jerseys : [],
+        jerseys: Array.isArray(i.jerseys) ? i.jerseys.map(jerseyDurable) : [],
         missions_done: i.missions_done || {},
         jerseys_shipped: !!i.jerseys_shipped,
         jerseys_locked: !!i.jerseys_locked,
@@ -2020,18 +2020,48 @@ function renderSheetMissions(inf){
     });
 }
 
+/* La vignette ne vient JAMAIS de ce qui est enregistré dans la fiche : l'URL
+   d'une image R2 est signée pour 7 jours, celle qui a été stockée le jour de
+   l'attribution est morte. On la reprend donc du catalogue, rechargé et
+   re-signé à chaque ouverture de la console. */
+/* Ce qu'on enregistre d'un maillot attribué : rien qui puisse périmer. Les
+   anciennes fiches trimballent encore une URL signée expirée — on la remplace
+   par la clé R2 au premier enregistrement, et elles se réparent d'elles-mêmes. */
+function jerseyDurable(j){
+    if(!j || typeof j !== 'object') return j;
+    const ref = (catalog || []).find(x => x.id === j.id);
+    const out = {id: j.id, name: j.name || '', sub: j.sub || '', size: j.size || ''};
+    const cle = j.r2_key || (ref && ref.r2_key) || '';
+    if(cle) out.r2_key = cle;
+    return out;
+}
+
+function jerseyVignette(j){
+    const ref = (catalog || []).find(x => x.id === j.id);
+    return (ref && ref.image) || '';
+}
+
 // Maillots sélectionnés par l'influenceur, avec leur taille.
 function renderSheetJerseys(inf){
     const box = document.getElementById('fJerseys');
     const list = inf.jerseys || [];
 
+    // Le catalogue n'est pas encore là au premier affichage : on le charge et
+    // on repeint une fois, plutôt que d'afficher des images cassées.
+    if(list.length && !catalog){
+        ensureCatalog().then(() => {
+            const cur = find(currentId);
+            if(cur) renderSheetJerseys(cur);
+        });
+    }
+
     const chips = list.length ? `<div class="jchips">
-        ${list.map((j,i) => `<span class="jchip">
-            ${j.image ? `<img src="${esc(j.image)}" alt="">` : ''}
+        ${list.map((j,i) => { const vig = jerseyVignette(j); return `<span class="jchip">
+            ${vig ? `<img src="${esc(vig)}" alt="">` : ''}
             <span>${esc(j.name || 'Maillot')}</span>
             <b>${esc(j.size || '?')}</b>
             ${inf.jerseys_shipped ? '' : `<button class="jchip-x" data-jrm="${i}" title="Retirer">✕</button>`}
-        </span>`).join('')}
+        </span>`; }).join('')}
     </div>` : `<div class="hint" style="margin-top:0">Aucun maillot attribué pour l'instant.</div>`;
 
     const state = !list.length ? ''
@@ -2120,8 +2150,11 @@ async function bindJerseyAdder(inf){
         const cur = find(currentId);
         const j = cat.find(x => x.id === pick.value);
         if(!cur || !j || !size.value) return;
+        // On garde la clé R2, jamais l'URL signée : celle-ci expire au bout de
+        // 7 jours et la vignette resterait cassée pour toujours.
         cur.jerseys = (cur.jerseys || []).concat({
-            id: j.id, name: j.name, sub: j.sub || '', size: size.value, image: j.image || ''
+            id: j.id, name: j.name, sub: j.sub || '', size: size.value,
+            r2_key: j.r2_key || ''
         });
         renderSheetJerseys(cur);
         scheduleSave();
@@ -2216,7 +2249,13 @@ async function doSave(force){
         // le laisse intact côté serveur (la fusion conserve les champs absents),
         // et évite qu'un onglet ouvert depuis une heure ne réécrive un code
         // régénéré entre-temps.
-        const payload = influenceurs.map(({espace_pin, ...rest}) => rest);
+        // Les fiches sont normalisées au chargement, avant que le catalogue ne
+        // soit là : on repasse les maillots ici pour y remettre leur clé R2 une
+        // fois qu'elle est connue.
+        const payload = influenceurs.map(({espace_pin, ...rest}) => ({
+            ...rest,
+            jerseys: Array.isArray(rest.jerseys) ? rest.jerseys.map(jerseyDurable) : [],
+        }));
         const r = await fetch('/api/influenceurs', {
             method:'POST', headers:{'Content-Type':'application/json'},
             body: JSON.stringify({influenceurs: payload, base_version: dataVersion, force: !!force})
