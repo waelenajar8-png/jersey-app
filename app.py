@@ -5514,22 +5514,53 @@ def _espace_share_link(inf):
     }
 
 
+def _jersey_durable(j):
+    """Réduit un maillot choisi à ce qui ne périme pas : id, nom, taille, clé R2."""
+    garde = {k: j.get(k) for k in ("id", "name", "sub", "size") if j.get(k)}
+    cle = (j.get("r2_key") or "").strip()
+    if not cle and j.get("id"):
+        try:
+            cat = _load_gifting_catalog()
+            cle = next((x.get("r2_key") for x in cat.get("jerseys", [])
+                        if x.get("id") == j.get("id")), "") or ""
+        except Exception:
+            cle = ""
+    if cle:
+        garde["r2_key"] = cle
+    return garde
+
+
 def _espace_jerseys(inf):
     """
     Maillots de l'influenceur, avec leur visuel signé pour l'affichage.
 
     Les images vivent sur R2 en accès privé : sans URL signée, l'espace ne peut
-    rien montrer. On signe pour 7 jours — au-delà, un rechargement de la page
-    régénère les liens, donc rien ne casse.
+    rien montrer. On RE-signe à chaque affichage, sans jamais réutiliser l'URL
+    enregistrée dans la fiche : une URL signée expire au bout de 7 jours, et
+    celle qui a été stockée le jour du choix des maillots est morte depuis
+    longtemps — c'est ce qui laissait des vignettes cassées dans « Mon colis ».
+    La clé R2 vient de la fiche si elle y est, sinon du catalogue via l'id.
     """
+    picks = [j for j in (inf.get("jerseys") or []) if isinstance(j, dict)]
+    if not picks:
+        return []
+
+    cles = {}
+    if any(not j.get("r2_key") for j in picks):
+        try:
+            cat = _load_gifting_catalog()
+            cles = {j.get("id"): j.get("r2_key") for j in cat.get("jerseys", []) if j.get("r2_key")}
+        except Exception as e:
+            print(f"[ESPACE] Catalogue illisible pour les visuels: {e}")
+
     out = []
-    for j in (inf.get("jerseys") or []):
-        if not isinstance(j, dict):
-            continue
+    for j in picks:
         item = dict(j)
-        if not item.get("image") and item.get("r2_key"):
+        cle = item.get("r2_key") or cles.get(item.get("id")) or ""
+        if cle:
             try:
-                item["image"] = r2_presigned(item["r2_key"], expires=604800)
+                item["r2_key"] = cle
+                item["image"] = r2_presigned(cle, expires=604800) or ""
             except Exception as e:
                 print(f"[ESPACE] Visuel maillot indisponible: {e}")
                 item["image"] = ""
@@ -5728,6 +5759,13 @@ def api_espace_update(slug):
                 break
         if not found:
             return jsonify({"success": False, "error": "introuvable"}), 404
+
+        # On n'enregistre jamais l'URL signée envoyée par le navigateur : elle
+        # expire au bout de 7 jours et laisserait une vignette cassée pour
+        # toujours. Seule la clé R2 est durable, l'URL se re-signe à l'affichage.
+        if isinstance(updates.get("jerseys"), list):
+            updates["jerseys"] = [_jersey_durable(j) for j in updates["jerseys"]
+                                  if isinstance(j, dict)]
 
         found.update(updates)
         found["lastModified"] = datetime.now(timezone.utc).isoformat()
