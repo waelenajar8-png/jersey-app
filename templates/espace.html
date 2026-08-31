@@ -2342,7 +2342,10 @@ function selectJersey(jid, size){
         else PICKS[existing].size = size;
     }else{
         if(PICKS.length >= 2){ toast('Tu as déjà choisi 2 maillots'); return; }
-        PICKS.push({id:j.id, name:j.name, sub:j.sub, size, image:j.image});
+        // `image` sert à l'aperçu ici et maintenant ; c'est `r2_key` qui part
+        // au serveur, parce qu'une URL signée expire au bout de 7 jours.
+        PICKS.push({id:j.id, name:j.name, sub:j.sub, size,
+                    image:j.image, r2_key:j.r2_key || ''});
     }
     const c = document.getElementById('pickCount');
     if(c){ c.textContent = `${PICKS.length} / 2`; c.classList.toggle('full', PICKS.length>=2); }
