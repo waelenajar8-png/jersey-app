@@ -338,6 +338,54 @@ h1{font-size:27px;font-weight:800;letter-spacing:-.035em;line-height:1.1}
 .sz .r{color:var(--warn);font-weight:700}
 .sz.out{background:var(--danger-soft);border-color:transparent;color:var(--danger)}
 .sz.low{border-color:#F5D9A8}
+/* ── Qui a quoi ──────────────────────────────────────────────────────────
+   Une ligne = une personne et son colis. Les maillots priment visuellement,
+   parce que c'est ce qu'on vient vérifier ; le suivi et l'état se règlent sur
+   place pour ne pas avoir à rouvrir la fiche. */
+.stabs{display:flex;gap:6px;margin-bottom:18px}
+.env{
+    display:flex;gap:16px;padding:16px 0;border-bottom:1px solid var(--line);
+    align-items:flex-start;flex-wrap:wrap;
+}
+.env:last-child{border-bottom:none}
+.env-av{
+    width:38px;height:38px;border-radius:11px;flex-shrink:0;
+    display:grid;place-items:center;background:var(--accent-soft);color:var(--accent);
+    font-size:13px;font-weight:800;letter-spacing:-.02em;
+}
+.env-b{flex:1 1 300px;min-width:0}
+.env-top{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.env-n{font-size:15px;font-weight:800;letter-spacing:-.025em}
+.env-tag{
+    font-size:10.5px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;
+    padding:3px 8px;border-radius:7px;background:var(--surface-2);color:var(--muted);
+}
+.env-tag.att{background:var(--warn-soft);color:#96590A}
+.env-tag.ok{background:var(--ok-soft);color:#0B7A44}
+.env-tag.bad{background:var(--danger-soft);color:var(--danger)}
+.env-items{display:flex;flex-wrap:wrap;gap:7px;margin-top:10px}
+.env-j{
+    display:inline-flex;align-items:center;gap:8px;padding:5px 6px 5px 5px;
+    border-radius:11px;background:var(--surface-2);border:1px solid var(--line);
+    font-size:12.5px;font-weight:600;
+}
+.env-j img{width:26px;height:26px;border-radius:7px;object-fit:cover;background:var(--surface);display:block}
+.env-j b{font-size:12px;font-weight:800;padding:2px 6px;border-radius:6px;
+    background:var(--accent-soft);color:var(--accent)}
+.env-x{
+    border:0;background:transparent;cursor:pointer;color:var(--faint);
+    font-size:13px;line-height:1;padding:3px 4px;border-radius:6px;font-family:inherit;
+}
+.env-x:hover{background:var(--danger-soft);color:var(--danger)}
+.env-side{display:flex;gap:8px;align-items:center;flex:0 0 auto;flex-wrap:wrap;margin-top:2px}
+.env-side .inp{height:34px;font-size:12.5px;min-width:0}
+.env-suivi{flex:0 0 180px;width:180px}
+.env-etat{flex:0 0 132px;width:132px}
+.env-empty{font-size:12px;color:var(--faint);font-weight:600;margin-top:9px}
+@media(max-width:900px){
+    .env-side{flex:1 1 100%;margin-top:10px}
+    .env-suivi{flex:1 1 140px;width:auto}
+}
 .sz-more{
     display:inline-flex;align-items:center;padding:6px 11px;border-radius:10px;
     background:transparent;border:1px dashed var(--line-2);cursor:pointer;
@@ -717,7 +765,7 @@ select.inp{cursor:pointer}
             <div class="topline">
                 <div>
                     <h1>Stock maillots</h1>
-                    <p class="subtitle">Tu saisis ce qu'il te reste. Les maillots déjà promis restent comptés à part.</p>
+                    <p class="subtitle" id="stockSub">Tu saisis ce qu'il te reste. Les maillots déjà promis restent comptés à part.</p>
                 </div>
                 <div class="toolbar">
                     <div class="search"><span data-i="search"></span>
@@ -726,6 +774,16 @@ select.inp{cursor:pointer}
                     <a class="btn" href="/catalogue" target="_blank" data-i="ext">Modifier le catalogue</a>
                 </div>
             </div>
+
+            <!-- Deux questions, deux écrans. « Par maillot » répond à « qu'est-ce
+                 qu'il me reste » ; « Qui a quoi » répond à « qui détient quoi »,
+                 sans avoir à ouvrir onze fiches pour le savoir. -->
+            <div class="stabs">
+                <button class="chip on" id="tabStockM" onclick="setStockTab('modeles')">Par maillot</button>
+                <button class="chip" id="tabStockE" onclick="setStockTab('envois')">Qui a quoi</button>
+            </div>
+
+            <div id="paneModeles">
 
             <!-- Le catalogue partagé : un lien qui ne se périme pas, et le PDF du
                  moment quand il faut vraiment un fichier. -->
@@ -750,6 +808,17 @@ select.inp{cursor:pointer}
             </div>
 
             <div id="stockList"></div>
+            </div><!-- /paneModeles -->
+
+            <div id="paneEnvois" hidden>
+                <div class="board">
+                    <div class="board-cell"><div class="board-label">Ambassadrices servies</div><div class="board-value num" id="eGens">—</div></div>
+                    <div class="board-cell"><div class="board-label">Maillots réservés</div><div class="board-value num" id="eResa">—</div></div>
+                    <div class="board-cell"><div class="board-label">Maillots expédiés</div><div class="board-value num" id="eEnv">—</div></div>
+                    <div class="board-cell"><div class="board-label">Sans numéro de suivi</div><div class="board-value num" id="eSans">—</div></div>
+                </div>
+                <div id="envoisList"></div>
+            </div>
         </section>
 
         <!-- ══ Vue Vidéos ══ -->
@@ -1322,6 +1391,8 @@ function renderAll(){
     document.getElementById('bSales').textContent = sales;
     document.getElementById('bMonth').textContent = month;
     document.getElementById('bCom').textContent   = euro(com);
+    // La vue « Qui a quoi » lit les mêmes fiches : elle doit suivre.
+    if(VIEW === 'stock' && STOCK_TAB === 'envois') renderEnvois();
 
     // Les vendeurs hors boutique ont leur propre ligne : à part des chiffres
     // de la boutique, mais visibles — les cacher ferait douter qu'ils existent.
@@ -2346,7 +2417,10 @@ function setView(v){
     // Les vidéos sont préchargées au démarrage pour le compteur : si c'est déjà
     // fait, il suffit d'afficher, sinon on va les chercher.
     if(v === 'videos') videosLoaded ? renderVideos() : loadVideos();
-    if(v === 'stock')  stockData ? renderStock() : loadStock();
+    if(v === 'stock'){
+        if(STOCK_TAB === 'envois') renderEnvois();
+        else stockData ? renderStock() : loadStock();
+    }
 }
 
 /* ── Vidéos ─────────────────────────────────────────────────────────── */
@@ -2783,6 +2857,154 @@ async function dlCatPdf(btn){
     paintIcons(btn.parentElement);
 }
 
+/* ── Qui a quoi ──────────────────────────────────────────────────────────
+   La même donnée que la fiche de chaque ambassadrice, mais rassemblée : sans
+   ça, savoir qui détient le dernier S d'un modèle demande d'ouvrir onze fiches
+   l'une après l'autre. Tout est déjà chargé côté console — c'est une lecture
+   transversale de `influenceurs`, aucune requête de plus. */
+let STOCK_TAB = 'modeles';
+
+function setStockTab(t){
+    STOCK_TAB = t;
+    document.getElementById('paneModeles').hidden = t !== 'modeles';
+    document.getElementById('paneEnvois').hidden  = t !== 'envois';
+    document.getElementById('tabStockM').classList.toggle('on', t === 'modeles');
+    document.getElementById('tabStockE').classList.toggle('on', t === 'envois');
+    document.getElementById('sq').placeholder = t === 'envois'
+        ? 'Rechercher une ambassadrice ou un maillot' : 'Rechercher';
+    document.getElementById('stockSub').textContent = t === 'envois'
+        ? "Qui détient quoi, et où en est son colis. Annuler un maillot le remet en stock."
+        : "Tu saisis ce qu'il te reste. Les maillots déjà promis restent comptés à part.";
+    if(t === 'envois') renderEnvois();
+}
+
+const ENV_ETATS = {'':'—', prepare:'Préparé', envoye:'Envoyé', livre:'Livré', probleme:'Problème'};
+
+function renderEnvois(){
+    const box = document.getElementById('envoisList');
+    if(!box) return;
+
+    // Le catalogue porte les visuels re-signés ; on le charge si besoin.
+    if(!catalog){
+        ensureCatalog().then(() => { if(STOCK_TAB === 'envois') renderEnvois(); });
+    }
+
+    const tous = ambassadeurs().filter(i => (i.jerseys || []).length);
+    const q = (document.getElementById('sq').value || '').toLowerCase().trim();
+    const liste = q ? tous.filter(i =>
+        (i.pseudo || '').toLowerCase().includes(q) ||
+        (i.jerseys || []).some(j => (j.name || '').toLowerCase().includes(q))) : tous;
+
+    // Les colis pas encore partis d'abord : c'est là qu'il y a quelque chose à faire.
+    liste.sort((a, b) => (a.jerseys_shipped ? 1 : 0) - (b.jerseys_shipped ? 1 : 0)
+        || (a.pseudo || '').localeCompare(b.pseudo || ''));
+
+    const resa = tous.filter(i => !i.jerseys_shipped).reduce((n, i) => n + i.jerseys.length, 0);
+    const env  = tous.filter(i => i.jerseys_shipped).reduce((n, i) => n + i.jerseys.length, 0);
+    const sans = tous.filter(i => !i.jerseys_shipped && !(i.tracking || '').trim()).length;
+    document.getElementById('eGens').textContent = tous.length;
+    document.getElementById('eResa').textContent = resa;
+    document.getElementById('eEnv').textContent  = env;
+    document.getElementById('eSans').textContent = sans;
+
+    if(!liste.length){
+        box.innerHTML = `<div class="empty">${ico('inbox')}
+            <div class="empty-t">${tous.length ? 'Aucun résultat' : 'Aucun maillot attribué'}</div>
+            <div class="empty-s">${tous.length
+                ? 'Essaie un autre terme.'
+                : 'Dès qu\'une ambassadrice choisit ses maillots, elle apparaît ici.'}</div></div>`;
+        paintIcons(box);
+        return;
+    }
+
+    box.innerHTML = liste.map(inf => {
+        const parti = !!inf.jerseys_shipped;
+        const etat  = inf.trackingStatus || '';
+        const tag = parti
+            ? `<span class="env-tag ok">Sorti du stock</span>`
+            : `<span class="env-tag att">Réservé</span>`;
+        const pb = etat === 'probleme' ? `<span class="env-tag bad">Problème colis</span>` : '';
+        const nosuivi = (!parti && !(inf.tracking || '').trim())
+            ? `<span class="env-tag">Sans suivi</span>` : '';
+
+        const items = inf.jerseys.map((j, i) => {
+            const vig = jerseyVignette(j);
+            return `<span class="env-j">
+                ${vig ? `<img src="${esc(vig)}" alt="">` : ''}
+                ${esc(j.name || 'Maillot')}<b>${esc(j.size || '?')}</b>
+                ${parti ? '' : `<button class="env-x" data-env-rm="${esc(inf.id)}" data-i="${i}"
+                    title="Annuler — le maillot repart en stock">✕</button>`}
+            </span>`;
+        }).join('');
+
+        return `<div class="env">
+            <div class="env-av">${esc(initials(inf.pseudo))}</div>
+            <div class="env-b">
+                <div class="env-top">
+                    <span class="env-n">${esc(inf.pseudo || '—')}</span>
+                    ${tag}${pb}${nosuivi}
+                </div>
+                <div class="env-items">${items}</div>
+            </div>
+            <div class="env-side">
+                <input class="inp env-suivi" placeholder="Numéro de suivi" autocomplete="off"
+                       value="${esc(inf.tracking || '')}" data-env-suivi="${esc(inf.id)}">
+                <select class="inp env-etat" data-env-etat="${esc(inf.id)}">
+                    ${Object.entries(ENV_ETATS).map(([v, l]) =>
+                        `<option value="${v}" ${v === etat ? 'selected' : ''}>${l}</option>`).join('')}
+                </select>
+                <button class="btn sm ghost" data-env-fiche="${esc(inf.id)}">Fiche</button>
+            </div>
+        </div>`;
+    }).join('');
+
+    bindEnvois();
+}
+
+/* Rien ne se redessine pendant la frappe : le numéro de suivi s'écrit d'une
+   traite, comme partout ailleurs dans la console. */
+function bindEnvois(){
+    const box = document.getElementById('envoisList');
+
+    box.querySelectorAll('[data-env-suivi]').forEach(inp => {
+        inp.oninput = () => {
+            const cur = find(inp.dataset.envSuivi);
+            if(!cur) return;
+            cur.tracking = inp.value;
+            scheduleSave();
+        };
+    });
+
+    box.querySelectorAll('[data-env-etat]').forEach(sel => {
+        sel.onchange = () => {
+            const cur = find(sel.dataset.envEtat);
+            if(!cur) return;
+            cur.trackingStatus = sel.value;
+            scheduleSave();
+            renderEnvois();
+        };
+    });
+
+    box.querySelectorAll('[data-env-fiche]').forEach(b => {
+        b.onclick = () => openSheet(b.dataset.envFiche);
+    });
+
+    box.querySelectorAll('[data-env-rm]').forEach(b => {
+        b.onclick = () => {
+            const cur = find(b.dataset.envRm);
+            const i = parseInt(b.dataset.i, 10);
+            if(!cur || !cur.jerseys || !cur.jerseys[i]) return;
+            const nom = cur.jerseys[i].name || 'Maillot';
+            const taille = cur.jerseys[i].size || '';
+            cur.jerseys = cur.jerseys.filter((_, k) => k !== i);
+            scheduleSave();
+            stockData = null;          // la taille redevient disponible
+            renderEnvois();
+            toast(`${nom} ${taille} remis en stock`);
+        };
+    });
+}
+
 /* Une taille épuisée n'est pas une taille : elle ne se choisit plus, elle ne
    s'envoie plus, et la laisser affichée à 0 oblige à relire chaque pastille
    pour savoir ce qui reste vraiment. On les retire donc de la ligne — mais on
@@ -3085,8 +3307,10 @@ document.getElementById('addBtn').addEventListener('click', openAdd);
 document.getElementById('importBtn').addEventListener('click', openImp);
 document.getElementById('exportBtn').addEventListener('click', exportCsv);
 document.getElementById('vq').addEventListener('input', renderVideos);
-document.getElementById('sq').addEventListener('input', renderStock);
-document.getElementById('stockRefresh').addEventListener('click', loadStock);
+document.getElementById('sq').addEventListener('input',
+    () => STOCK_TAB === 'envois' ? renderEnvois() : renderStock());
+document.getElementById('stockRefresh').addEventListener('click',
+    () => STOCK_TAB === 'envois' ? renderEnvois() : loadStock());
 document.getElementById('vidAddBtn').addEventListener('click', openVidUpload);
 document.getElementById('vidScrim').addEventListener('click', e => { if(e.target.id==='vidScrim') closeVidUpload(); });
 document.getElementById('vDrop').addEventListener('click', () => document.getElementById('vFile').click());
