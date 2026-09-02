@@ -2082,6 +2082,10 @@ function viewPaliers(){
             ${/* Les deux gains côte à côte : l'argent d'abord, parce que c'est
                  la première question. Le montant garanti se déclenche au même
                  nombre de ventes que le palier — d'où la lecture commune. */''}
+            ${/* Le palier de départ n'est pas un abonnement : c'est le point
+                 d'entrée. Ses deux maillots sont le colis de démarrage, offert
+                 sans condition — le présenter comme un envoi récurrent
+                 promettrait quelque chose qui n'existe pas. */''}
             <div class="tc-gains">
                 <div class="tc-gain">
                     <div class="tc-gk">Ce que tu touches</div>
@@ -2089,13 +2093,15 @@ function viewPaliers(){
                         ? `<div class="tc-gv num">${fmtFull(x.monthly_fixed)} €</div>
                            <div class="tc-gd">garantis dès <b>${fmtFull(x.monthly_threshold)} ventes</b> dans une période de 30 jours</div>`
                         : `<div class="tc-gv num">10 %</div>
-                           <div class="tc-gd">de tes ventes nettes, dès ta toute première</div>`}
+                           <div class="tc-gd">de tes ventes</div>`}
                 </div>
                 <div class="tc-gain">
                     <div class="tc-gk">Ce que tu reçois</div>
                     <div class="tc-shirts">${Array.from({length: x.jerseys}, ()=>SHIRT).join('')}</div>
                     <div class="tc-gv num">${fmtFull(x.jerseys)} maillots</div>
-                    <div class="tc-gd">floqués à ton nom, dès <b>${fmtFull(x.gifting_threshold)} ventes</b> dans la même période</div>
+                    <div class="tc-gd">${x.req_sales === 0
+                        ? `pour démarrer, <b>sans aucune vente à faire</b>`
+                        : `dès <b>${fmtFull(x.gifting_threshold)} ventes</b> dans la même période`}</div>
                 </div>
             </div>
 
