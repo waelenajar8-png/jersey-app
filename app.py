@@ -2927,6 +2927,23 @@ def categories_page(): return render_template("categories.html")
 INFLUENCEURS_R2_KEY = "meta/influenceurs.json"
 INFLUENCEURS_BACKUP_PREFIX = "meta/influenceurs_backups/"
 INFLUENCEURS_BACKUP_KEEP = 5  # nombre de sauvegardes de secours conservées
+INFLUENCEURS_BACKUP_MIN_SEC = 15 * 60   # intervalle minimum entre deux sauvegardes
+_backup_dernier = {"at": 0.0}
+
+
+def _backup_du_a(_now_iso=None):
+    """
+    Vrai si la dernière sauvegarde est assez ancienne pour en refaire une.
+
+    Le compteur vit en mémoire du processus : au redéploiement il repart à
+    zéro, ce qui provoque au pire une sauvegarde de plus. C'est le bon sens de
+    l'erreur.
+    """
+    maintenant = time.time()
+    if maintenant - _backup_dernier["at"] < INFLUENCEURS_BACKUP_MIN_SEC:
+        return False
+    _backup_dernier["at"] = maintenant
+    return True
 _influenceurs_lock = threading.Lock()
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -4051,8 +4068,15 @@ def api_save_influenceurs():
                 "updated_at": now_iso,
             }
 
-            # Sauvegarde de secours de l'ANCIEN état avant écrasement (si non vide)
-            if current.get("influenceurs"):
+            # Sauvegarde de secours de l'ANCIEN état avant écrasement (si non vide).
+            #
+            # Espacées dans le temps, pas une par écriture. La console
+            # enregistre à chaque frappe (debounce 0,65 s) : remplir un numéro
+            # de suivi produisait plusieurs sauvegardes d'affilée, et comme on
+            # n'en garde que cinq, quelques champs saisis suffisaient à chasser
+            # tout l'historique utile. Cinq sauvegardes espacées d'un quart
+            # d'heure couvrent une vraie fenêtre de rattrapage.
+            if current.get("influenceurs") and _backup_du_a(now_iso):
                 try:
                     ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
                     r2_put_json(f"{INFLUENCEURS_BACKUP_PREFIX}{ts}.json", current)
@@ -4075,6 +4099,117 @@ def api_save_influenceurs():
     except Exception as e:
         print(f"[INFLU] Erreur sauvegarde: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
+
+# ══════════════════════════════════════════════════════════════════════════════
+# PAIE
+# Le serveur calcule déjà, pour chaque influenceuse, ce qu'elle touchera sur sa
+# période — et ne le montrait qu'à elle. L'admin, lui, devait rouvrir dix-huit
+# fiches et refaire l'addition de tête. Cette route rend le même calcul, du
+# côté de celui qui paie, et garde la trace de ce qui a été réglé.
+# ══════════════════════════════════════════════════════════════════════════════
+def _periode_reglee(inf, cle):
+    """Ce qui a déjà été payé pour cette période, ou None."""
+    return ((inf.get("payouts") or {}).get(cle)) or None
+
+
+@app.route("/api/paie", methods=["GET"])
+@_require_admin_api
+def api_paie():
+    try:
+        data = r2_get_json(INFLUENCEURS_R2_KEY) or {}
+        influenceurs = data.get("influenceurs", []) or []
+        _refresh_light_stats(influenceurs)
+        now = datetime.now(timezone.utc)
+
+        lignes, total_du, total_regle = [], 0.0, 0.0
+        for inf in influenceurs:
+            if not isinstance(inf, dict):
+                continue
+            stats = dict(inf.get("stats") or {})
+            horloge = _month_clock(inf, now)
+            paie    = _compute_monthly_commission(inf, stats)
+            cle     = horloge["start"]
+            regle   = _periode_reglee(inf, cle)
+            montant = float(paie.get("amount") or 0)
+
+            total_du += montant
+            if regle:
+                total_regle += float(regle.get("amount") or 0)
+
+            lignes.append({
+                "id":        inf.get("id"),
+                "pseudo":    inf.get("pseudo") or "—",
+                "light":     bool(_is_light(inf)),
+                "promo":     inf.get("promo_code") or "",
+                # Sans date d'entrée, la période retombe en silence sur le mois
+                # calendaire : le montant est alors calculé sur la mauvaise
+                # fenêtre. C'est une erreur d'argent, elle doit se voir.
+                "anchored":  bool(horloge["anchored"]),
+                "start":     horloge["start"],
+                "end":       horloge["end"],
+                "days_left": horloge["days_left"],
+                "sales":     _safe_int(stats.get("sales_month", 0)),
+                "type":      paie.get("type"),
+                "amount":    montant,
+                "threshold": paie.get("threshold"),
+                "missing":   paie.get("missing") or 0,
+                "next_gain": paie.get("next_gain"),
+                "paid":      bool(regle),
+                "paid_at":   (regle or {}).get("at", ""),
+                "paid_amount": (regle or {}).get("amount"),
+            })
+
+        lignes.sort(key=lambda r: (r["paid"], -r["amount"], r["pseudo"].lower()))
+        return jsonify({
+            "rows": lignes,
+            "totals": {
+                "du":      round(total_du, 2),
+                "regle":   round(total_regle, 2),
+                "restant": round(total_du - total_regle, 2),
+                "gens":    len(lignes),
+                "a_payer": sum(1 for r in lignes if not r["paid"] and r["amount"] > 0),
+            },
+        })
+    except Exception as e:
+        print(f"[PAIE] Erreur: {e}")
+        return jsonify({"rows": [], "totals": {}, "error": str(e)}), 500
+
+
+@app.route("/api/paie/regle", methods=["POST"])
+@_require_admin_api
+def api_paie_regle():
+    """Marque une période payée, ou annule le marquage."""
+    d = request.json or {}
+    iid    = (d.get("id") or "").strip()
+    cle    = (d.get("period") or "").strip()
+    payer  = bool(d.get("paid"))
+    montant = _safe_float(d.get("amount"), 0.0)
+    if not iid or not cle:
+        return jsonify({"success": False, "error": "id ou période manquant"}), 400
+
+    with _influenceurs_lock:
+        data = r2_get_json(INFLUENCEURS_R2_KEY) or {}
+        influenceurs = data.get("influenceurs", []) or []
+        cible = next((i for i in influenceurs if isinstance(i, dict) and i.get("id") == iid), None)
+        if not cible:
+            return jsonify({"success": False, "error": "introuvable"}), 404
+
+        payouts = dict(cible.get("payouts") or {})
+        if payer:
+            payouts[cle] = {"amount": round(montant, 2),
+                            "at": datetime.now(timezone.utc).isoformat()}
+        else:
+            payouts.pop(cle, None)
+        cible["payouts"] = payouts
+
+        data["influenceurs"] = influenceurs
+        data["version"] = data.get("version", 0) + 1
+        data["updated_at"] = datetime.now(timezone.utc).isoformat()
+        if not r2_put_json(INFLUENCEURS_R2_KEY, data):
+            return jsonify({"success": False, "error": "écriture R2 échouée"}), 500
+
+    return jsonify({"success": True, "paid": payer})
+
 
 @app.route("/api/influenceurs/backups", methods=["GET"])
 @_require_admin_api
