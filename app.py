@@ -4512,12 +4512,15 @@ INFLUENCER_TIERS = [
         # avantage qui décrit une fonctionnalité (« ton espace personnel »)
         # ne fait envie à personne : on ne garde que ce qui a une valeur pour
         # elle, dit en euros, en objets ou en accès.
+        # Chaque avantage porte une CLÉ. Quand un palier supérieur redéfinit
+        # la même clé, l'ancienne version disparaît de l'acquis au lieu de
+        # s'empiler à côté d'elle : « −20 % » remplace « −15 % », la livraison
+        # à domicile remplace le point relais. Sans ça, la carte Ambassadeur
+        # affichait deux remises contradictoires l'une sous l'autre.
         "perks": [
-            "−15 % pour ta communauté avec ton code",
-            "Ton lien personnalisé à mettre en bio TikTok et Instagram, "
-            "pour vendre même quand tu ne publies pas",
-            "Livraison offerte en point relais ou en locker, "
-            "et à domicile dans certains cas",
+            {"cle": "code",  "t": "**−15 %** pour ta communauté avec ton code"},
+            {"cle": "lien",  "t": "**Ton lien en bio** — tu vends même les jours où tu ne publies pas"},
+            {"cle": "brief", "t": "**On te dit quoi filmer** — tu n'as pas à chercher l'idée"},
         ],
     },
     {
@@ -4534,9 +4537,9 @@ INFLUENCER_TIERS = [
         # qui rend la personnalisation possible, et c'est la vraie rupture
         # avec le palier de départ.
         "perks": [
-            "Tes maillots deviennent les tiens : flocage, numéro et taille au choix",
-            "Le catalogue avant les autres — tu réserves tes modèles en premier",
-            "Ton palier est acquis : un mois plus calme ne te fait jamais redescendre",
+            {"cle": "livraison",
+             "t": "**Livraison offerte** en point relais ou en locker, "
+                  "et à domicile dans certains cas"},
         ],
     },
     {
@@ -4550,9 +4553,14 @@ INFLUENCER_TIERS = [
         "monthly_jerseys": 4,
         "jersey_cost": 44.0,
         "perks": [
-            "Tes vidéos relayées sur nos comptes",
-            "Priorité sur les modèles en tension, même quand il n'en reste qu'un",
-            "Deux flocages au choix : le tien, et celui que tu veux offrir",
+            {"cle": "code", "remp": True,
+             "t": "**−20 %** pour ta communauté, au lieu de −15 %"},
+            {"cle": "livraison", "remp": True,
+             "t": "**Livraison offerte à domicile**, plus seulement en point relais"},
+            {"cle": "priorite",
+             "t": "**Traitement prioritaire** de tes commandes"},
+            {"cle": "accomp",
+             "t": "**Un accompagnement marketing renforcé** pour t'aider à grandir"},
         ],
     },
     {
@@ -4566,9 +4574,27 @@ INFLUENCER_TIERS = [
         "monthly_jerseys": 6,
         "jersey_cost": 62.0,
         "perks": [
-            "Tes vidéos sponsorisées : on met un budget publicitaire derrière",
-            "Une ligne directe avec l'équipe, sans passer par le support",
-            "Ton avis sur les prochains modèles avant qu'on les commande",
+            {"cle": "ligne",
+             "t": "**Ligne directe avec l'équipe dirigeante**, sans passer par le support"},
+            {"cle": "cata",
+             "t": "**Les catalogues privés en premier**, et les modèles "
+                  "qu'on ne sort pas publiquement"},
+            {"cle": "accomp", "remp": True,
+             "t": "**Un accompagnement stratégique** pour faire monter tes ventes "
+                  "et ton compte"},
+            {"cle": "coo",
+             "t": "**Un COO dédié**, qui a déjà passé les 80 millions de vues "
+                  "sur TikTok et Instagram"},
+            # Deux promesses distinctes : ce qu'elle paie, et ce qu'elle peut
+            # gagner. Le −70 % est pour ELLE — à ne pas confondre avec le
+            # −20 % de sa communauté, sinon on répond au message chaque semaine.
+            {"cle": "remise",
+             "t": "**Jusqu'à −70 % pour toi** sur l'intégralité du site — tu as accès "
+                  "à nos produits au meilleur prix, un tarif indisponible au public"},
+            {"cle": "events",
+             "t": "**Les événements privés et le tirage au sort du trimestre** — "
+                  "PS5, iPhone 17 Pro Max, et beaucoup d'autres cadeaux "
+                  "qu'on offre à nos VIP"},
         ],
     },
 ]
