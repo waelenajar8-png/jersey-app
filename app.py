@@ -4118,12 +4118,14 @@ def api_paie():
     try:
         data = r2_get_json(INFLUENCEURS_R2_KEY) or {}
         influenceurs = data.get("influenceurs", []) or []
-        _refresh_light_stats(influenceurs)
         now = datetime.now(timezone.utc)
 
         lignes, total_du, total_regle = [], 0.0, 0.0
         for inf in influenceurs:
-            if not isinstance(inf, dict):
+            # Les vendeurs hors boutique sont réglés à part, en direct : ils
+            # comptent au classement mais jamais dans les chiffres de la
+            # console — même règle que le tableau de bord et l'export.
+            if not isinstance(inf, dict) or _is_light(inf):
                 continue
             stats = dict(inf.get("stats") or {})
             horloge = _month_clock(inf, now)
@@ -4139,7 +4141,6 @@ def api_paie():
             lignes.append({
                 "id":        inf.get("id"),
                 "pseudo":    inf.get("pseudo") or "—",
-                "light":     bool(_is_light(inf)),
                 "promo":     inf.get("promo_code") or "",
                 # Sans date d'entrée, la période retombe en silence sur le mois
                 # calendaire : le montant est alors calculé sur la mauvaise
