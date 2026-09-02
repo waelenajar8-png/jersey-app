@@ -421,6 +421,7 @@ h1{font-size:27px;font-weight:800;letter-spacing:-.035em;line-height:1.1}
     border-radius:11px;background:var(--surface-2);border:1px solid var(--line);
     font-size:12.5px;font-weight:600;
 }
+.env-j.hc{border-style:dashed}
 .env-j img{width:26px;height:26px;border-radius:7px;object-fit:cover;background:var(--surface);display:block}
 .env-j b{font-size:12px;font-weight:800;padding:2px 6px;border-radius:6px;
     background:var(--accent-soft);color:var(--accent)}
@@ -438,6 +439,26 @@ h1{font-size:27px;font-weight:800;letter-spacing:-.035em;line-height:1.1}
     .env-side{flex:1 1 100%;margin-top:10px}
     .env-suivi{flex:1 1 140px;width:auto}
 }
+/* Attribution hors catalogue : un encart replié, ouvert seulement quand on
+   en a besoin — c'est l'exception, pas le geste courant. */
+.jhc-open{background:none;border:0;cursor:pointer;font-family:inherit;padding:9px 0 0;
+    font-size:12px;font-weight:700;color:var(--muted)}
+.jhc-open:hover{color:var(--accent)}
+.jhc{margin-top:11px;padding:15px 16px;border:1px dashed var(--line-2);border-radius:14px}
+.jhc-h{font-size:12.5px;font-weight:800;letter-spacing:-.02em;margin-bottom:12px}
+.jhc-h span{display:block;font-size:11.5px;font-weight:500;color:var(--muted);margin-top:2px}
+.jhc-row{display:flex;gap:11px;align-items:stretch}
+.jhc-img{flex:0 0 66px;height:66px;border-radius:12px;border:1.5px dashed var(--line-2);
+    background:var(--surface-2) center/cover no-repeat;cursor:pointer;
+    display:grid;place-items:center;font-size:10.5px;font-weight:700;color:var(--faint)}
+.jhc-img:hover{border-color:var(--accent);color:var(--accent)}
+.jhc-img.on{border-style:solid;border-color:var(--line)}
+.jhc-f{flex:1;min-width:0;display:flex;flex-direction:column;gap:8px}
+.jhc-a{display:flex;justify-content:flex-end;gap:8px;margin-top:12px}
+.jchip.hc{border-style:dashed}
+.jchip-hc{font-style:normal;font-size:9.5px;font-weight:800;letter-spacing:.06em;
+    text-transform:uppercase;color:var(--muted);background:var(--surface-2);
+    padding:2px 6px;border-radius:6px}
 .warow{display:flex;gap:8px;align-items:center}
 .warow .inp{flex:1;min-width:0}
 .sz-more{
@@ -2197,14 +2218,22 @@ function renderSheetMissions(inf){
    par la clé R2 au premier enregistrement, et elles se réparent d'elles-mêmes. */
 function jerseyDurable(j){
     if(!j || typeof j !== 'object') return j;
-    const ref = (catalog || []).find(x => x.id === j.id);
     const out = {id: j.id, name: j.name || '', sub: j.sub || '', size: j.size || ''};
+    if(j.hors_cat){
+        out.hors_cat = true;
+        if(j.r2_key) out.r2_key = j.r2_key;
+        return out;
+    }
+    const ref = (catalog || []).find(x => x.id === j.id);
     const cle = j.r2_key || (ref && ref.r2_key) || '';
     if(cle) out.r2_key = cle;
     return out;
 }
 
 function jerseyVignette(j){
+    // Un maillot hors catalogue n'a pas de modèle de référence : sa photo lui
+    // appartient, et son URL signée est fournie à l'attribution.
+    if(j.hors_cat) return j.image || '';
     const ref = (catalog || []).find(x => x.id === j.id);
     return (ref && ref.image) || '';
 }
@@ -2224,10 +2253,11 @@ function renderSheetJerseys(inf){
     }
 
     const chips = list.length ? `<div class="jchips">
-        ${list.map((j,i) => { const vig = jerseyVignette(j); return `<span class="jchip">
+        ${list.map((j,i) => { const vig = jerseyVignette(j); return `<span class="jchip${j.hors_cat ? ' hc' : ''}">
             ${vig ? `<img src="${esc(vig)}" alt="">` : ''}
             <span>${esc(j.name || 'Maillot')}</span>
             <b>${esc(j.size || '?')}</b>
+            ${j.hors_cat ? `<i class="jchip-hc" title="Hors catalogue, pas décompté du stock">hors stock</i>` : ''}
             ${inf.jerseys_shipped ? '' : `<button class="jchip-x" data-jrm="${i}" title="Retirer">✕</button>`}
         </span>`; }).join('')}
     </div>` : `<div class="hint" style="margin-top:0">Aucun maillot attribué pour l'instant.</div>`;
@@ -2243,6 +2273,27 @@ function renderSheetJerseys(inf){
             <select class="inp" id="jPick"><option value="">Choisir un modèle…</option></select>
             <select class="inp" id="jSize" disabled><option value="">Taille</option></select>
             <button class="btn sm" id="jAdd" disabled>Attribuer</button>
+        </div>
+        <!-- Un maillot reçu en une ou deux tailles ne mérite pas d'entrer au
+             catalogue : on l'attache à la fiche sans toucher au stock. -->
+        <button type="button" class="jhc-open" id="jHcOpen">+ Maillot hors catalogue</button>
+        <div class="jhc" id="jHc" hidden>
+            <div class="jhc-h">Maillot hors catalogue
+                <span>Attribué à elle seule. Ne touche pas au stock.</span></div>
+            <div class="jhc-row">
+                <label class="jhc-img" id="jHcDrop">
+                    <input type="file" accept="image/*" id="jHcFile" hidden>
+                    <span id="jHcPh">Photo</span>
+                </label>
+                <div class="jhc-f">
+                    <input class="inp" id="jHcName" placeholder="Nom du maillot" maxlength="60" autocomplete="off">
+                    <input class="inp" id="jHcSize" placeholder="Taille (S, M, L…)" maxlength="10" autocomplete="off">
+                </div>
+            </div>
+            <div class="jhc-a">
+                <button class="btn sm ghost" id="jHcCancel">Annuler</button>
+                <button class="btn sm primary" id="jHcAdd">Attribuer</button>
+            </div>
         </div>`;
 
     // Verrou de sélection : quand c'est toi qui as attribué les maillots,
@@ -2282,7 +2333,76 @@ function renderSheetJerseys(inf){
         };
     });
 
-    if(!inf.jerseys_shipped) bindJerseyAdder(inf);
+    if(!inf.jerseys_shipped){ bindJerseyAdder(inf); bindHorsCat(inf); }
+}
+
+/* Attribution d'un maillot qui n'est pas au catalogue.
+   Photo facultative, nom et taille libres. Rien n'entre en stock : la fiche
+   porte le maillot, et « Qui a quoi » le montre comme les autres. */
+let HC_KEY = '', HC_IMG = '';
+
+function bindHorsCat(inf){
+    const open = document.getElementById('jHcOpen');
+    const box  = document.getElementById('jHc');
+    if(!open || !box) return;
+
+    const nom = document.getElementById('jHcName');
+    const tail= document.getElementById('jHcSize');
+    const file= document.getElementById('jHcFile');
+    const ph  = document.getElementById('jHcPh');
+    const drop= document.getElementById('jHcDrop');
+
+    const reset = () => {
+        HC_KEY = ''; HC_IMG = '';
+        nom.value = ''; tail.value = ''; file.value = '';
+        ph.textContent = 'Photo';
+        drop.style.backgroundImage = '';
+        drop.classList.remove('on');
+    };
+
+    open.onclick = () => { box.hidden = false; open.hidden = true; nom.focus(); };
+    document.getElementById('jHcCancel').onclick = () => {
+        box.hidden = true; open.hidden = false; reset();
+    };
+
+    file.onchange = async () => {
+        const f = file.files && file.files[0];
+        if(!f) return;
+        ph.textContent = 'Envoi…';
+        try{
+            const fd = new FormData();
+            fd.append('image', f);
+            const r = await fetch('/api/gifting/upload', {method:'POST', body: fd});
+            const d = await r.json();
+            if(!d.success) throw new Error(d.error || '');
+            HC_KEY = d.r2_key; HC_IMG = d.image || '';
+            ph.textContent = '';
+            drop.style.backgroundImage = `url("${HC_IMG}")`;
+            drop.classList.add('on');
+            if(!nom.value && d.suggested_name) nom.value = d.suggested_name;
+        }catch(e){
+            ph.textContent = 'Photo';
+            toast('Envoi de la photo impossible', true);
+        }
+    };
+
+    document.getElementById('jHcAdd').onclick = () => {
+        const cur = find(currentId);
+        if(!cur) return;
+        const n = nom.value.trim(), t = tail.value.trim().toUpperCase();
+        if(!n){ toast('Donne un nom au maillot', true); nom.focus(); return; }
+        if(!t){ toast('Indique la taille', true); tail.focus(); return; }
+        cur.jerseys = (cur.jerseys || []).concat({
+            id: 'hc_' + Date.now().toString(36) + Math.random().toString(36).slice(2,7),
+            name: n, sub: '', size: t, hors_cat: true,
+            r2_key: HC_KEY, image: HC_IMG,
+        });
+        reset();
+        box.hidden = true; open.hidden = false;
+        renderSheetJerseys(cur);
+        scheduleSave();
+        toast(`${n} ${t} attribué — hors stock`);
+    };
 }
 
 // Sélecteur modèle → taille, avec le disponible réel affiché.
@@ -3368,9 +3488,10 @@ function renderEnvois(){
 
         const items = inf.jerseys.map((j, i) => {
             const vig = jerseyVignette(j);
-            return `<span class="env-j">
+            return `<span class="env-j${j.hors_cat ? ' hc' : ''}">
                 ${vig ? `<img src="${esc(vig)}" alt="">` : ''}
                 ${esc(j.name || 'Maillot')}<b>${esc(j.size || '?')}</b>
+                ${j.hors_cat ? `<i class="jchip-hc" title="Hors catalogue, pas décompté du stock">hors stock</i>` : ''}
                 ${parti ? '' : `<button class="env-x" data-env-rm="${esc(inf.id)}" data-i="${i}"
                     title="Annuler — le maillot repart en stock">✕</button>`}
             </span>`;
