@@ -6443,6 +6443,41 @@ def api_gifting_catalog_save():
         ok = _save_gifting_catalog(cat)
     return jsonify({"success": ok, "count": len(cat["jerseys"])})
 
+def _nom_depuis_fichier(fname):
+    """
+    Nom lisible tiré du nom de fichier — ou rien du tout.
+
+    Un téléphone nomme ses photos `IMG_3499.HEIC`, `8C6F835F-E056-4EC7.jpg`,
+    `55583698.png`. Transformé en titre, ça donne « Img 3499 », « 8C6F835F
+    E0564Ec7 » : un nom qui a l'air renseigné, donc qu'on ne pense pas à
+    corriger, et qui ressort tel quel dans le catalogue envoyé aux
+    influenceuses. Mieux vaut un champ vide avec son invite « Nom du maillot »
+    qu'un faux nom : le vide se voit, le faux nom non.
+    """
+    brut = (fname or "").rsplit(".", 1)[0]
+    brut = re.sub(r"[-_]+", " ", brut).strip()
+    if not brut:
+        return ""
+    # Que des chiffres, de l'hexadécimal, un uuid, un compteur d'appareil photo…
+    sans_espaces = brut.replace(" ", "")
+    if len(sans_espaces) < 3:
+        return ""
+    if re.fullmatch(r"[0-9]+", sans_espaces):
+        return ""
+    if re.fullmatch(r"[0-9A-Fa-f]{6,}", sans_espaces):
+        return ""
+    if re.match(r"^(img|image|photo|dsc|pxl|screenshot|capture|whatsapp)\b", brut, re.I):
+        return ""
+    # Une suite de mots dont aucun ne contient de voyelle n'est pas un nom.
+    mots = [m for m in brut.split() if len(m) > 2]
+    if mots and not any(re.search(r"[aeiouyàâéèêëîïôöùûü]", m, re.I) for m in mots):
+        return ""
+    # Horodatage collé par l'app d'export (…202604141415) : du bruit, pas un nom.
+    garde = [m for m in brut.split() if not re.fullmatch(r"\d{8,}", m)]
+    # `.title()` casserait PSG en Psg : on ne recapitalise que ce qui est en bas de casse.
+    return " ".join(m.capitalize() if m.islower() else m for m in garde).strip()
+
+
 @app.route("/api/gifting/upload", methods=["POST"])
 @_require_admin_api
 def api_gifting_upload():
@@ -6470,7 +6505,7 @@ def api_gifting_upload():
         "success": True,
         "r2_key": key,
         "image": r2_presigned(key, expires=604800),
-        "suggested_name": fname.rsplit(".", 1)[0].replace("-", " ").replace("_", " ").title(),
+        "suggested_name": _nom_depuis_fichier(fname),
     })
 
 @app.route("/api/gifting/delete_image", methods=["POST"])
