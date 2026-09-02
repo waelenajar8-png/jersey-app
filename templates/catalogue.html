@@ -107,12 +107,20 @@ h1{font-size:26px;font-weight:800;letter-spacing:-.03em}
 .jersey.off{opacity:.5}
 .j-img{width:100%;aspect-ratio:1;object-fit:contain;background:#fff;display:block;border-bottom:1px solid var(--line)}
 .j-body{padding:13px 14px}
-.j-name{width:100%;font-size:13.5px;font-weight:700;border:none;background:transparent;
-        padding:4px 0;border-bottom:1px solid transparent;letter-spacing:-.015em}
-.j-name:focus{outline:none;border-bottom-color:var(--accent)}
-.j-sub{width:100%;font-size:11.5px;color:var(--muted);font-weight:500;border:none;
-       background:transparent;padding:3px 0;border-bottom:1px solid transparent}
-.j-sub:focus{outline:none;border-bottom-color:var(--accent)}
+/* Le nom se saisit, donc il ressemble à un champ.
+   Avant, c'était un input sans bordure ni fond : à l'écran, du texte figé.
+   On ne clique pas sur du texte figé — d'où « je peux pas modifier le nom ». */
+.j-num{font-size:10px;font-weight:800;letter-spacing:.06em;color:var(--faint);margin-bottom:6px}
+.j-name,.j-sub{width:100%;border:1px solid var(--line-2);border-radius:9px;
+       background:var(--surface-2);transition:border-color .15s,background .15s}
+.j-name{font-size:13.5px;font-weight:700;padding:7px 9px;letter-spacing:-.015em}
+.j-sub{font-size:11.5px;color:var(--ink-2);font-weight:500;padding:6px 9px;margin-top:6px}
+.j-name:hover,.j-sub:hover{border-color:var(--muted)}
+.j-name:focus,.j-sub:focus{outline:none;border-color:var(--accent);background:#fff;
+       box-shadow:0 0 0 3px rgba(47,80,241,.10)}
+.j-name::placeholder,.j-sub::placeholder{color:var(--faint);font-weight:600}
+/* Un nom manquant se voit : c'est ce qui partira dans le catalogue partagé. */
+.j-name.vide{border-color:var(--warn);background:var(--warn-soft)}
 .sizes{display:flex;gap:6px;margin-top:11px}
 .size-in{flex:1;text-align:center}
 .size-lbl{font-size:10px;font-weight:800;color:var(--muted);letter-spacing:.05em}
@@ -229,8 +237,9 @@ h1{font-size:26px;font-weight:800;letter-spacing:-.03em}
             <div class="card-head">
                 <div>
                     <div class="card-title">Maillots du catalogue</div>
-                    <div class="card-sub">Renseigne le nom et les quantités par taille · 0 = épuisé</div>
+                    <div class="card-sub" id="listSub">Clique dans un champ pour renommer · 0 = épuisé</div>
                 </div>
+                <button class="btn-ghost btn-sm" id="btnAuto" style="display:none"></button>
             </div>
             <div id="list"></div>
         </div>
@@ -264,7 +273,7 @@ async function load(){
     render();
 }
 
-function render(){ renderModes(); renderStats(); renderList(); }
+function render(){ renderModes(); renderStats(); renderList(); renderAuto(); }
 
 function renderModes(){
     document.getElementById('modes').innerHTML = MODES.map(m=>`
@@ -287,6 +296,37 @@ function renderStats(){
         <div class="chip"><span class="dot" style="background:var(--warn)"></span>Pièces <b>${pieces}</b></div>`;
 }
 
+/* Un nom fabriqué à partir d'un nom de fichier d'appareil photo : « Img 3499 »,
+   « Acbc0Fb1 », « 8C6F835F E0564Ec7 ». Ça ressemble à un nom rempli, donc on
+   ne le corrige pas — et c'est ça qui part dans le catalogue partagé. */
+function nomAuto(n){
+    const s = String(n||'').trim();
+    if(!s) return false;
+    const c = s.replace(/\s+/g,'');
+    if(/^\d+$/.test(c)) return true;
+    if(/^[0-9a-fA-F]{6,}$/.test(c)) return true;
+    if(/^(img|image|photo|dsc|pxl|screenshot|capture|whatsapp)\b/i.test(s)) return true;
+    const mots = s.split(/\s+/).filter(m=>m.length>2);
+    if(mots.length && !mots.some(m=>/[aeiouyàâéèêëîïôöùûü]/i.test(m))) return true;
+    return false;
+}
+
+function renderAuto(){
+    const b = document.getElementById('btnAuto');
+    const n = CAT.jerseys.filter(j=>nomAuto(j.name)).length;
+    const sans = CAT.jerseys.filter(j=>!String(j.name||'').trim()).length;
+    document.getElementById('listSub').textContent = sans
+        ? `Clique dans un champ pour renommer · ${sans} maillot${sans>1?'s':''} sans nom`
+        : 'Clique dans un champ pour renommer · 0 = épuisé';
+    if(!n){ b.style.display='none'; return; }
+    b.style.display = '';
+    b.textContent = `Vider ${n} nom${n>1?'s':''} automatique${n>1?'s':''}`;
+    b.onclick = ()=>{
+        CAT.jerseys.forEach(j=>{ if(nomAuto(j.name)) j.name = ''; });
+        touch(); renderList(); renderAuto();
+    };
+}
+
 function renderList(){
     const el = document.getElementById('list');
     if(!CAT.jerseys.length){
@@ -302,7 +342,8 @@ function renderList(){
         return `<div class="jersey ${on?'':'off'}">
             <img class="j-img" src="${escAttr(j.image||'')}" alt="${escAttr(j.name)}" loading="lazy">
             <div class="j-body">
-                <input class="j-name" value="${escAttr(j.name||'')}" placeholder="Nom du maillot" data-f="name" data-i="${i}">
+                <div class="j-num">#${i+1}</div>
+                <input class="j-name ${(j.name||'').trim()?'':'vide'}" value="${escAttr(j.name||'')}" placeholder="Nom du maillot" data-f="name" data-i="${i}">
                 <input class="j-sub" value="${escAttr(j.sub||'')}" placeholder="Couleur · saison" data-f="sub" data-i="${i}">
                 <div class="sizes">
                     ${SIZES.map(s=>{
@@ -324,7 +365,18 @@ function renderList(){
     }).join('')}</div>`;
 
     el.querySelectorAll('[data-f]').forEach(inp=>{
-        inp.oninput = ()=>{ CAT.jerseys[+inp.dataset.i][inp.dataset.f] = inp.value; touch(); };
+        // On ne redessine jamais la liste pendant la frappe : reconstruire le
+        // HTML enlèverait le curseur du champ, et il faudrait recliquer après
+        // chaque lettre. On repeint juste ce champ-là.
+        inp.oninput = ()=>{
+            CAT.jerseys[+inp.dataset.i][inp.dataset.f] = inp.value;
+            if(inp.dataset.f === 'name'){
+                inp.classList.toggle('vide', !inp.value.trim());
+                renderAuto();   // ne touche que l'en-tête, jamais les champs
+            }
+            touch();
+        };
+        inp.onkeydown = e=>{ if(e.key==='Enter'){ e.preventDefault(); inp.blur(); } };
     });
     el.querySelectorAll('[data-size]').forEach(inp=>{
         inp.oninput = ()=>{
@@ -392,12 +444,21 @@ async function handleFiles(files){
 }
 
 // ── Sauvegarde ──────────────────────────────────────────────────────────
+let autoT = null;
 function touch(){
     dirty = true;
     document.getElementById('savebar').classList.add('show');
     document.getElementById('saveTxt').textContent = 'Modifications non enregistrées';
+    // Enregistrement automatique après une courte pause de frappe. Le bouton
+    // reste là pour qui veut forcer, mais plus rien ne dépend de l'avoir vu :
+    // un nom corrigé puis un onglet fermé, c'était un nom perdu.
+    clearTimeout(autoT);
+    autoT = setTimeout(()=>{ if(dirty) save(); }, 900);
 }
+let enCours = false;
 async function save(){
+    if(enCours){ clearTimeout(autoT); autoT = setTimeout(()=>{ if(dirty) save(); }, 700); return; }
+    enCours = true;
     const btn = document.getElementById('saveBtn');
     btn.disabled = true; document.getElementById('saveTxt').textContent = 'Enregistrement…';
     try{
@@ -412,7 +473,7 @@ async function save(){
             toast('Catalogue enregistré');
         }else toast('Erreur : ' + (d.error||''));
     }catch(e){ toast('Erreur réseau'); }
-    finally{ btn.disabled = false; }
+    finally{ btn.disabled = false; enCours = false; }
 }
 document.getElementById('saveBtn').onclick = save;
 window.addEventListener('beforeunload', e=>{ if(dirty){ e.preventDefault(); e.returnValue=''; } });
