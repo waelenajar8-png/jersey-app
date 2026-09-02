@@ -3046,6 +3046,15 @@ function construireFile(){
             pousse(inf, 2, `À <b>${p.missing} vente${p.missing>1?'s':''}</b> de ${euroC(p.next_gain)}, `
                  + `sa période finit dans <b>${p.days_left} j</b>`, ['wa:palier', 'fiche']);
 
+        // ── L'inactivité longue ─────────────────────────────────────────
+        // Trois mois sans une vente : la fiche encombre la console et fausse
+        // les moyennes. On le signale, on ne supprime jamais tout seul — une
+        // sortie de programme se décide, elle ne se subit pas.
+        const derniere = joursDepuis(inf.last_sale_at || inf.last_synced_at);
+        if(st >= 5 && !(inf.stats_sales_month > 0) && derniere !== null && derniere >= 90)
+            pousse(inf, 2, `<b>${derniere} jours sans une vente</b> — à sortir du programme ?`,
+                   ['wa:relance', 'fiche']);
+
         // ── Le silence ──────────────────────────────────────────────────
         const seuil = RELANCE_THRESHOLD[st];
         if(seuil !== undefined && jours !== null && jours >= seuil && st < STATUS_LAST)
