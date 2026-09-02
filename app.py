@@ -5518,6 +5518,19 @@ def api_light_sellers_get():
 # champs sensibles le réclame, la lecture reste libre.
 ESPACE_PIN_FIELDS = {"shipping"}   # champs exigeant le code
 
+
+def _jerseys_verrouilles(inf):
+    """
+    La sélection de maillots est verrouillée PAR DÉFAUT.
+
+    C'est l'admin qui compose le colis : sans verrou, il suffisait d'ouvrir son
+    espace après réception pour changer la sélection enregistrée et prétendre
+    ensuite qu'on s'était trompé d'envoi. Le champ absent vaut donc verrou —
+    seule une ouverture explicite depuis la console (`jerseys_locked: false`)
+    laisse l'influenceuse choisir elle-même.
+    """
+    return (inf or {}).get("jerseys_locked", True) is not False
+
 # Contact de l'équipe, affiché dans l'espace. Sans numéro renseigné, le lien
 # n'est simplement pas rendu — plutôt qu'un bouton qui ne fait rien.
 CONTACT_WHATSAPP = (os.environ.get("CONTACT_WHATSAPP") or "").strip()
@@ -5781,7 +5794,7 @@ def _espace_payload(inf):
             "jerseys": _espace_jerseys(inf),
             # Verrou de sélection : quand l'admin a choisi les maillots lui-même,
             # l'influenceur ne doit plus pouvoir les changer.
-            "jerseys_locked": bool(inf.get("jerseys_locked")),
+            "jerseys_locked": _jerseys_verrouilles(inf),
             "shipping": inf.get("shipping") or {},
             "tracking": inf.get("tracking") or "",
             "tracking_status": inf.get("trackingStatus") or "",
@@ -5897,7 +5910,7 @@ def api_espace_update(slug):
     # parce qu'un champ qu'il ne peut pas modifier est présent dans le corps.
     if "jerseys" in updates:
         guard = _get_influencer_by_slug(slug)
-        if guard and guard.get("jerseys_locked"):
+        if guard is None or _jerseys_verrouilles(guard):
             updates.pop("jerseys")
             print(f"[ESPACE] Maillots verrouillés, modification ignorée ({slug})")
             if not updates:
@@ -6239,11 +6252,23 @@ def _gifting_public_view(cat, except_id=None, with_image=True):
     plus. `except_id` laisse une influenceuse voir la taille qu'elle a
     elle-même retenue, sinon son propre choix disparaîtrait sous ses yeux.
     """
+    siens = set()
     try:
         data = r2_get_json(INFLUENCEURS_R2_KEY) or {}
-        influenceurs = [i for i in (data.get("influenceurs", []) or [])
+        tous = data.get("influenceurs", []) or []
+        influenceurs = [i for i in tous
                         if not (except_id and isinstance(i, dict) and i.get("id") == except_id)]
         reserved = _reserved_map(influenceurs)
+        # Ce qu'elle a déjà choisi lui reste visible quoi qu'il arrive. Une
+        # taille tombée à zéro disparaît pour les autres, jamais pour celle qui
+        # la détient : sinon son propre colis s'efface de son espace et elle
+        # écrit pour demander ce qu'elle a commandé.
+        if except_id:
+            moi = next((i for i in tous
+                        if isinstance(i, dict) and i.get("id") == except_id), None)
+            for j in ((moi or {}).get("jerseys") or []):
+                if isinstance(j, dict) and j.get("id") and j.get("size"):
+                    siens.add((j["id"], str(j["size"]).strip()))
     except Exception as e:
         print(f"[GIFTING] Réservations illisibles, stock physique utilisé: {e}")
         reserved = {}
@@ -6253,10 +6278,12 @@ def _gifting_public_view(cat, except_id=None, with_image=True):
         if not j.get("active", True):
             continue
         sizes = {}
-        for s, q in (j.get("sizes") or {}).items():
-            reste = _safe_int(q, 0) - reserved.get((j.get("id"), s), 0)
+        for t, q in (j.get("sizes") or {}).items():
+            reste = _safe_int(q, 0) - reserved.get((j.get("id"), t), 0)
+            if (j.get("id"), str(t).strip()) in siens:
+                reste = max(reste, 1)
             if reste > 0:
-                sizes[s] = reste
+                sizes[t] = reste
         if not sizes:
             continue
         out.append({
