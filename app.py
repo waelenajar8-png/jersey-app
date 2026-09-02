@@ -152,6 +152,31 @@ app.secret_key = os.environ.get("FLASK_SECRET_KEY") or os.urandom(32)
 # au démarrage — ça déconnecte tout le monde à chaque redéploiement. Pour des
 # sessions qui survivent aux redéploiements, définis FLASK_SECRET_KEY.
 
+
+@app.after_request
+def _pas_de_cache(resp):
+    """
+    Rien de ce qui bouge ne doit être servi depuis un cache.
+
+    Le catalogue partagé, l'espace d'une influenceuse et les réponses d'API
+    changent d'une minute à l'autre. Sans en-tête, un navigateur — surtout
+    celui intégré à WhatsApp ou Instagram, par lequel arrivent la plupart des
+    ouvertures — a le droit de réafficher la version d'hier. On modifie le
+    catalogue, on rouvre le lien, et on voit l'ancien : le stock n'est pas en
+    retard, c'est la page qui n'a jamais été redemandée.
+    Les images et le CSS gardent leur cache : eux ne changent pas.
+    """
+    chemin = request.path or ""
+    if (chemin.startswith("/api/")
+            or chemin.startswith("/catalogue-live/")
+            or chemin.startswith("/espace/")
+            or chemin == "/catalogue"):
+        resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        resp.headers["Pragma"] = "no-cache"
+        resp.headers["Expires"] = "0"
+    return resp
+
+
 # ── Cache flocages chargé au démarrage ─────────────────────────────────────
 # (sera initialisé au premier appel si pas encore chargé)
 
