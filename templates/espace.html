@@ -397,6 +397,9 @@ input,select{font-family:inherit}
     font-weight:700;color:var(--accent)}
 .pay-note-d{font-size:13px;color:var(--ink-2);margin-top:8px;line-height:1.6;font-weight:500}
 .pay-note-d b{color:var(--ink);font-weight:700}
+.pay-when{font-size:12.5px;color:var(--ink-2);font-weight:600;margin-top:11px;
+    padding-top:11px;border-top:1px solid rgba(47,80,241,.16);line-height:1.55}
+.pay-when b{color:var(--accent);font-weight:800}
 @media (max-width:520px){
     .pay-r{gap:12px;padding:15px 16px}
     .pay-n{width:34px;height:34px;font-size:13px}
@@ -638,6 +641,33 @@ input,select{font-family:inherit}
    Un rail numéroté à gauche, du texte serré, et le seul élément fort est la
    ligne à copier — c'est la seule chose qu'on vient vraiment y chercher. */
 /* Les deux formats, côte à côte : ce sont deux choix, pas deux étapes. */
+/* Confirmer la réception : une question, deux réponses. C'est le seul endroit
+   de l'espace où elle nous apprend quelque chose que nous ignorons. */
+/* Les montants sous la courbe : c'est eux qu'on vient lire, pas la pente. */
+.evo{display:flex;gap:6px;margin-top:14px;overflow-x:auto;padding-bottom:2px}
+.evo-c{flex:1 1 0;min-width:62px;text-align:center;padding:9px 6px;border-radius:11px;
+    background:var(--surface-2)}
+.evo-c.now{background:var(--accent-soft)}
+.evo-m{font-size:11px;font-weight:700;color:var(--muted);letter-spacing:-.01em}
+.evo-c.now .evo-m{color:var(--accent)}
+.evo-v{font-size:14px;font-weight:800;letter-spacing:-.03em;margin-top:2px;
+    font-variant-numeric:tabular-nums}
+.evo-c.now .evo-v{color:var(--accent)}
+.evo-tot{font-size:12.5px;color:var(--muted);font-weight:500;margin-top:12px}
+.evo-tot b{color:var(--ink);font-weight:800}
+.v-act{display:flex;gap:7px;flex:none}
+.lien{color:var(--accent);font-weight:700;text-decoration:none}
+.lien:hover{text-decoration:underline}
+.v-del:hover{color:var(--danger);border-color:var(--danger)}
+.ca{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-top:16px;
+    padding-top:16px;border-top:1px solid var(--line)}
+.ca-q{font-size:14px;font-weight:700;letter-spacing:-.02em;flex:1 1 auto}
+.ca-b{display:flex;gap:8px;flex-wrap:wrap}
+.ca-ok{display:flex;align-items:center;gap:8px;margin-top:16px;padding:12px 14px;
+    background:var(--ok-soft);border-radius:12px;
+    font-size:13px;font-weight:600;color:var(--ok)}
+.ca-ok.warn{background:var(--warn-soft);color:#96590A}
+.ca-ok svg{width:15px;height:15px;flex:none}
 .gd-two{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px}
 .gd-f{background:var(--surface);border:1px solid var(--line);border-radius:20px;
     padding:18px 20px 20px}
@@ -1118,13 +1148,19 @@ async function load(){
         paintChrome();
         render();
     }catch(e){
+        // Une coupure réseau de deux secondes affichait « Espace introuvable » :
+        // on croyait être sortie du programme. Seul un vrai 404 le dit.
+        const introuvable = String(e.message) === '404';
         document.getElementById('view').innerHTML =
             `<div class="card"><div class="empty">
-                <div class="empty-ico">${ICO.lock}</div>
-                <div class="empty-title">Espace introuvable</div>
-                <div class="empty-text">Ce lien n'est plus valide. Contacte l'équipe Volakits pour en recevoir un nouveau.</div>
+                <div class="empty-ico">${introuvable ? ICO.lock : ICO.warn}</div>
+                <div class="empty-title">${introuvable ? 'Espace introuvable' : 'Connexion interrompue'}</div>
+                <div class="empty-text">${introuvable
+                    ? "Ce lien n'est plus valide. Écris-nous pour en recevoir un nouveau."
+                    : "On n'arrive pas à charger ton espace. Vérifie ta connexion — rien n'est perdu."}</div>
+                ${introuvable ? '' : `<button class="btn" style="margin-top:16px" onclick="load()">Réessayer</button>`}
             </div></div>`;
-        document.getElementById('greeting').textContent = 'Oups';
+        document.getElementById('greeting').textContent = introuvable ? 'Oups' : 'Un instant';
     }
 }
 
@@ -1161,6 +1197,21 @@ function paintChrome(){
     document.getElementById('mobTier').textContent = label;
 
     document.getElementById('greeting').innerHTML = `Salut ${esc(name)} 👋`;
+
+    // Le seul point de contact de l'espace pointait sur « # » et ne faisait
+    // rien. Sans numéro configuré côté serveur, on n'affiche pas de lien mort.
+    const aide = document.getElementById('helpLink');
+    const url  = (D.contact && D.contact.url) || '';
+    if(aide){
+        if(url){
+            aide.href = url;
+            aide.target = '_blank';
+            aide.rel = 'noopener';
+            aide.textContent = "Écris à l'équipe Volakits";
+        }else{
+            aide.parentElement.style.display = 'none';
+        }
+    }
 
     const badge = document.getElementById('navMissions');
     if(badge) badge.textContent = D.missions.filter(m=>!m.done).length;
@@ -1625,6 +1676,9 @@ function blockEvolution(){
         return ['janv.','févr.','mars','avr.','mai','juin','juil.','août','sept.','oct.','nov.','déc.'][Number(mo)-1] || m;
     };
     const shown = months.slice(-6);
+    // Une courbe sans un seul chiffre ne répond pas à « combien j'ai touché
+    // le mois dernier » — la question qui partait en message.
+    const cumul = Number((D.stats && D.stats.commission) || 0);
 
     return `<section class="sec rise" style="animation-delay:.24s">
         <div class="sec-k">Évolution</div>
@@ -1637,6 +1691,13 @@ function blockEvolution(){
             </svg>
             <div class="spark-x"><span>${esc(label(shown[0]))}</span><span>${esc(label(shown[shown.length-1]))}</span></div>
         </div>
+        <div class="evo">
+            ${shown.map((m,i)=>`<div class="evo-c ${i===shown.length-1?'now':''}">
+                <div class="evo-m">${esc(label(m))}</div>
+                <div class="evo-v">${eur(pts[i])}</div>
+            </div>`).join('')}
+        </div>
+        <div class="evo-tot">Depuis ton entrée dans le programme : <b>${eur(cumul)}</b></div>
     </section>`;
 }
 
@@ -1645,7 +1706,8 @@ function blockColis(){
     const inf = D.influencer;
     const st  = inf.tracking_status || '';
     const LABEL = {prepare:'En préparation', envoye:'En route vers toi',
-                   livre:'Livré', probleme:'Un souci sur ton colis'};
+                   transit:'En route vers toi', livre:'Livré',
+                   probleme:'Un souci sur ton colis'};
     const title = LABEL[st] || 'Pas encore expédié';
 
     // L'étape franchie, sur les cinq du parcours d'expédition.
@@ -1682,7 +1744,7 @@ function blockColis(){
                     title="${escAttr(x.label)}"></span>`).join('')}
             </div>
             <div class="pk-foot">
-                <span class="pk-now">${esc((cur || steps[steps.length-1]).label)}</span>
+                <span class="pk-now">${esc((cur || steps.find(x=>!x.done) || steps[steps.length-1]).label)}</span>
                 ${cta
                     ? `<button class="pk-cta" data-goto="${cta.tab}">${esc(cta.label)} →</button>`
                     : `<button class="pk-cta ghost" data-goto="colis">Voir le suivi →</button>`}
@@ -1781,7 +1843,9 @@ function blockGuide(){
                         : 'Ton code arrive avec ton colis — tu pourras le coller ici.'}</div>
                     <div class="gd-copy">
                         <span class="gd-txt">${esc(legende)}</span>
-                        <button class="copy-btn ghost" data-copy="${escAttr(legende)}">${copySvg}<span>Copier</span></button>
+                        ${code
+                            ? `<button class="copy-btn ghost" data-copy="${escAttr(legende)}">${copySvg}<span>Copier</span></button>`
+                            : `<button class="copy-btn ghost" disabled title="Ton code arrive avec ton colis">${copySvg}<span>Bientôt</span></button>`}
                     </div>
                 </div>
             </div>
@@ -1800,7 +1864,7 @@ function blockGuide(){
                 </div>
             </div>
         </div>
-        <div class="gd-foot">Une question sur une étape ? Écris-nous, on répond vite.</div>
+        <div class="gd-foot">Une question sur une étape ? ${lienAide('Écris-nous')}, on répond vite.</div>
     </section>`;
 }
 
@@ -1844,11 +1908,50 @@ function shipTimelineCompact(){
         </div>` : ''}`;
 }
 
+/* Les deux seules choses qu'elle sait avant nous : que le colis est arrivé,
+   et qu'il y a un problème. Sans ces boutons, les deux partaient en message
+   qu'il fallait lire, comprendre, puis reporter à la main dans la console. */
+function colisActions(){
+    const inf = D.influencer;
+    if((inf.status || 0) < 5) return '';          // rien avant l'expédition
+    if(inf.tracking_status === 'livre')
+        return `<div class="ca-ok">${ICO.check} Réception confirmée. Merci !</div>`;
+    if(inf.tracking_status === 'probleme')
+        return `<div class="ca-ok warn">${ICO.warn} On a bien noté le souci, on revient vers toi.</div>`;
+    return `<div class="ca">
+        <div class="ca-q">Tu l'as reçu ?</div>
+        <div class="ca-b">
+            <button class="btn" id="caRecu">Oui, je l'ai reçu</button>
+            <button class="btn-ghost" id="caPb">J'ai un problème</button>
+        </div>
+    </div>`;
+}
+
+async function signalerColis(action, btn){
+    const b = btn; b.disabled = true;
+    try{
+        const r = await fetch(`/api/espace/${SLUG}/colis`, {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({action})
+        });
+        const d = await r.json();
+        if(!d.success) throw new Error(d.error || '');
+        D.influencer.tracking_status = d.tracking_status;
+        if(action === 'recu') D.influencer.status = Math.max(D.influencer.status || 0, 6);
+        toast(action === 'recu' ? 'Réception confirmée, merci !' : 'C\'est noté, on regarde ça');
+        render();
+    }catch(e){
+        toast(e.message || 'Impossible pour le moment', true);
+        b.disabled = false;
+    }
+}
+
 function viewColis(){
     return `<div class="grid g-2">
         <div class="card">
             <div class="card-head"><div class="card-title"><span class="ico-box">${ICO.box}</span>Suivi de ton colis</div></div>
             ${shipTimelineCompact()}
+            ${colisActions()}
         </div>
         <div class="card">
             <div class="card-head"><div class="card-title"><span class="ico-box">${ICO.tag}</span>Contenu de l'envoi</div></div>
@@ -1929,6 +2032,7 @@ function viewPaliers(){
         <div class="pay-note">
             <div class="pay-note-t">Comment c'est calculé</div>
             <div class="pay-note-d">À chaque période, on te verse <b>le plus avantageux des deux</b> : ${base} % de tes ventes, ou le montant garanti le plus élevé que tu as atteint. Tu ne peux jamais y perdre. ${periodDates() && periodDates().anchored ? `Tes compteurs courent ${esc(periodLabel())}, puis repartent de zéro.` : 'Les compteurs repartent de zéro le 1er du mois.'}</div>
+            <div class="pay-when">${quandPayee()}</div>
         </div>
     </section>
 
@@ -2091,7 +2195,10 @@ function viewContenus(){
                     <div class="mission-label" style="word-break:break-all;font-size:12.5px">${esc(v.orig_link||v.filename||'—')}</div>
                     <div class="mission-desc">${fmtDate(v.uploaded_at)}</div>
                 </div>
-                ${v.orig_link?`<a class="btn-ghost btn-sm" href="${escAttr(v.orig_link)}" target="_blank" rel="noopener">Ouvrir</a>`:''}
+                <div class="v-act">
+                    ${v.orig_link?`<a class="btn-ghost btn-sm" href="${escAttr(v.orig_link)}" target="_blank" rel="noopener">Ouvrir</a>`:''}
+                    ${v.mine?`<button class="btn-ghost btn-sm v-del" data-vdel="${escAttr(v.id)}" title="Retirer">Retirer</button>`:''}
+                </div>
             </div>`).join('')
         : `<div class="empty">
                 <div class="empty-ico">${ICO.play}</div>
@@ -2131,8 +2238,15 @@ function bindDynamic(){
     });
 
     document.querySelectorAll('[data-copy]').forEach(b=>{
-        b.onclick = ()=>{
-            navigator.clipboard.writeText(b.getAttribute('data-copy'));
+        b.onclick = async ()=>{
+            const ok = await copier(b.getAttribute('data-copy'));
+            if(!ok){
+                // Dans le navigateur intégré de TikTok ou Instagram, la copie
+                // peut échouer sans rien dire. Afficher « Copié » là-dessus,
+                // c'est laisser publier une description sans code promo.
+                toast('Copie impossible ici — sélectionne le texte à la main', true);
+                return;
+            }
             // Retour visuel sur le bouton lui-même : plus direct qu'une notification.
             const lbl = b.querySelector('span'), ico = b.querySelector('svg');
             if(lbl && ico){
@@ -2151,6 +2265,55 @@ function bindDynamic(){
     });
     const add = document.getElementById('vAdd');
     if(add) add.onclick = addVideo;
+
+    const recu = document.getElementById('caRecu');
+    if(recu) recu.onclick = () => signalerColis('recu', recu);
+    const pb = document.getElementById('caPb');
+    if(pb) pb.onclick = () => signalerColis('probleme', pb);
+
+    document.querySelectorAll('[data-vdel]').forEach(b=>{
+        b.onclick = () => supprimerVideo(b.getAttribute('data-vdel'), b);
+    });
+}
+
+/* Copier vraiment, et savoir si ça a marché.
+   `navigator.clipboard` n'existe pas hors contexte sécurisé et peut échouer
+   en silence dans les webviews des applis sociales — exactement là où le code
+   promo se copie. On tente l'API, puis un repli, et on renvoie le verdict. */
+async function copier(texte){
+    try{
+        if(navigator.clipboard && window.isSecureContext){
+            await navigator.clipboard.writeText(texte);
+            return true;
+        }
+    }catch(e){ /* on tente le repli */ }
+    try{
+        const z = document.createElement('textarea');
+        z.value = texte;
+        z.setAttribute('readonly', '');
+        z.style.cssText = 'position:fixed;top:0;left:0;opacity:0';
+        document.body.appendChild(z);
+        z.select(); z.setSelectionRange(0, texte.length);
+        const ok = document.execCommand('copy');
+        z.remove();
+        return !!ok;
+    }catch(e){ return false; }
+}
+
+async function supprimerVideo(id, btn){
+    if(!confirm('Retirer cette vidéo de tes contenus ?')) return;
+    btn.disabled = true;
+    try{
+        const r = await fetch(`/api/espace/${SLUG}/video/${id}`, {method:'DELETE'});
+        const d = await r.json();
+        if(!d.success) throw new Error(d.error || '');
+        D.videos = (D.videos || []).filter(v => v.id !== id);
+        toast('Vidéo retirée');
+        render();
+    }catch(e){
+        toast(e.message || 'Suppression impossible', true);
+        btn.disabled = false;
+    }
 }
 
 async function addVideo(){
@@ -2392,12 +2555,21 @@ async function saveProfil(){
         if(v) shipping[inp.getAttribute('data-s')] = v;
     });
 
+    // L'adresse ne part que si elle a bougé. Elle était renvoyée à chaque
+    // enregistrement, si bien que corriger un pseudo Instagram réclamait le
+    // code à 4 chiffres — et sans parcours « code oublié », c'était un
+    // message à traiter.
+    const avant = D.influencer.shipping || {};
+    const memeAdresse = ['address','postal','city','country','name','phone','extra','note']
+        .every(k => (shipping[k] || '') === (avant[k] || ''));
+
+    const corps = D.influencer.jerseys_locked ? {platforms} : {platforms, jerseys:PICKS};
+    if(!memeAdresse) corps.shipping = shipping;
+
     try{
         const r = await fetch(`/api/espace/${SLUG}/update`,{
             method:'POST', headers:{'Content-Type':'application/json'},
-            body: JSON.stringify(D.influencer.jerseys_locked
-                ? {platforms, shipping}
-                : {platforms, shipping, jerseys:PICKS})
+            body: JSON.stringify(corps)
         });
         let d = await r.json();
 
@@ -2412,9 +2584,7 @@ async function saveProfil(){
             }
             const r2 = await fetch(`/api/espace/${SLUG}/update`,{
                 method:'POST', headers:{'Content-Type':'application/json'},
-                body: JSON.stringify(D.influencer.jerseys_locked
-                    ? {platforms, shipping}
-                    : {platforms, shipping, jerseys:PICKS})
+                body: JSON.stringify(corps)
             });
             d = await r2.json();
         }
@@ -2484,7 +2654,36 @@ function askPin(){
     });
 }
 
+/* « Quand suis-je payée ? » n'avait aucune réponse dans l'espace alors que la
+   date de clôture est calculée à chaque affichage. */
+function quandPayee(){
+    const c = D.month_clock || {};
+    if(!c.end) return '';
+    const fin = new Date(c.end + 'T12:00:00');
+    if(isNaN(fin)) return '';
+    const jour = fin.toLocaleDateString('fr-FR', {day:'numeric', month:'long'});
+    const reste = c.days_left;
+    return `Ta période se termine le <b>${jour}</b>`
+         + (reste === 0 ? " — c'est aujourd'hui."
+            : reste === 1 ? ' — demain.'
+            : ` — dans ${reste} jours.`)
+         + ' Ton virement part dans les jours qui suivent.';
+}
+
+// Un « écris-nous » qui n'est pas cliquable est une impasse de plus.
+function lienAide(texte){
+    const u = (D.contact && D.contact.url) || '';
+    return u ? `<a href="${escAttr(u)}" target="_blank" rel="noopener" class="lien">${esc(texte)}</a>`
+             : esc(texte);
+}
+
 // ── Utils ───────────────────────────────────────────────────────────────
+// Les euros ne s'abrègent pas : « 1.2K € » n'est pas un montant.
+function eur(v){
+    return (Math.round((Number(v)||0)*100)/100)
+        .toLocaleString('fr-FR', {style:'currency', currency:'EUR',
+                                  minimumFractionDigits:0, maximumFractionDigits:0});
+}
 function fmt(n){
     n = Number(n)||0;
     if(n >= 1000000) return (n/1000000).toFixed(1).replace('.0','')+'M';
