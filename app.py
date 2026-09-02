@@ -4466,9 +4466,11 @@ INFLUENCER_TIERS = [
         # ne fait envie à personne : on ne garde que ce qui a une valeur pour
         # elle, dit en euros, en objets ou en accès.
         "perks": [
-            "2 maillots floqués à ton nom, offerts",
             "−15 % pour ta communauté avec ton code",
-            "Livraison offerte, rien à avancer",
+            "Ton lien personnalisé à mettre en bio TikTok et Instagram, "
+            "pour vendre même quand tu ne publies pas",
+            "Livraison offerte en point relais ou en locker, "
+            "et à domicile dans certains cas",
         ],
     },
     {
