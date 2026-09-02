@@ -886,7 +886,7 @@ select.inp{cursor:pointer}
             <div class="topline">
                 <div>
                     <h1>À payer</h1>
-                    <p class="subtitle">Chacune a sa propre période, ancrée sur sa date d'entrée. Le montant est calculé, pas saisi.</p>
+                    <p class="subtitle">Chacune a sa propre période, ancrée sur sa date d'entrée. Les vendeurs hors boutique n'y sont pas — tu les règles à part.</p>
                 </div>
                 <div class="toolbar">
                     <button class="btn" id="paieRefresh" data-i="sync">Actualiser</button>
@@ -3226,7 +3226,7 @@ function renderPaie(){
             : '';
         return `<div class="pay ${r.paid ? 'ok' : ''}">
             <div class="pay-n">
-                <div class="pay-who">${esc(r.pseudo)}${r.light ? ' <span class="hb-tag">hors boutique</span>' : ''}</div>
+                <div class="pay-who">${esc(r.pseudo)}</div>
                 <div class="pay-per">Période <b>${fmtJour(r.start)} → ${fmtJour(r.end)}</b>
                     ${r.paid ? '' : ` · reste ${r.days_left} j`}</div>
             </div>
