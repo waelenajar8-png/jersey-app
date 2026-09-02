@@ -292,21 +292,24 @@ input,select{font-family:inherit}
    sépare donc visuellement : un CHEMIN vertical pour les paliers, une
    ÉCHELLE horizontale pour la paie. Rien n'est replié : ce qu'on ne voit pas
    ne fait pas rêver. */
-.rw-hero{background:var(--accent);border-radius:22px;padding:22px 24px 24px;color:#fff}
-.rw-hero-k{font-size:10.5px;letter-spacing:.19em;text-transform:uppercase;
-    font-weight:700;color:var(--on-accent-lab)}
-.rw-hero-v{display:flex;align-items:center;gap:12px;font-size:32px;font-weight:800;
-    letter-spacing:-.04em;line-height:1;margin-top:10px}
-.rw-hero-e{font-size:28px;line-height:1}
-.rw-hero-s{font-size:13.5px;color:var(--on-accent);margin-top:12px;line-height:1.5}
-.rw-hero-s b{color:#fff;font-weight:800}
-.rw-hero-bar{height:7px;background:rgba(255,255,255,.22);border-radius:100px;
+/* Le repère, pas la vitrine : il dit où elle en est en deux chiffres et une
+   barre. La vitrine, c'est la carte du palier plus bas. */
+.rw-hero{background:var(--surface);border:1px solid var(--line);
+    border-radius:20px;padding:20px 22px 22px}
+.rw-hero-top{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}
+.rw-hero-k{font-size:9.5px;letter-spacing:.19em;text-transform:uppercase;
+    font-weight:800;color:var(--faint)}
+.rw-hero-v{font-size:23px;font-weight:800;letter-spacing:-.035em;line-height:1.1;margin-top:7px}
+.rw-hero-c{text-align:right;flex:none;display:flex;align-items:baseline;gap:5px}
+.rw-hero-cn{font-size:26px;font-weight:800;letter-spacing:-.04em;line-height:1;color:var(--accent)}
+.rw-hero-ct{font-size:11.5px;font-weight:700;color:var(--muted)}
+.rw-hero-bar{height:8px;background:var(--surface-2);border-radius:100px;
     margin-top:16px;overflow:hidden}
-.rw-hero-bar i{display:block;height:100%;background:#fff;border-radius:100px;
+.rw-hero-bar i{display:block;height:100%;background:var(--accent);border-radius:100px;
     transition:width .7s cubic-bezier(.2,.8,.2,1)}
-.rw-hero-m{display:flex;justify-content:space-between;gap:12px;margin-top:9px;
-    font-size:11.5px;font-weight:700;color:var(--on-accent-lab)}
-.rw-hero + .sec{margin-top:44px}
+.rw-hero-s{font-size:13px;color:var(--muted);margin-top:11px;line-height:1.5;font-weight:500}
+.rw-hero-s b{color:var(--ink);font-weight:800}
+.rw-hero + .sec{margin-top:40px}
 /* ══ LIEN DE BIO ═════════════════════════════════════════════════════════
    Le code promo suppose que le visiteur le retienne puis le retape au bon
    moment. Le lien supprime les deux étapes : la réduction est déjà là. Il
@@ -389,111 +392,79 @@ input,select{font-family:inherit}
    montants garantis sont ouverts à tout le monde dès le premier mois. Les
    placer dans la fiche de chaque palier laissait croire le contraire et
    sous-vendait le programme auprès des débutants. */
-/* ── La paie : une échelle qui se remet à zéro à chaque période ───────── */
-.paie{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-top:16px}
-.ps{background:var(--surface);border:1px solid var(--line);border-radius:16px;
-    padding:15px 15px 16px;text-align:center}
-.ps.done{background:var(--ok-soft);border-color:transparent}
-.ps-n{font-size:11.5px;font-weight:800;color:var(--muted);letter-spacing:-.01em}
-.ps.done .ps-n{color:var(--ok)}
-.ps-v{font-size:24px;font-weight:800;letter-spacing:-.045em;line-height:1;margin-top:8px}
-.ps.done .ps-v{color:var(--ok)}
-.ps-w{font-size:11px;font-weight:600;color:var(--faint);margin-top:7px;line-height:1.35}
-.ps.done .ps-w{color:var(--ok)}
-.ps-y{font-size:10.5px;font-weight:700;color:var(--faint);margin-top:8px;
-    padding-top:8px;border-top:1px solid var(--line)}
-.ps.done .ps-y{border-color:rgba(31,138,91,.22);color:var(--ok)}
-.pay-note{background:var(--accent-soft);border-radius:16px;padding:17px 19px;margin-top:12px}
-.pay-note-t{font-size:9px;letter-spacing:.17em;text-transform:uppercase;
-    font-weight:700;color:var(--accent)}
-.pay-note-d{font-size:13px;color:var(--ink-2);margin-top:8px;line-height:1.6;font-weight:500}
-.pay-note-d b{color:var(--ink);font-weight:700}
-.pay-when{font-size:12.5px;color:var(--ink-2);font-weight:600;margin-top:11px;
-    padding-top:11px;border-top:1px solid rgba(47,80,241,.16);line-height:1.55}
-.pay-when b{color:var(--accent);font-weight:800}
-.sec-sub{font-size:13px;color:var(--muted);font-weight:500;margin-top:6px}
-@media (max-width:520px){
-    /* Une ligne par palier de paie : le seuil, où j'en suis, le montant — et
-       la projection annuelle dessous, parce que c'est elle qui fait rêver. */
-    .paie{grid-template-columns:1fr;gap:7px}
-    .ps{display:grid;grid-template-columns:auto 1fr auto;align-items:center;
-        column-gap:14px;text-align:left;padding:14px 16px;
-        grid-template-areas:"n w v" "y y y"}
-    .ps-n{grid-area:n}
-    .ps-w{grid-area:w;margin-top:0}
-    .ps-v{grid-area:v;margin-top:0;font-size:20px}
-    .ps-y{grid-area:y;margin-top:10px;padding-top:9px}
-}
-/* ── Le sélecteur de palier ───────────────────────────────────────────────
-   Quatre niveaux, quatre pastilles, une seule carte affichée à la fois. On
-   ne fait pas défiler pour comprendre : on tape. La piste sert en même temps
-   de barre de progression — la position du jeton EST l'information.
-   Chaque palier a sa couleur, du gris au noir : l'escalade doit se voir
-   avant de se lire. */
-.tr{display:flex;align-items:flex-start;gap:0;margin-top:18px;position:relative}
-.tr-i{flex:1 1 0;min-width:0;background:none;border:0;padding:0;cursor:pointer;
-    font-family:inherit;display:flex;flex-direction:column;align-items:center;
-    gap:7px;position:relative;-webkit-tap-highlight-color:transparent}
-/* Le rail passe derrière les pastilles, d'un centre à l'autre. */
-.tr-i::before{content:"";position:absolute;top:23px;left:-50%;width:100%;height:3px;
-    background:var(--line);border-radius:3px;z-index:0}
+/* ── Paliers ──────────────────────────────────────────────────────────────
+   Un sélecteur sobre, une carte pleine. La carte porte la couleur du niveau
+   à pleine force — ardoise, bleu, or, noir — parce que l'escalade doit se
+   voir avant de se lire ; tout le reste de l'écran reste clair pour qu'il
+   n'y ait qu'une seule surface forte. Aucune animation de position : un
+   contenu qui glisse à chaque clic fait jouet, une transparence ne se
+   remarque pas et c'est exactement ce qu'on veut. */
+.tr{display:flex;gap:0;margin-top:16px}
+.tr-i{flex:1 1 0;min-width:0;background:none;border:0;padding:0 0 2px;cursor:pointer;
+    font-family:inherit;display:flex;flex-direction:column;align-items:center;gap:8px;
+    position:relative;-webkit-tap-highlight-color:transparent}
+.tr-i::before{content:"";position:absolute;top:17px;left:-50%;width:100%;height:2px;
+    background:var(--line);z-index:0}
 .tr-i:first-child::before{display:none}
-.tr-i.fill::before{background:var(--ok)}
-.tr-d{width:46px;height:46px;border-radius:16px;display:grid;place-items:center;
-    font-size:21px;line-height:1;background:var(--surface);border:2px solid var(--line);
-    position:relative;z-index:1;transition:transform .18s cubic-bezier(.2,.8,.2,1),
-    box-shadow .18s ease,border-color .18s ease}
-.tr-i.got .tr-d{border-color:var(--ok);background:var(--ok-soft)}
-.tr-i.here .tr-d{transform:scale(1.12)}
-.tr-i.on .tr-d{box-shadow:0 0 0 4px var(--accent-soft);border-color:var(--accent)}
-.tr-i.here.on .tr-d{box-shadow:0 0 0 4px var(--accent-soft)}
-.tr-l{font-size:10.5px;font-weight:800;letter-spacing:-.01em;color:var(--faint);
-    text-align:center;line-height:1.25;padding:0 2px}
-.tr-i.on .tr-l{color:var(--ink)}
-.tr-i.got .tr-l{color:var(--ok)}
-.tr-i.here .tr-l,.tr-i.here .tr-n{color:var(--accent)}
-.tr-n{font-size:9.5px;font-weight:800;color:var(--faint);letter-spacing:-.01em}
-.tr-i.on .tr-n{color:var(--accent)}
+.tr-i.fill::before{background:var(--ink-2)}
+.tr-d{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;
+    font-size:14px;line-height:1;background:var(--bg);
+    box-shadow:inset 0 0 0 1.5px var(--line-2);position:relative;z-index:1;
+    transition:box-shadow .2s ease,background .2s ease}
+.tr-i.got .tr-d{background:var(--ink-2);box-shadow:none;color:#fff}
+.tr-i.on .tr-d{box-shadow:inset 0 0 0 1.5px var(--ink),0 0 0 4px var(--bg),0 0 0 5.5px var(--ink)}
+.tr-i.got.on .tr-d{box-shadow:0 0 0 4px var(--bg),0 0 0 5.5px var(--ink)}
+.tr-l{font-size:10.5px;font-weight:700;color:var(--faint);text-align:center;
+    line-height:1.2;letter-spacing:-.01em}
+.tr-i.on .tr-l{color:var(--ink);font-weight:800}
+.tr-n{font-size:9.5px;font-weight:700;color:var(--faint);
+    font-variant-numeric:tabular-nums;letter-spacing:.01em}
+.tr-i.here .tr-n{color:var(--accent)}
 
-/* ── La carte du palier ─────────────────────────────────────────────────
-   Une seule à l'écran, dans la couleur de son niveau. Le gain se montre —
-   autant de maillots dessinés que de maillots reçus — avant de s'écrire. */
-.tc{border-radius:22px;padding:22px 22px 24px;margin-top:16px;
-    animation:tcIn .3s cubic-bezier(.2,.8,.2,1) both}
-@keyframes tcIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+/* La carte du palier : la seule surface pleine de l'écran. */
+.tc{border-radius:22px;padding:26px 26px 28px;margin-top:18px;color:#fff;
+    animation:tcIn .22s ease-out both}
+@keyframes tcIn{from{opacity:0}to{opacity:1}}
 @media(prefers-reduced-motion:reduce){.tc{animation:none}}
-.tc.t0{background:#EDF0F5;color:#1B2334}
-.tc.t1{background:var(--accent-soft);color:var(--ink)}
-.tc.t2{background:#FAF1D9;color:#3A2E08}
-.tc.t3{background:var(--sidebar);color:#fff}
-.tc-h{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
-.tc-e{font-size:30px;line-height:1}
-.tc-n{font-size:26px;font-weight:800;letter-spacing:-.04em;line-height:1}
-.tc-tag{margin-left:auto;font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;
-    font-weight:800;padding:5px 10px;border-radius:8px;
-    background:rgba(11,16,32,.08);color:currentColor}
-.tc.t3 .tc-tag{background:rgba(255,255,255,.16)}
-.tc-tag.got{background:var(--ok);color:#fff}
-.tc-tag.now{background:var(--accent);color:#fff}
-.tc-c{font-size:13px;font-weight:600;opacity:.72;margin-top:9px}
-/* Le gain, dessiné. Deux maillots ou six, ça se compte à l'œil. */
-.tc-gift{background:rgba(255,255,255,.62);border-radius:16px;padding:15px 17px;margin-top:16px}
-.tc.t3 .tc-gift{background:rgba(255,255,255,.08)}
-.tc-shirts{display:flex;gap:5px;flex-wrap:wrap}
-.tc-shirts svg{width:26px;height:26px;flex:none}
-.tc-g{display:flex;align-items:baseline;gap:7px;margin-top:11px}
-.tc-gn{font-size:27px;font-weight:800;letter-spacing:-.05em;line-height:1}
-.tc-gl{font-size:12.5px;font-weight:700;opacity:.78;line-height:1.3}
-.tc-perks{display:flex;flex-wrap:wrap;gap:6px;margin-top:15px}
-.tc-perk{font-size:12px;font-weight:600;padding:7px 11px;border-radius:9px;
-    background:rgba(255,255,255,.62);line-height:1.3}
-.tc.t3 .tc-perk{background:rgba(255,255,255,.1)}
-/* Ce qui manque, dit une seule fois et fort : c'est le hameçon. */
-.tc-need{display:flex;align-items:center;gap:11px;margin-top:16px;padding:13px 15px;
-    border-radius:14px;background:rgba(11,16,32,.07);font-size:13px;font-weight:700;
-    line-height:1.35}
-.tc.t3 .tc-need{background:rgba(255,255,255,.12)}
-.tc-need b{font-size:19px;font-weight:800;letter-spacing:-.04em}
+.tc.t0{background:#5B6478}
+.tc.t1{background:var(--accent)}
+.tc.t2{background:#9A7A12}
+.tc.t3{background:var(--sidebar)}
+.tc-k{font-size:9.5px;letter-spacing:.19em;text-transform:uppercase;font-weight:800;
+    color:rgba(255,255,255,.62)}
+.tc-h{display:flex;align-items:baseline;gap:11px;flex-wrap:wrap;margin-top:9px}
+.tc-n{font-size:29px;font-weight:800;letter-spacing:-.04em;line-height:1}
+.tc-c{font-size:12.5px;font-weight:600;color:rgba(255,255,255,.72);margin-top:8px}
+/* Le gain, dessiné : deux maillots ou six, ça se compte à l'œil. */
+.tc-gift{margin-top:20px;padding-top:19px;border-top:1px solid rgba(255,255,255,.2)}
+.tc-shirts{display:flex;gap:6px;flex-wrap:wrap;color:rgba(255,255,255,.92)}
+.tc-shirts svg{width:25px;height:25px;flex:none}
+.tc-g{display:flex;align-items:baseline;gap:8px;margin-top:13px}
+.tc-gn{font-size:30px;font-weight:800;letter-spacing:-.05em;line-height:1}
+.tc-gl{font-size:13px;font-weight:700;line-height:1.35}
+.tc-gy{font-size:12px;font-weight:600;color:rgba(255,255,255,.62);margin-top:7px}
+/* Les avantages : des lignes, pas des pastilles. */
+.tc-perks{list-style:none;margin:20px 0 0;padding:19px 0 0;
+    border-top:1px solid rgba(255,255,255,.2);display:flex;flex-direction:column;gap:0}
+.tc-perks li{font-size:13px;font-weight:600;line-height:1.45;padding:11px 0 11px 22px;
+    position:relative;border-top:1px solid rgba(255,255,255,.12)}
+.tc-perks li:first-child{border-top:0;padding-top:0}
+.tc-perks li:last-child{padding-bottom:0}
+.tc-perks li::before{content:"";position:absolute;left:4px;top:18px;width:6px;height:6px;
+    border-radius:50%;background:rgba(255,255,255,.55)}
+.tc-perks li:first-child::before{top:7px}
+/* Ce qui manque : dit une fois, en gros. */
+.tc-need{display:flex;align-items:baseline;gap:10px;margin-top:22px;padding:15px 17px;
+    border-radius:14px;background:rgba(255,255,255,.14);font-size:13px;font-weight:600;
+    line-height:1.4}
+.tc-need b{font-size:22px;font-weight:800;letter-spacing:-.04em}
+@media (max-width:420px){
+    .tc{padding:22px 20px 24px}
+    .tc-n{font-size:25px}
+    .tc-gn{font-size:26px}
+    .tr-d{width:31px;height:31px;font-size:13px}
+    .tr-i::before{top:15px}
+}
 
 /* ── La paie : une échelle qui se remet à zéro à chaque période ───────── */
 .paie{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-top:16px}
@@ -529,59 +500,6 @@ input,select{font-family:inherit}
     .ps-w{grid-area:w;margin-top:0}
     .ps-v{grid-area:v;margin-top:0;font-size:20px}
     .ps-y{grid-area:y;margin-top:10px;padding-top:9px}
-}
-/* ── Le chemin : quatre paliers, tous lisibles d'un coup ──────────────── */
-/* Les cartes ne s'étirent pas sur toute la largeur : au-delà, la ligne
-   de texte devient trop longue pour être lue en diagonale. */
-.path{margin-top:18px;position:relative;max-width:720px}
-.pn{display:grid;grid-template-columns:40px 1fr;gap:14px;position:relative;
-    padding-bottom:12px}
-.pn:last-child{padding-bottom:0}
-/* Le rail relie les pastilles : il se remplit jusqu'au palier atteint. */
-.pn::before{content:"";position:absolute;left:19px;top:40px;bottom:0;width:2px;
-    background:var(--line);border-radius:2px}
-.pn:last-child::before{display:none}
-.pn.done::before{background:var(--ok)}
-.pn-dot{width:40px;height:40px;border-radius:14px;display:grid;place-items:center;
-    font-size:19px;line-height:1;background:var(--surface-2);
-    border:2px solid var(--line);position:relative;z-index:1}
-.pn.done .pn-dot{background:var(--ok-soft);border-color:var(--ok)}
-.pn.now  .pn-dot{background:var(--accent);border-color:var(--accent);
-    box-shadow:0 0 0 5px var(--accent-soft)}
-.pn-card{background:var(--surface);border:1px solid var(--line);border-radius:16px;
-    padding:15px 17px 16px;min-width:0}
-.pn.now .pn-card{border-color:var(--accent);background:var(--accent-soft)}
-.pn.lock .pn-card{background:transparent;border-style:dashed}
-.pn-top{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
-.pn-name{font-size:16px;font-weight:800;letter-spacing:-.03em}
-.pn.lock .pn-name{color:var(--ink-2)}
-.pn-tag{font-size:9px;letter-spacing:.13em;text-transform:uppercase;font-weight:800;
-    padding:4px 8px;border-radius:7px;background:var(--surface-2);color:var(--faint)}
-.pn.done .pn-tag{background:var(--ok-soft);color:var(--ok)}
-.pn.now  .pn-tag{background:var(--accent);color:#fff}
-.pn-cond{font-size:12px;font-weight:600;color:var(--muted);margin-top:3px}
-/* Le gain principal du palier : c'est la ligne qu'on lit en diagonale. */
-.pn-gain{display:flex;align-items:baseline;gap:7px;margin-top:12px;
-    padding-top:12px;border-top:1px solid var(--line)}
-.pn.now .pn-gain{border-color:rgba(47,80,241,.2)}
-.pn-gn{font-size:26px;font-weight:800;letter-spacing:-.05em;line-height:1}
-.pn.now .pn-gn{color:var(--accent)}
-.pn-gl{font-size:12.5px;font-weight:700;color:var(--ink-2);line-height:1.3}
-.pn-perks{list-style:none;margin:11px 0 0;padding:0;display:flex;
-    flex-direction:column;gap:6px}
-.pn-perks li{position:relative;padding-left:17px;font-size:12.5px;font-weight:500;
-    color:var(--ink-2);line-height:1.4}
-.pn-perks li::before{content:"";position:absolute;left:2px;top:7px;width:5px;height:5px;
-    border-radius:50%;background:var(--accent);opacity:.45}
-.pn.done .pn-perks li::before{background:var(--ok);opacity:.6}
-.pn.lock .pn-perks li{color:var(--muted)}
-@media (max-width:420px){
-    .pn{grid-template-columns:34px 1fr;gap:11px}
-    .pn::before{left:16px;top:34px}
-    .pn-dot{width:34px;height:34px;font-size:16px;border-radius:12px}
-    .pn-card{padding:13px 14px 14px}
-    .pn-name{font-size:15px}
-    .pn-gn{font-size:23px}
 }
 /* — Missions présentées comme des gains — */
 .task{display:flex;align-items:center;gap:14px;width:100%;text-align:left;padding:16px 18px;
@@ -2101,16 +2019,20 @@ function viewPaliers(){
     ${/* ── Où j'en suis : la seule surface forte de l'écran. ── */''}
     ${isLight() ? '' : `
     <section class="rw-hero">
-        <div class="rw-hero-k">Ton palier</div>
-        <div class="rw-hero-v"><span class="rw-hero-e">${esc(t.current.icon || '')}</span>${esc(t.current.name)}</div>
-        <div class="rw-hero-s">${next
-            ? `Plus que <b>${fmtFull(toNext)} vente${toNext>1?'s':''}</b> pour devenir ${esc(next.icon||'')} <b>${esc(next.name)}</b>.`
-            : `Tu es au sommet du programme. Acquis définitivement.`}</div>
-        <div class="rw-hero-bar"><i style="width:${pct}%"></i></div>
-        <div class="rw-hero-m">
-            <span>${d ? `${fmtFull(d.current)} / ${fmtFull(d.target)} ventes depuis le début` : 'Palier maximum'}</span>
-            <span>${pct}%</span>
+        <div class="rw-hero-top">
+            <div>
+                <div class="rw-hero-k">Ton palier</div>
+                <div class="rw-hero-v">${esc(t.current.icon || '')} ${esc(t.current.name)}</div>
+            </div>
+            <div class="rw-hero-c">
+                <span class="rw-hero-cn num">${d ? fmtFull(d.current) : '—'}</span>
+                <span class="rw-hero-ct">${d ? `/ ${fmtFull(d.target)} ventes` : 'palier max'}</span>
+            </div>
         </div>
+        <div class="rw-hero-bar"><i style="width:${pct}%"></i></div>
+        <div class="rw-hero-s">${next
+            ? `Plus que <b>${fmtFull(toNext)} vente${toNext>1?'s':''}</b> pour devenir <b>${esc(next.name)}</b>.`
+            : `Tu es au sommet du programme. Acquis définitivement.`}</div>
     </section>`}
 
     ${/* ── Le menu de niveaux ── */''}
@@ -2133,11 +2055,10 @@ function viewPaliers(){
         </div>
 
         <div class="tc t${sel}">
+            <div class="tc-k">Palier ${sel + 1} sur ${paliers.length} · ${
+                sel < idx ? 'Acquis' : sel === idx ? 'Le tien' : 'À débloquer'}</div>
             <div class="tc-h">
-                <span class="tc-e">${esc(x.icon || '')}</span>
-                <span class="tc-n">${esc(x.name)}</span>
-                <span class="tc-tag ${sel < idx ? 'got' : sel === idx ? 'now' : ''}">${
-                    sel < idx ? 'Acquis' : sel === idx ? 'Ton palier' : 'À débloquer'}</span>
+                <span class="tc-n">${esc(x.icon || '')} ${esc(x.name)}</span>
             </div>
             <div class="tc-c">${x.req_sales === 0
                 ? `Acquis dès ton entrée dans le programme`
@@ -2149,17 +2070,18 @@ function viewPaliers(){
                     <span class="tc-gn num">${fmtFull(x.jerseys)}</span>
                     <span class="tc-gl">maillots floqués offerts<br>à chaque période</span>
                 </div>
+                <div class="tc-gy">soit <b>${fmtFull(x.jerseys * 12)} maillots par an</b>, à toi, sans rien avancer</div>
             </div>
 
             ${(() => {
                 // Le premier avantage répète toujours les maillots, déjà dessinés.
                 const pk = (x.perks || []).filter(v => !/maillot/i.test(v));
-                return pk.length ? `<div class="tc-perks">${pk.map(v=>`<span class="tc-perk">${esc(v)}</span>`).join('')}</div>` : '';
+                return pk.length ? `<ul class="tc-perks">${pk.map(v=>`<li>${esc(v)}</li>`).join('')}</ul>` : '';
             })()}
 
             ${sel > idx ? `<div class="tc-need">
                 <b>${fmtFull(x.missing_sales)}</b>
-                <span>vente${x.missing_sales>1?'s':''} de plus et il est à toi, pour toujours.</span>
+                <span>vente${x.missing_sales>1?'s':''} de plus et ce palier est à toi, définitivement.</span>
             </div>` : ''}
         </div>
     </section>`}
