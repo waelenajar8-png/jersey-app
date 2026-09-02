@@ -1725,8 +1725,11 @@ function blockColis(){
     if(st === 'livre')          msg = 'Ton colis est arrivé. Il ne reste plus qu\'à filmer.';
     else if(st === 'probleme')  msg = 'On regarde ce qui s\'est passé et on revient vers toi.';
     else if(inf.tracking)       msg = 'Ton colis est parti. Tu peux suivre son trajet.';
-    else if(!jerseysDone)     { msg = 'Choisis tes 2 maillots pour lancer l\'expédition.';
-                                cta = {label:'Choisir mes maillots', tab:'profil'}; }
+    else if(!jerseysDone)     { msg = inf.jerseys_locked
+                                    ? 'On enregistre tes 2 maillots avec toi, puis le colis part.'
+                                    : 'Choisis tes 2 maillots pour lancer l\'expédition.';
+                                cta = {label: inf.jerseys_locked ? 'Voir mes maillots' : 'Choisir mes maillots',
+                                       tab:'profil'}; }
     else if(!addrDone)        { msg = 'Renseigne ton adresse et ton colis part.';
                                 cta = {label:'Renseigner mon adresse', tab:'profil'}; }
     else                        msg = 'Tout est bon de ton côté. On prépare ton colis.';
@@ -2417,17 +2420,21 @@ function viewProfil(){
     <div class="card">
         <div class="card-head">
             <div>
-                <div class="card-title"><span class="ico-box">${ICO.tag}</span>${LOCKED ? 'Tes 2 maillots' : 'Choisis tes 2 maillots'}</div>
+                <div class="card-title"><span class="ico-box">${ICO.tag}</span>${LOCKED
+                    ? (PICKS.length ? 'Tes maillots' : 'Tes maillots')
+                    : 'Choisis tes 2 maillots'}</div>
                 <div class="card-sub" style="margin-top:5px">${LOCKED
-                    ? 'Sélectionnés pour toi par l\'équipe Volakits'
+                    ? (PICKS.length ? 'Enregistrés par l\'équipe Volakits' : 'Ta sélection se fait avec l\'équipe')
                     : 'Sélectionne un modèle, puis sa taille'}</div>
             </div>
             ${LOCKED ? '' : `<span class="pick-count ${PICKS.length>=2?'full':''}" id="pickCount">${PICKS.length} / 2</span>`}
         </div>
         ${LOCKED ? `<div class="lock-note">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
-            <div><div class="lock-note-t">Sélection faite par l'équipe</div>
-            <div class="lock-note-d">Ces deux maillots ont été choisis pour toi. Si tu veux en changer, écris-nous — on s'en occupe tant que le colis n'est pas parti.</div></div>
+            <div><div class="lock-note-t">${PICKS.length ? 'Sélection faite par l\'équipe' : 'On choisit ensemble'}</div>
+            <div class="lock-note-d">${PICKS.length
+                ? `Ces maillots ont été enregistrés pour toi. Pour en changer, ${lienAide('écris-nous')} — on s'en occupe tant que le colis n'est pas parti.`
+                : `On te montre le catalogue et tu nous dis lesquels tu veux : ${lienAide('écris-nous')} et on les enregistre pour toi.`}</div></div>
         </div>` : ''}
         <div id="pickedZone"></div>
         ${LOCKED ? '' : `<div id="jerseyGrid"><div class="empty" style="padding:20px"><div class="empty-text">Chargement du catalogue…</div></div></div>`}
@@ -2441,14 +2448,14 @@ function viewProfil(){
             </div>
         </div>
         <div class="form-grid">
-            <div class="field"><label>Prénom</label><input data-s="firstname" value="${escAttr(sh.firstname||'')}" placeholder="Lucas"></div>
-            <div class="field"><label>Nom</label><input data-s="lastname" value="${escAttr(sh.lastname||'')}" placeholder="Martin"></div>
-            <div class="field full"><label>Adresse</label><input data-s="address" value="${escAttr(sh.address||'')}" placeholder="18 rue du Puchot"></div>
-            <div class="field"><label>Code postal</label><input data-s="postal" value="${escAttr(sh.postal||'')}" placeholder="76500"></div>
-            <div class="field"><label>Ville</label><input data-s="city" value="${escAttr(sh.city||'')}" placeholder="Elbeuf"></div>
+            <div class="field"><label>Prénom</label><input data-s="firstname" value="${escAttr(sh.firstname||'')}" placeholder="Ton prénom"></div>
+            <div class="field"><label>Nom</label><input data-s="lastname" value="${escAttr(sh.lastname||'')}" placeholder="Ton nom"></div>
+            <div class="field full"><label>Adresse</label><input data-s="address" value="${escAttr(sh.address||'')}" placeholder="Numéro et nom de rue"></div>
+            <div class="field"><label>Code postal</label><input data-s="postal" value="${escAttr(sh.postal||'')}" placeholder="00000"></div>
+            <div class="field"><label>Ville</label><input data-s="city" value="${escAttr(sh.city||'')}" placeholder="Ta ville"></div>
             <div class="field"><label>Pays</label><input data-s="country" value="${escAttr(sh.country||'France')}" placeholder="France"></div>
-            <div class="field"><label>Téléphone</label><input data-s="phone" value="${escAttr(sh.phone||'')}" placeholder="06 12 34 56 78"></div>
-            <div class="field full"><label>Email</label><input type="email" data-s="email" value="${escAttr(sh.email||'')}" placeholder="lucas@email.com"></div>
+            <div class="field"><label>Téléphone</label><input data-s="phone" value="${escAttr(sh.phone||'')}" placeholder="06 00 00 00 00"></div>
+            <div class="field full"><label>Email</label><input type="email" data-s="email" value="${escAttr(sh.email||'')}" placeholder="ton@email.com"></div>
         </div>
     </div>
 
