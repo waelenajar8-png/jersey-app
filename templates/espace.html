@@ -303,6 +303,8 @@ input,select{font-family:inherit}
 .rw-hero-c{text-align:right;flex:none;display:flex;align-items:baseline;gap:5px}
 .rw-hero-cn{font-size:26px;font-weight:800;letter-spacing:-.04em;line-height:1;color:var(--accent)}
 .rw-hero-ct{font-size:11.5px;font-weight:700;color:var(--muted)}
+.rw-hero-max{font-size:10px;font-weight:800;letter-spacing:.11em;text-transform:uppercase;
+    color:var(--accent);background:var(--accent-soft);padding:6px 10px;border-radius:8px}
 .rw-hero-bar{height:8px;background:var(--surface-2);border-radius:100px;
     margin-top:16px;overflow:hidden}
 .rw-hero-bar i{display:block;height:100%;background:var(--accent);border-radius:100px;
@@ -2038,9 +2040,12 @@ function viewPaliers(){
                 <div class="rw-hero-k">Ton palier</div>
                 <div class="rw-hero-v">${esc(t.current.icon || '')} ${esc(t.current.name)}</div>
             </div>
+            ${/* Au dernier palier il n'y a plus de cible : un « — » en gros
+                 chiffre ressemblait à un trait perdu dans le coin. */''}
             <div class="rw-hero-c">
-                <span class="rw-hero-cn num">${d ? fmtFull(d.current) : '—'}</span>
-                <span class="rw-hero-ct">${d ? `/ ${fmtFull(d.target)} ventes` : 'palier max'}</span>
+                ${d ? `<span class="rw-hero-cn num">${fmtFull(d.current)}</span>
+                       <span class="rw-hero-ct">/ ${fmtFull(d.target)} ventes</span>`
+                    : `<span class="rw-hero-max">Palier max</span>`}
             </div>
         </div>
         <div class="rw-hero-bar"><i style="width:${pct}%"></i></div>
@@ -2091,25 +2096,26 @@ function viewPaliers(){
                     <div class="tc-gk">Ce que tu touches</div>
                     ${x.monthly_fixed
                         ? `<div class="tc-gv num">${fmtFull(x.monthly_fixed)} €</div>
-                           <div class="tc-gd">garantis dès <b>${fmtFull(x.monthly_threshold)} ventes</b> dans une période de 30 jours</div>`
+                           <div class="tc-gd">garantis dès <b>${fmtFull(x.monthly_threshold)} ventes</b> sur une période de 30 jours</div>`
                         : `<div class="tc-gv num">10 %</div>
-                           <div class="tc-gd">de tes ventes</div>`}
+                           <div class="tc-gd">de commission sur toutes tes ventes</div>`}
                 </div>
+                ${/* Le colis de départ n'est pas personnalisable, les suivants le
+                     sont : c'est la vraie différence entre le premier palier et
+                     les autres, et elle doit se lire ici. */''}
                 <div class="tc-gain">
                     <div class="tc-gk">Ce que tu reçois</div>
                     <div class="tc-shirts">${Array.from({length: x.jerseys}, ()=>SHIRT).join('')}</div>
                     <div class="tc-gv num">${fmtFull(x.jerseys)} maillots</div>
                     <div class="tc-gd">${x.req_sales === 0
-                        ? `pour démarrer, <b>sans aucune vente à faire</b>`
-                        : `dès <b>${fmtFull(x.gifting_threshold)} ventes</b> dans la même période`}</div>
+                        ? `offerts pour démarrer et faire le contenu qu'on te demande`
+                        : `offerts et <b>personnalisables</b>, tous les 30 jours`}</div>
                 </div>
             </div>
 
-            ${(() => {
-                // Le premier avantage répète toujours les maillots, déjà dessinés.
-                const pk = (x.perks || []).filter(v => !/maillot/i.test(v));
-                return pk.length ? `<ul class="tc-perks">${pk.map(v=>`<li>${esc(v)}</li>`).join('')}</ul>` : '';
-            })()}
+            ${(x.perks || []).length
+                ? `<ul class="tc-perks">${x.perks.map(v=>`<li>${esc(v)}</li>`).join('')}</ul>`
+                : ''}
 
             ${sel > idx ? `<div class="tc-need">
                 <b>${fmtFull(x.missing_sales)}</b>
