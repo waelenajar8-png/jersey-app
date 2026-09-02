@@ -121,6 +121,20 @@ h1{font-size:26px;font-weight:800;letter-spacing:-.03em}
 .j-name::placeholder,.j-sub::placeholder{color:var(--faint);font-weight:600}
 /* Un nom manquant se voit : c'est ce qui partira dans le catalogue partagé. */
 .j-name.vide{border-color:var(--warn);background:var(--warn-soft)}
+
+/* Un maillot sans aucune taille n'existe pour personne : ni dans le lien
+   public, ni dans le PDF, ni dans l'espace des influenceuses. Il fallait le
+   dire, au lieu de le faire disparaître en silence. */
+.jersey.fantome{border-color:var(--warn);box-shadow:0 0 0 3px var(--warn-soft)}
+.jersey.fantome .j-alert{display:flex}
+.j-alert{display:none;align-items:flex-start;gap:7px;margin-top:10px;padding:8px 10px;
+    border-radius:9px;background:var(--warn-soft);color:#8A5B04;
+    font-size:11px;font-weight:700;line-height:1.4}
+.j-alert svg{flex-shrink:0;margin-top:1px}
+.bandeau{display:flex;align-items:center;gap:12px;background:var(--warn-soft);
+    border:1px solid #F6D9A2;border-radius:var(--r);padding:13px 16px;margin-bottom:14px}
+.bandeau-t{font-size:13px;font-weight:800;color:#7A5103}
+.bandeau-d{font-size:12px;font-weight:600;color:#8A5B04;margin-top:2px;line-height:1.45}
 .sizes{display:flex;gap:6px;margin-top:11px}
 .size-in{flex:1;text-align:center}
 .size-lbl{font-size:10px;font-weight:800;color:var(--muted);letter-spacing:.05em}
@@ -327,6 +341,33 @@ function renderAuto(){
     };
 }
 
+function totalPieces(j){
+    return Object.values(j.sizes||{}).reduce((a,b)=>a+(+b||0),0);
+}
+
+function htmlBandeau(n){
+    if(!n) return '';
+    return `<div class="bandeau">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#B57C0A" stroke-width="2"><path d="M10.3 3.9L1.8 18a2 2 0 001.7 3h17a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 9v4M12 17h.01" stroke-linecap="round"/></svg>
+        <div>
+            <div class="bandeau-t">${n} maillot${n>1?'s':''} ${n>1?"n'apparaissent":"n'apparaît"} nulle part</div>
+            <div class="bandeau-d">Aucune taille renseignée — ${n>1?'ils sont absents':'il est absent'} du lien partagé,
+                du PDF et de l'espace des influenceuses. Mets une quantité sur au moins une taille.</div>
+        </div>
+    </div>`;
+}
+
+/* Le bandeau se recompte à chaud pendant qu'on tape les quantités — on
+   l'insère ou on le retire seul, sans reconstruire la grille sous le curseur. */
+function paintBandeau(){
+    const n = CAT.jerseys.filter(j=>j.active!==false && !totalPieces(j)).length;
+    const b = document.querySelector('.bandeau');
+    if(!n){ if(b) b.remove(); return; }
+    if(b) b.querySelector('.bandeau-t').textContent =
+        `${n} maillot${n>1?'s':''} ${n>1?"n'apparaissent":"n'apparaît"} nulle part`;
+    else document.getElementById('list').insertAdjacentHTML('afterbegin', htmlBandeau(n));
+}
+
 function renderList(){
     const el = document.getElementById('list');
     if(!CAT.jerseys.length){
@@ -337,9 +378,11 @@ function renderList(){
         </div>`;
         return;
     }
-    el.innerHTML = `<div class="grid">${CAT.jerseys.map((j,i)=>{
+    const fantomes = CAT.jerseys.filter(j=>j.active!==false && !totalPieces(j)).length;
+    el.innerHTML = htmlBandeau(fantomes) + `<div class="grid">${CAT.jerseys.map((j,i)=>{
         const on = j.active !== false;
-        return `<div class="jersey ${on?'':'off'}">
+        const vide = on && !totalPieces(j);
+        return `<div class="jersey ${on?'':'off'} ${vide?'fantome':''}">
             <img class="j-img" src="${escAttr(j.image||'')}" alt="${escAttr(j.name)}" loading="lazy">
             <div class="j-body">
                 <div class="j-num">#${i+1}</div>
@@ -354,6 +397,9 @@ function renderList(){
                         </div>`;
                     }).join('')}
                 </div>
+                <div class="j-alert">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="10"/><path d="M12 8v5M12 16h.01" stroke-linecap="round"/></svg>
+                    Invisible partout tant qu'aucune taille n'a de quantité.</div>
                 <div class="j-foot">
                     <div class="toggle ${on?'on':''}" data-toggle="${i}">
                         <span class="tg"></span>${on?'Visible':'Masqué'}
@@ -384,6 +430,10 @@ function renderList(){
             j.sizes = j.sizes || {};
             j.sizes[inp.dataset.size] = Math.max(0, parseInt(inp.value||0));
             inp.parentElement.classList.toggle('zero', !j.sizes[inp.dataset.size]);
+            // Repeint l'état « invisible partout » sur place : reconstruire la
+            // grille arracherait le curseur du champ en cours de saisie.
+            inp.closest('.jersey').classList.toggle('fantome', j.active!==false && !totalPieces(j));
+            paintBandeau();
             touch(); renderStats();
         };
     });
