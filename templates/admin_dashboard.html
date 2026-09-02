@@ -1420,7 +1420,9 @@ function normalize(i){
         jerseys: Array.isArray(i.jerseys) ? i.jerseys.map(jerseyDurable) : [],
         missions_done: i.missions_done || {},
         jerseys_shipped: !!i.jerseys_shipped,
-        jerseys_locked: !!i.jerseys_locked,
+        // Verrouillé par défaut : `!!` transformait un champ absent en `false`
+        // et déverrouillait tout le monde au premier enregistrement.
+        jerseys_locked: i.jerseys_locked !== false,
         _espace_url: i._espace_url||'', program_start_date: i.program_start_date||'',
         espace_pin: i.espace_pin||'',
         // Vendeur hors boutique : volume renseigné à la main, pas de Shopify.
@@ -2252,8 +2254,8 @@ function renderSheetJerseys(inf){
             <span class="jlock-b">
                 <span class="jlock-t">Verrouiller la sélection</span>
                 <span class="jlock-d">${inf.jerseys_locked
-                    ? "L'influenceur voit ses maillots mais ne peut pas les changer."
-                    : "L'influenceur peut choisir et modifier ses maillots depuis son espace."}</span>
+                    ? "Elle voit ses maillots mais ne peut pas les changer. C'est l'état par défaut."
+                    : "Ouvert : elle peut choisir et modifier ses maillots depuis son espace."}</span>
             </span>
         </button>`;
 
