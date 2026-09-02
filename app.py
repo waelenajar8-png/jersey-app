@@ -3796,6 +3796,19 @@ def _merge_influenceurs(stored, incoming):
 STATUS_COLIS_ENVOYE = 5
 
 
+def _hors_catalogue(j):
+    """
+    Maillot attribué à la main, absent du catalogue.
+
+    Il arrive qu'un modèle n'existe qu'en une ou deux tailles : le faire entrer
+    dans le catalogue pour l'offrir une fois obligerait à gérer un stock qui
+    n'a pas lieu d'être. Ces maillots-là s'attachent donc directement à une
+    fiche — ils ne décrémentent rien, ne réservent rien, mais restent visibles
+    dans « Qui a quoi » et dans l'espace de l'influenceuse.
+    """
+    return bool((j or {}).get("hors_cat"))
+
+
 def _reserved_map(influenceurs):
     """Maillots choisis mais pas encore expédiés → {(jersey_id, taille): qté}."""
     res = {}
@@ -3805,6 +3818,8 @@ def _reserved_map(influenceurs):
         if inf.get("jerseys_shipped"):
             continue                      # déjà sorti du stock physique
         for j in (inf.get("jerseys") or []):
+            if _hors_catalogue(j):
+                continue                  # jamais entré en stock, rien à réserver
             jid, size = j.get("id"), (j.get("size") or "").strip()
             if jid and size:
                 res[(jid, size)] = res.get((jid, size), 0) + 1
@@ -3822,6 +3837,8 @@ def _apply_shipment(inf, cat):
     shortages = []
     by_id = {j.get("id"): j for j in cat.get("jerseys", [])}
     for pick in (inf.get("jerseys") or []):
+        if _hors_catalogue(pick):
+            continue                      # hors stock : rien à décrémenter
         jid, size = pick.get("id"), (pick.get("size") or "").strip()
         if not jid or not size:
             continue
@@ -3851,6 +3868,8 @@ def _undo_shipment(inf, cat):
         return
     by_id = {j.get("id"): j for j in cat.get("jerseys", [])}
     for pick in (inf.get("jerseys") or []):
+        if _hors_catalogue(pick):
+            continue
         jid, size = pick.get("id"), (pick.get("size") or "").strip()
         j = by_id.get(jid)
         if not j or not size:
@@ -3919,6 +3938,8 @@ def api_stock():
             if not isinstance(inf, dict) or inf.get("jerseys_shipped"):
                 continue
             for j in (inf.get("jerseys") or []):
+                if _hors_catalogue(j):
+                    continue
                 jid, size = j.get("id"), (j.get("size") or "").strip()
                 if jid and size:
                     holders.setdefault((jid, size), []).append(inf.get("pseudo") or "—")
@@ -3951,7 +3972,8 @@ def api_stock():
         known = {j.get("id") for j in cat.get("jerseys", [])}
         orphans = sorted({
             (j.get("name") or "?") for inf in influenceurs
-            for j in (inf.get("jerseys") or []) if j.get("id") not in known
+            for j in (inf.get("jerseys") or [])
+            if not _hors_catalogue(j) and j.get("id") not in known
         })
 
         return jsonify({
@@ -5718,6 +5740,11 @@ def _espace_share_link(inf):
 def _jersey_durable(j):
     """Réduit un maillot choisi à ce qui ne périme pas : id, nom, taille, clé R2."""
     garde = {k: j.get(k) for k in ("id", "name", "sub", "size") if j.get(k)}
+    if _hors_catalogue(j):
+        garde["hors_cat"] = True
+        if (j.get("r2_key") or "").strip():
+            garde["r2_key"] = j["r2_key"].strip()
+        return garde
     cle = (j.get("r2_key") or "").strip()
     if not cle and j.get("id"):
         try:
