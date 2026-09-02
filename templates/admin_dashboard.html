@@ -338,6 +338,58 @@ h1{font-size:27px;font-weight:800;letter-spacing:-.035em;line-height:1.1}
 .sz .r{color:var(--warn);font-weight:700}
 .sz.out{background:var(--danger-soft);border-color:transparent;color:var(--danger)}
 .sz.low{border-color:#F5D9A8}
+/* ── La file du jour ─────────────────────────────────────────────────────
+   Ce bloc n'est pas un tableau de bord : c'est une liste de choses à faire.
+   Chaque ligne porte un motif écrit en clair et le geste qui va avec — sans
+   ça, il faut relire dix-huit cartes pour reconstituer ce que l'app sait
+   déjà. Le rouge est réservé à ce qui bloque ou coûte de l'argent. */
+.file{background:var(--surface);border:1px solid var(--line);
+    border-radius:var(--r-lg);margin-bottom:20px;overflow:hidden}
+.file-h{display:flex;align-items:center;gap:10px;padding:15px 20px;
+    border-bottom:1px solid var(--line);flex-wrap:wrap}
+.file-t{font-size:14px;font-weight:800;letter-spacing:-.025em}
+.file-n{font-size:11px;font-weight:800;padding:2px 8px;border-radius:20px;
+    background:var(--accent-soft);color:var(--accent);font-variant-numeric:tabular-nums}
+.file-n.zero{background:var(--ok-soft);color:var(--ok)}
+.file-more{margin-left:auto;background:transparent;border:0;cursor:pointer;
+    font-family:inherit;font-size:11.5px;font-weight:700;color:var(--muted)}
+.file-more:hover{color:var(--ink)}
+.fl{display:flex;align-items:center;gap:12px;padding:12px 20px;
+    border-top:1px solid var(--line);flex-wrap:wrap}
+.fl:first-child{border-top:0}
+.fl-p{flex:0 0 4px;align-self:stretch;border-radius:3px;background:var(--line-2);
+    margin:-12px 0 -12px -8px}
+.fl.hi .fl-p{background:var(--danger)}
+.fl.md .fl-p{background:var(--warn)}
+.fl.lo .fl-p{background:var(--accent)}
+.fl-who{flex:0 0 auto;font-size:13.5px;font-weight:800;letter-spacing:-.02em;
+    min-width:96px}
+.fl-why{flex:1 1 240px;min-width:0;font-size:13px;color:var(--ink-2);line-height:1.45}
+.fl-why b{font-weight:700;color:var(--ink)}
+.fl-act{display:flex;gap:7px;flex:0 0 auto;flex-wrap:wrap}
+.fl-vide{padding:26px 20px;text-align:center;font-size:13px;color:var(--muted);font-weight:600}
+.btn.wa{border-color:#12A150;color:#0F7C3E}
+.btn.wa:hover:not(:disabled){background:#E8F7EE;border-color:#12A150}
+
+/* ── À payer ─────────────────────────────────────────────────────────── */
+.pay{display:flex;align-items:center;gap:16px;padding:15px 0;
+    border-bottom:1px solid var(--line);flex-wrap:wrap}
+.pay:last-child{border-bottom:0}
+.pay.ok{opacity:.55}
+.pay-n{flex:1 1 200px;min-width:0}
+.pay-who{font-size:14.5px;font-weight:800;letter-spacing:-.025em}
+.pay-per{font-size:11.5px;color:var(--muted);font-weight:600;margin-top:2px}
+.pay-per b{color:var(--ink-2);font-weight:700}
+.pay-mid{flex:1 1 210px;min-width:0;font-size:12.5px;color:var(--muted);font-weight:600}
+.pay-mid b{color:var(--ink-2);font-weight:700}
+.pay-eur{flex:0 0 auto;text-align:right;min-width:104px}
+.pay-v{font-size:19px;font-weight:800;letter-spacing:-.03em;font-variant-numeric:tabular-nums}
+.pay-k{font-size:10.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;
+    color:var(--muted);margin-top:1px}
+.pay-btn{flex:0 0 auto}
+.pay-warn{flex:1 1 100%;font-size:11.5px;font-weight:700;color:#96590A;
+    background:var(--warn-soft);padding:7px 11px;border-radius:9px;line-height:1.45}
+
 /* ── Qui a quoi ──────────────────────────────────────────────────────────
    Une ligne = une personne et son colis. Les maillots priment visuellement,
    parce que c'est ce qu'on vient vérifier ; le suivi et l'état se règlent sur
@@ -386,6 +438,8 @@ h1{font-size:27px;font-weight:800;letter-spacing:-.035em;line-height:1.1}
     .env-side{flex:1 1 100%;margin-top:10px}
     .env-suivi{flex:1 1 140px;width:auto}
 }
+.warow{display:flex;gap:8px;align-items:center}
+.warow .inp{flex:1;min-width:0}
 .sz-more{
     display:inline-flex;align-items:center;padding:6px 11px;border-radius:10px;
     background:transparent;border:1px dashed var(--line-2);cursor:pointer;
@@ -692,9 +746,10 @@ select.inp{cursor:pointer}
                 <div class="brand-sub">Console</div>
             </div>
         </div>
-        <button class="nav-item active" id="navPeople" onclick="setView('people')" data-i="users">Ambassadeurs</button>
+        <button class="nav-item active" id="navPeople" onclick="setView('people')" data-i="users">Influenceuses</button>
         <button class="nav-item" id="navStock" onclick="setView('stock')" data-i="tag">Stock maillots<span class="nav-count" id="navStockCount"></span></button>
         <button class="nav-item" id="navVideos" onclick="setView('videos')" data-i="film">Vidéos<span class="nav-count" id="navVidCount"></span></button>
+        <button class="nav-item" id="navPaie" onclick="setView('paie')" data-i="euro">À payer<span class="nav-count" id="navPaieCount"></span></button>
         <div class="nav-label">Outils</div>
         <a href="/influenceurs" class="nav-item" data-i="ext">Ancien back-office</a>
         <div class="side-foot">
@@ -706,9 +761,10 @@ select.inp{cursor:pointer}
         <div class="mbar">
             <div class="mbar-mark">V</div>
             <div class="mseg">
-                <button data-mseg="people" onclick="setView('people')">Ambassadeurs</button>
+                <button data-mseg="people" onclick="setView('people')">Influenceuses</button>
                 <button data-mseg="stock" onclick="setView('stock')">Stock</button>
                 <button data-mseg="videos" onclick="setView('videos')">Vidéos<span class="n num" id="mVidCount"></span></button>
+                <button data-mseg="paie" onclick="setView('paie')">À payer</button>
             </div>
             <a href="/influenceurs/logout" class="mbar-out" title="Déconnexion" data-i="out"></a>
         </div>
@@ -717,8 +773,8 @@ select.inp{cursor:pointer}
         <section id="viewPeople">
             <div class="topline">
                 <div>
-                    <h1>Ambassadeurs</h1>
-                    <p class="subtitle">Classés par ventes cumulées. Ouvre une fiche pour tout gérer.</p>
+                    <h1>Influenceuses</h1>
+                    <p class="subtitle">Classées par ventes cumulées. Ouvre une fiche pour tout gérer.</p>
                 </div>
                 <div class="toolbar">
                     <div class="search">
@@ -735,9 +791,13 @@ select.inp{cursor:pointer}
 
             <div class="banner" id="banner"></div>
 
+            <!-- La file du jour passe avant les chiffres : on ouvre cette page
+                 pour savoir quoi faire, pas pour contempler un total. -->
+            <div id="file"></div>
+
             <div class="board">
                 <div class="board-cell">
-                    <div class="board-label">Ambassadeurs</div>
+                    <div class="board-label">Influenceuses</div>
                     <div class="board-value num" id="bCount">—</div>
                 </div>
                 <div class="board-cell">
@@ -821,6 +881,29 @@ select.inp{cursor:pointer}
             </div>
         </section>
 
+        <!-- ══ Vue À payer ══ -->
+        <section id="viewPaie" hidden>
+            <div class="topline">
+                <div>
+                    <h1>À payer</h1>
+                    <p class="subtitle">Chacune a sa propre période, ancrée sur sa date d'entrée. Le montant est calculé, pas saisi.</p>
+                </div>
+                <div class="toolbar">
+                    <button class="btn" id="paieRefresh" data-i="sync">Actualiser</button>
+                    <button class="btn" onclick="exportPaie()" data-i="download">Export</button>
+                </div>
+            </div>
+
+            <div class="board">
+                <div class="board-cell"><div class="board-label">Restant à verser</div><div class="board-value num" id="pRestant">—</div></div>
+                <div class="board-cell"><div class="board-label">Déjà réglé</div><div class="board-value num" id="pRegle">—</div></div>
+                <div class="board-cell"><div class="board-label">Total de la période</div><div class="board-value num" id="pDu">—</div></div>
+                <div class="board-cell"><div class="board-label">Virements à faire</div><div class="board-value num" id="pAfaire">—</div></div>
+            </div>
+
+            <div id="paieList"></div>
+        </section>
+
         <!-- ══ Vue Vidéos ══ -->
         <section id="viewVideos" hidden>
             <div class="topline">
@@ -883,7 +966,10 @@ select.inp{cursor:pointer}
                     </div>
                     <div>
                         <label for="fWhatsapp">WhatsApp</label>
-                        <input class="inp" id="fWhatsapp" placeholder="+33…" autocomplete="off">
+                        <div class="warow">
+                            <input class="inp" id="fWhatsapp" placeholder="+33…" autocomplete="off">
+                            <button type="button" class="btn sm wa" id="fWaOpen" title="Ouvrir la conversation">Écrire</button>
+                        </div>
                     </div>
                     <div class="wide">
                         <label for="fProfil">Lien du profil</label>
@@ -1257,6 +1343,7 @@ const I = {
   upload:'<path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/>',
   download:'<path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/>',
   link:'<path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/>',
+  euro:'<path d="M18 7a6 6 0 00-4.5-2A6.5 6.5 0 007 11.5v1A6.5 6.5 0 0013.5 19a6 6 0 004.5-2"/><path d="M4 10h8M4 14h8"/>',
 };
 function ico(n, cls){
   if(!I[n]) return '';
@@ -1294,6 +1381,10 @@ function initials(n){
     return ((p[0]?.[0]||'?') + (p[1]?.[0]||'')).toUpperCase();
 }
 const euro = v => '€' + Math.round(v||0).toLocaleString('fr-FR');
+// Un virement se fait au centime : arrondir 34,20 € à 34 € donnerait un
+// montant que la banque ne verra jamais.
+const euroC = v => (Math.round((v||0)*100)/100)
+    .toLocaleString('fr-FR', {style:'currency', currency:'EUR'});
 function daysSince(iso){
     const t = new Date(iso).getTime();
     return isNaN(t) ? 0 : Math.max(0, Math.floor((Date.now()-t)/86400000));
@@ -1393,6 +1484,7 @@ function renderAll(){
     document.getElementById('bCom').textContent   = euro(com);
     // La vue « Qui a quoi » lit les mêmes fiches : elle doit suivre.
     if(VIEW === 'stock' && STOCK_TAB === 'envois') renderEnvois();
+    renderFile();
 
     // Les vendeurs hors boutique ont leur propre ligne : à part des chiffres
     // de la boutique, mais visibles — les cacher ferait douter qu'ils existent.
@@ -1992,6 +2084,9 @@ function openSheet(id){
     document.getElementById('fStatus').innerHTML = STATUSES.map((s,i)=>`<option value="${i}" ${i===inf.status?'selected':''}>${esc(s)}</option>`).join('');
     document.getElementById('fPseudo').value   = inf.pseudo || '';
     document.getElementById('fWhatsapp').value = inf.whatsapp || '';
+    const wa = document.getElementById('fWaOpen');
+    wa.disabled = !(inf.whatsapp || '').trim();
+    wa.onclick  = () => ouvrirWhatsApp(inf.id, 'libre');
     document.getElementById('fProfil').value   = inf.profil || '';
     renderPlats(inf.platform_list || []);
     document.getElementById('fPromo').value     = inf.promo_code || '';
@@ -2263,7 +2358,10 @@ function saveSheet(){
     inf.quota             = document.getElementById('fQuota').value;
     inf.deadline          = document.getElementById('fDeadline').value;
     inf.tracking          = document.getElementById('fTracking').value;
-    inf.trackingStatus    = document.getElementById('fTrackStatus').value;
+    // L'état du suivi peut faire avancer le statut, donc la sortie de stock.
+    const etatColis = document.getElementById('fTrackStatus').value;
+    if(etatColis !== inf.trackingStatus) majEtatColis(inf, etatColis);
+    else inf.trackingStatus = etatColis;
     inf.address           = document.getElementById('fAddress').value;
     inf.notes             = document.getElementById('fNotes').value;
 
@@ -2347,6 +2445,10 @@ async function doSave(force){
         const d = await r.json();
         if(d.success){
             dataVersion = d.version || dataVersion;
+            // Le serveur détecte les tailles expédiées alors que le stock est
+            // déjà à zéro. Avant, il le renvoyait ici et personne ne le lisait.
+            if(Array.isArray(d.stock_warnings) && d.stock_warnings.length)
+                toast(`Stock insuffisant — ${d.stock_warnings[0]}`, true);
         }else{
             toast("Enregistrement échoué. Nouvelle tentative…", true);
             setTimeout(()=>doSave(force), 3000);
@@ -2410,9 +2512,11 @@ function setView(v){
     document.getElementById('viewPeople').hidden = v !== 'people';
     document.getElementById('viewVideos').hidden = v !== 'videos';
     document.getElementById('viewStock').hidden  = v !== 'stock';
+    document.getElementById('viewPaie').hidden   = v !== 'paie';
     document.getElementById('navPeople').classList.toggle('active', v==='people');
     document.getElementById('navVideos').classList.toggle('active', v==='videos');
     document.getElementById('navStock').classList.toggle('active', v==='stock');
+    document.getElementById('navPaie').classList.toggle('active', v==='paie');
     document.querySelectorAll('[data-mseg]').forEach(b => b.classList.toggle('on', b.dataset.mseg === v));
     // Les vidéos sont préchargées au démarrage pour le compteur : si c'est déjà
     // fait, il suffit d'afficher, sinon on va les chercher.
@@ -2421,6 +2525,7 @@ function setView(v){
         if(STOCK_TAB === 'envois') renderEnvois();
         else stockData ? renderStock() : loadStock();
     }
+    if(v === 'paie') paieLoaded ? renderPaie() : loadPaie();
 }
 
 /* ── Vidéos ─────────────────────────────────────────────────────────── */
@@ -2857,6 +2962,329 @@ async function dlCatPdf(btn){
     paintIcons(btn.parentElement);
 }
 
+/* ══════════════════════════════════════════════════════════════════════════
+   LA FILE DU JOUR
+   Tout ce qui suit se calcule sur des données déjà chargées : aucune requête
+   de plus. Le principe : une situation détectable = une ligne, avec le motif
+   écrit en clair et le geste qui va avec. Ce qui n'appelle aucune action ne
+   produit pas de ligne — une file qui contient tout ne se lit plus.
+   ══════════════════════════════════════════════════════════════════════════ */
+let FILE_TOUT = false;
+let LIGHT_AGE = {};          // {id: jours depuis la dernière confirmation}
+const FILE_APERCU = 6;
+
+// Nombre de jours écoulés depuis une date ISO, ou null si la date manque.
+function joursDepuis(iso){
+    if(!iso) return null;
+    const t = new Date(iso).getTime();
+    return isNaN(t) ? null : Math.floor((Date.now() - t) / 86400000);
+}
+
+function videosDe(id){
+    return (allVideos || []).filter(v => v.influ_id === id);
+}
+
+/* Les motifs, du plus coûteux au plus anodin. `p` est la priorité :
+   0 = ça bloque ou ça coûte de l'argent, 1 = ça traîne, 2 = c'est une
+   occasion à saisir. */
+function construireFile(){
+    const out = [];
+    const pousse = (inf, p, why, actions) => out.push({inf, p, why, actions});
+
+    ambassadeurs().forEach(inf => {
+        const st    = inf.status || 0;
+        const vids  = videosDe(inf.id);
+        const jours = joursDepuis(inf.lastContact);
+
+        // ── Ce qui coûte de l'argent ────────────────────────────────────
+        // Sans code promo, aucune de ses ventes n'est attribuée.
+        if(st >= 3 && !(inf.promo_code || '').trim())
+            pousse(inf, 0, `<b>Aucun code promo</b> — ses ventes ne sont attribuées à personne`,
+                   ['fiche']);
+
+        // Sans date d'entrée, sa période de paie retombe sur le mois
+        // calendaire : le barème est calculé sur la mauvaise fenêtre.
+        if(st >= 3 && !(inf.program_start_date || '').trim())
+            pousse(inf, 0, `<b>Pas de date de début</b> — sa période de paie est fausse`,
+                   ['fiche']);
+
+        // ── Ce qui bloque ───────────────────────────────────────────────
+        if(st === 4 && !(inf.address || '').trim())
+            pousse(inf, 0, `Colis à envoyer mais <b>adresse manquante</b>`, ['wa:adresse', 'fiche']);
+
+        if(st === 4 && (inf.jerseys || []).length < 2)
+            pousse(inf, 1, `Colis à envoyer mais <b>maillots pas choisis</b>`, ['wa:maillots', 'fiche']);
+
+        if(st === 4 && (inf.address || '').trim() && (inf.jerseys || []).length >= 2)
+            pousse(inf, 1, `Prêt à expédier — adresse et maillots au complet`, ['fiche']);
+
+        if(st === 5 && !(inf.tracking || '').trim())
+            pousse(inf, 1, `Colis envoyé <b>sans numéro de suivi</b>`, ['fiche']);
+
+        if(inf.trackingStatus === 'probleme')
+            pousse(inf, 0, `<b>Problème sur son colis</b> — elle attend une réponse`, ['wa:probleme', 'fiche']);
+
+        // ── Le contenu ──────────────────────────────────────────────────
+        const livre = inf.trackingStatus === 'livre' || st >= 6;
+        const depuisLivraison = joursDepuis(inf.jerseys_shipped_at);
+        if(livre && !vids.length)
+            pousse(inf, 1, depuisLivraison !== null && depuisLivraison >= 3
+                ? `Colis livré il y a <b>${depuisLivraison} j</b>, <b>aucune vidéo</b>`
+                : `Colis livré, <b>aucune vidéo</b> déclarée`, ['wa:unboxing', 'fiche']);
+
+        const playbacks = vids.filter(v => v.type === 'playback').length;
+        if(livre && vids.some(v => v.type === 'unboxing') && playbacks === 0)
+            pousse(inf, 2, `Unboxing fait, <b>aucun playback</b>`, ['wa:playback', 'fiche']);
+
+        // ── L'occasion ──────────────────────────────────────────────────
+        // Elle est à quelques ventes d'un palier de rémunération et sa
+        // période se termine : c'est le seul moment où un message rapporte.
+        const p = PAIE_ROWS.find(r => r.id === inf.id);
+        if(p && p.missing > 0 && p.missing <= 3 && p.days_left <= 7 && p.next_gain)
+            pousse(inf, 2, `À <b>${p.missing} vente${p.missing>1?'s':''}</b> de ${euroC(p.next_gain)}, `
+                 + `sa période finit dans <b>${p.days_left} j</b>`, ['wa:palier', 'fiche']);
+
+        // ── Le silence ──────────────────────────────────────────────────
+        const seuil = RELANCE_THRESHOLD[st];
+        if(seuil !== undefined && jours !== null && jours >= seuil && st < STATUS_LAST)
+            pousse(inf, 2, `Sans nouvelles depuis <b>${jours} j</b> — ${esc(STATUSES[st] || '')}`,
+                   ['wa:relance', 'fiche']);
+    });
+
+    // Les vendeurs hors boutique n'ont ni colis ni vidéo : leur seul risque
+    // est que leur compteur périme et qu'ils sortent du classement.
+    // L'ancienneté ne survit pas à normalize() côté client : elle vient de
+    // /api/classement/light, chargé au démarrage.
+    horsBoutique().forEach(inf => {
+        const age = LIGHT_AGE[inf.id];
+        if(typeof age === 'number' && age >= 30)
+            pousse(inf, age >= 45 ? 0 : 2,
+                   age >= 45 ? `Compteur non vérifié depuis <b>${age} j</b> — <b>sorti du classement</b>`
+                             : `Compteur à confirmer — <b>${age} j</b> sans mise à jour`,
+                   ['ext']);
+    });
+
+    out.sort((a, b) => a.p - b.p || (a.inf.pseudo||'').localeCompare(b.inf.pseudo||''));
+    return out;
+}
+
+function renderFile(){
+    const box = document.getElementById('file');
+    if(!box) return;
+    const tout = construireFile();
+    const n = tout.length;
+
+    if(!n){
+        box.innerHTML = `<div class="file">
+            <div class="file-h"><span class="file-t">La file du jour</span>
+                <span class="file-n zero">à jour</span></div>
+            <div class="fl-vide">Rien à traiter. Tout est en ordre.</div></div>`;
+        return;
+    }
+
+    const vues = FILE_TOUT ? tout : tout.slice(0, FILE_APERCU);
+    const rang = p => p === 0 ? 'hi' : p === 1 ? 'md' : 'lo';
+
+    box.innerHTML = `<div class="file">
+        <div class="file-h">
+            <span class="file-t">La file du jour</span>
+            <span class="file-n">${n}</span>
+            ${n > FILE_APERCU ? `<button class="file-more" onclick="fileTout()">${
+                FILE_TOUT ? 'Réduire' : `Voir les ${n - FILE_APERCU} autres`}</button>` : ''}
+        </div>
+        ${vues.map(l => `<div class="fl ${rang(l.p)}">
+            <span class="fl-p"></span>
+            <span class="fl-who">${esc(l.inf.pseudo || '—')}</span>
+            <span class="fl-why">${l.why}</span>
+            <span class="fl-act">${l.actions.map(a => actionBtn(a, l.inf)).join('')}</span>
+        </div>`).join('')}
+    </div>`;
+    bindFile();
+}
+
+function fileTout(){ FILE_TOUT = !FILE_TOUT; renderFile(); }
+
+function actionBtn(a, inf){
+    if(a === 'fiche') return `<button class="btn sm ghost" data-fl-fiche="${esc(inf.id)}">Fiche</button>`;
+    if(a === 'ext')   return `<button class="btn sm ghost" data-fl-ext="1">Gérer</button>`;
+    const cle = a.slice(3);
+    if(!(inf.whatsapp || '').trim()) return '';
+    return `<button class="btn sm wa" data-fl-wa="${esc(inf.id)}" data-msg="${esc(cle)}">WhatsApp</button>`;
+}
+
+function bindFile(){
+    const box = document.getElementById('file');
+    box.querySelectorAll('[data-fl-fiche]').forEach(b =>
+        b.onclick = () => openSheet(b.dataset.flFiche));
+    box.querySelectorAll('[data-fl-ext]').forEach(b => b.onclick = () => openExt());
+    box.querySelectorAll('[data-fl-wa]').forEach(b =>
+        b.onclick = () => ouvrirWhatsApp(b.dataset.flWa, b.dataset.msg));
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   WHATSAPP
+   Pas d'API, pas d'abonnement : un lien wa.me ouvre la conversation avec le
+   texte déjà écrit. Le message reste envoyé par toi — c'est ce qui fait la
+   différence entre une relance et une notification.
+   ══════════════════════════════════════════════════════════════════════════ */
+function telWa(n){
+    // wa.me veut un numéro international sans signe ni espace. Un 06 français
+    // saisi tel quel devient 336…
+    let t = String(n || '').replace(/[^\d+]/g, '');
+    if(t.startsWith('+')) t = t.slice(1);
+    else if(t.startsWith('00')) t = t.slice(2);
+    else if(t.startsWith('0')) t = '33' + t.slice(1);
+    return t;
+}
+
+function prenom(inf){
+    const p = String(inf.pseudo || '').trim();
+    return p.split(/[\s._-]/)[0] || 'toi';
+}
+
+const MSG = {
+    adresse: i => `Coucou ${prenom(i)} ! On prépare ton colis Volakits 📦 Il me manque juste ton adresse de livraison — tu peux la renseigner ici : ${lienEspace(i)}`,
+    maillots: i => `Coucou ${prenom(i)} ! Il ne te reste plus qu'à choisir tes 2 maillots pour qu'on t'envoie ton colis : ${lienEspace(i)}`,
+    unboxing: i => `Coucou ${prenom(i)} ! Tu as bien reçu ton colis ? Dès que tu as un moment pour l'unboxing, tout est expliqué ici : ${lienEspace(i)}`,
+    playback: i => `Coucou ${prenom(i)} ! Super pour l'unboxing 🔥 Quand tu veux pour la vidéo avec le maillot — tu peux la déclarer ici : ${lienEspace(i)}`,
+    probleme: i => `Coucou ${prenom(i)} ! Je vois qu'il y a un souci avec ton colis, raconte-moi ce qui s'est passé et je m'en occupe.`,
+    palier: i => {
+        const p = PAIE_ROWS.find(r => r.id === i.id) || {};
+        return `Coucou ${prenom(i)} ! Tu es à ${p.missing} vente${p.missing>1?'s':''} de passer à ${euroC(p.next_gain)} sur ta période, et il te reste ${p.days_left} jour${p.days_left>1?'s':''} 👀 Ton espace : ${lienEspace(i)}`;
+    },
+    relance: i => `Coucou ${prenom(i)} ! Comment ça avance de ton côté ? Tout est à jour dans ton espace : ${lienEspace(i)}`,
+    suivi: i => `Coucou ${prenom(i)} ! Ton colis Volakits est parti 🚚 Numéro de suivi : ${i.tracking || '—'}. Tu peux suivre l'avancement ici : ${lienEspace(i)}`,
+    libre: i => `Coucou ${prenom(i)} ! `,
+};
+
+function lienEspace(inf){
+    // Le serveur pose `_espace_url` à chaque lecture ; il n'y a pas de repli
+    // maison, un slug reconstitué à la main donnerait un lien mort.
+    return inf._espace_url || '';
+}
+
+function ouvrirWhatsApp(id, cle){
+    const inf = find(id);
+    if(!inf) return;
+    const num = telWa(inf.whatsapp);
+    if(!num){ toast('Pas de numéro WhatsApp sur sa fiche', true); return; }
+    const texte = (MSG[cle] || MSG.libre)(inf);
+    window.open(`https://wa.me/${num}?text=${encodeURIComponent(texte)}`, '_blank', 'noopener');
+
+    // Le contact n'est enregistré que parce que la conversation s'est
+    // réellement ouverte. Le bouton « Relancer » d'avant remettait le compteur
+    // à zéro sans que personne n'ait été contacté.
+    inf.lastContact = new Date().toISOString();
+    inf.relances = (inf.relances || 0) + 1;
+    inf.relanceHistory = (inf.relanceHistory || []).concat(inf.lastContact);
+    scheduleSave();
+    renderAll();
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   À PAYER
+   ══════════════════════════════════════════════════════════════════════════ */
+let PAIE_ROWS = [], PAIE_TOT = {}, paieLoaded = false;
+
+async function loadPaie(silencieux){
+    try{
+        const r = await fetch('/api/paie');
+        const d = await r.json();
+        PAIE_ROWS = d.rows || [];
+        PAIE_TOT  = d.totals || {};
+        paieLoaded = true;
+    }catch(e){
+        if(!silencieux) toast('Chargement des paiements impossible', true);
+    }
+    const n = document.getElementById('navPaieCount');
+    if(n) n.textContent = PAIE_TOT.a_payer || '';
+    if(VIEW === 'paie') renderPaie();
+    if(VIEW === 'people') renderFile();
+}
+
+function renderPaie(){
+    document.getElementById('pRestant').textContent = euroC(PAIE_TOT.restant);
+    document.getElementById('pRegle').textContent   = euroC(PAIE_TOT.regle);
+    document.getElementById('pDu').textContent      = euroC(PAIE_TOT.du);
+    document.getElementById('pAfaire').textContent  = PAIE_TOT.a_payer ?? 0;
+
+    const box = document.getElementById('paieList');
+    if(!PAIE_ROWS.length){
+        box.innerHTML = `<div class="empty">${ico('euro')}
+            <div class="empty-t">Rien à verser</div>
+            <div class="empty-s">Les montants apparaissent dès qu'une période a des ventes.</div></div>`;
+        paintIcons(box);
+        return;
+    }
+
+    box.innerHTML = PAIE_ROWS.map(r => {
+        const base = r.type === 'fixed'
+            ? `Fixe débloqué à <b>${r.threshold} ventes</b>`
+            : `Commission <b>10 %</b> des ventes nettes`;
+        const suite = r.missing > 0 && r.next_gain
+            ? ` · à <b>${r.missing}</b> vente${r.missing>1?'s':''} de ${euroC(r.next_gain)}`
+            : '';
+        return `<div class="pay ${r.paid ? 'ok' : ''}">
+            <div class="pay-n">
+                <div class="pay-who">${esc(r.pseudo)}${r.light ? ' <span class="hb-tag">hors boutique</span>' : ''}</div>
+                <div class="pay-per">Période <b>${fmtJour(r.start)} → ${fmtJour(r.end)}</b>
+                    ${r.paid ? '' : ` · reste ${r.days_left} j`}</div>
+            </div>
+            <div class="pay-mid"><b>${r.sales}</b> vente${r.sales>1?'s':''} · ${base}${suite}</div>
+            <div class="pay-eur">
+                <div class="pay-v">${euroC(r.amount)}</div>
+                <div class="pay-k">${r.paid ? 'réglé' : 'à verser'}</div>
+            </div>
+            <div class="pay-btn">
+                <button class="btn sm ${r.paid ? 'ghost' : 'primary'}"
+                        data-pay="${esc(r.id)}" data-per="${esc(r.start)}"
+                        data-mnt="${r.amount}" data-on="${r.paid ? 1 : 0}">
+                    ${r.paid ? 'Annuler' : 'Marquer payé'}</button>
+            </div>
+            ${r.anchored ? '' : `<div class="pay-warn">Aucune date de début de programme :
+                sa période suit le mois calendaire, donc ce montant est calculé sur la mauvaise
+                fenêtre. À corriger dans sa fiche.</div>`}
+        </div>`;
+    }).join('');
+
+    box.querySelectorAll('[data-pay]').forEach(b => {
+        b.onclick = async () => {
+            b.disabled = true;
+            try{
+                await fetch('/api/paie/regle', {
+                    method:'POST', headers:{'Content-Type':'application/json'},
+                    body: JSON.stringify({id:b.dataset.pay, period:b.dataset.per,
+                                          amount:parseFloat(b.dataset.mnt) || 0,
+                                          paid: b.dataset.on !== '1'})
+                });
+                await loadPaie(true);
+                toast(b.dataset.on === '1' ? 'Marquage annulé' : 'Marqué payé');
+            }catch(e){ toast('Enregistrement impossible', true); b.disabled = false; }
+        };
+    });
+}
+
+// « 2026-08-12 » → « 12 août »
+function fmtJour(iso){
+    const d = new Date(iso + 'T12:00:00');
+    return isNaN(d) ? iso : d.toLocaleDateString('fr-FR', {day:'numeric', month:'short'});
+}
+
+function exportPaie(){
+    const lignes = [['Pseudo','Période début','Période fin','Ventes','Base','Montant €','Payé','Payé le']]
+        .concat(PAIE_ROWS.map(r => [r.pseudo, r.start, r.end, r.sales,
+            r.type === 'fixed' ? `fixe ${r.threshold} ventes` : 'commission 10%',
+            String(r.amount).replace('.', ','), r.paid ? 'oui' : 'non',
+            (r.paid_at || '').slice(0,10)]));
+    const csv = '﻿' + lignes.map(l => l.map(c =>
+        `"${String(c).replace(/"/g,'""')}"`).join(';')).join('\n');
+    const u = URL.createObjectURL(new Blob([csv], {type:'text/csv;charset=utf-8'}));
+    const a = document.createElement('a');
+    a.href = u; a.download = `volakits-paie-${new Date().toISOString().slice(0,10)}.csv`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(u), 4000);
+}
+
 /* ── Qui a quoi ──────────────────────────────────────────────────────────
    La même donnée que la fiche de chaque ambassadrice, mais rassemblée : sans
    ça, savoir qui détient le dernier S d'un modèle demande d'ouvrir onze fiches
@@ -2961,6 +3389,26 @@ function renderEnvois(){
     bindEnvois();
 }
 
+/* ── L'état du colis, en un seul geste ───────────────────────────────────
+   Il y avait deux notions qui ne se parlaient pas : le statut de
+   l'influenceuse (« Colis envoyé », « Livré ») et l'état du suivi. Seul le
+   premier fait sortir le maillot du stock, si bien qu'on pouvait marquer un
+   colis parti sans que le stock bouge. Poser l'état avance donc aussi le
+   statut — jamais en arrière, pour ne pas défaire une étape franchie à la
+   main et remettre des maillots en stock par surprise. */
+const ETAT_VERS_STATUT = {prepare: 4, envoye: 5, livre: 6};
+
+function majEtatColis(inf, etat){
+    inf.trackingStatus = etat;
+    const vise = ETAT_VERS_STATUT[etat];
+    if(vise !== undefined && (inf.status || 0) < vise){
+        inf.status = vise;
+        toast(`${inf.pseudo || 'Fiche'} → ${STATUSES[vise]}`);
+    }
+    scheduleSave();
+    renderAll();
+}
+
 /* Rien ne se redessine pendant la frappe : le numéro de suivi s'écrit d'une
    traite, comme partout ailleurs dans la console. */
 function bindEnvois(){
@@ -2979,8 +3427,7 @@ function bindEnvois(){
         sel.onchange = () => {
             const cur = find(sel.dataset.envEtat);
             if(!cur) return;
-            cur.trackingStatus = sel.value;
-            scheduleSave();
+            majEtatColis(cur, sel.value);
             renderEnvois();
         };
     });
@@ -3309,6 +3756,7 @@ document.getElementById('exportBtn').addEventListener('click', exportCsv);
 document.getElementById('vq').addEventListener('input', renderVideos);
 document.getElementById('sq').addEventListener('input',
     () => STOCK_TAB === 'envois' ? renderEnvois() : renderStock());
+document.getElementById('paieRefresh').addEventListener('click', () => loadPaie());
 document.getElementById('stockRefresh').addEventListener('click',
     () => STOCK_TAB === 'envois' ? renderEnvois() : loadStock());
 document.getElementById('vidAddBtn').addEventListener('click', openVidUpload);
@@ -3332,12 +3780,24 @@ document.addEventListener('keydown', e => {
 document.getElementById('grid').innerHTML = Array.from({length:3}, ()=>'<div class="skel"></div>').join('');
 paintIcons();
 load();
-// Compteur vidéos dans la barre latérale, sans attendre l'ouverture de la vue.
+// Vidéos, paiements et ancienneté des compteurs sont chargés dès le départ,
+// pas à l'ouverture de leur vue : la file du jour a besoin des trois pour dire
+// « colis livré, aucune vidéo » ou « à 2 ventes du palier ». Chaque arrivée la
+// repeint, dans l'ordre où les réponses tombent.
 fetch('/api/influenceurs/videos')
     .then(r => r.json())
     .then(d => { allVideos = d.videos || []; videosLoaded = true;
                  document.getElementById('navVidCount').textContent = allVideos.length || '';
-                 const mv = document.getElementById('mVidCount'); if(mv) mv.textContent = allVideos.length || ''; })
+                 const mv = document.getElementById('mVidCount'); if(mv) mv.textContent = allVideos.length || '';
+                 if(VIEW === 'people') renderFile(); })
+    .catch(() => {});
+
+loadPaie(true);
+
+fetch('/api/classement/light')
+    .then(r => r.json())
+    .then(d => { (d.entries || []).forEach(e => { if(e.id) LIGHT_AGE[e.id] = e.age_days; });
+                 if(VIEW === 'people') renderFile(); })
     .catch(() => {});
 </script>
 </body>
