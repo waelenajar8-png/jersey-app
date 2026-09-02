@@ -424,6 +424,112 @@ input,select{font-family:inherit}
     .ps-v{grid-area:v;margin-top:0;font-size:20px}
     .ps-y{grid-area:y;margin-top:10px;padding-top:9px}
 }
+/* ── Le sélecteur de palier ───────────────────────────────────────────────
+   Quatre niveaux, quatre pastilles, une seule carte affichée à la fois. On
+   ne fait pas défiler pour comprendre : on tape. La piste sert en même temps
+   de barre de progression — la position du jeton EST l'information.
+   Chaque palier a sa couleur, du gris au noir : l'escalade doit se voir
+   avant de se lire. */
+.tr{display:flex;align-items:flex-start;gap:0;margin-top:18px;position:relative}
+.tr-i{flex:1 1 0;min-width:0;background:none;border:0;padding:0;cursor:pointer;
+    font-family:inherit;display:flex;flex-direction:column;align-items:center;
+    gap:7px;position:relative;-webkit-tap-highlight-color:transparent}
+/* Le rail passe derrière les pastilles, d'un centre à l'autre. */
+.tr-i::before{content:"";position:absolute;top:23px;left:-50%;width:100%;height:3px;
+    background:var(--line);border-radius:3px;z-index:0}
+.tr-i:first-child::before{display:none}
+.tr-i.fill::before{background:var(--ok)}
+.tr-d{width:46px;height:46px;border-radius:16px;display:grid;place-items:center;
+    font-size:21px;line-height:1;background:var(--surface);border:2px solid var(--line);
+    position:relative;z-index:1;transition:transform .18s cubic-bezier(.2,.8,.2,1),
+    box-shadow .18s ease,border-color .18s ease}
+.tr-i.got .tr-d{border-color:var(--ok);background:var(--ok-soft)}
+.tr-i.here .tr-d{transform:scale(1.12)}
+.tr-i.on .tr-d{box-shadow:0 0 0 4px var(--accent-soft);border-color:var(--accent)}
+.tr-i.here.on .tr-d{box-shadow:0 0 0 4px var(--accent-soft)}
+.tr-l{font-size:10.5px;font-weight:800;letter-spacing:-.01em;color:var(--faint);
+    text-align:center;line-height:1.25;padding:0 2px}
+.tr-i.on .tr-l{color:var(--ink)}
+.tr-i.got .tr-l{color:var(--ok)}
+.tr-i.here .tr-l,.tr-i.here .tr-n{color:var(--accent)}
+.tr-n{font-size:9.5px;font-weight:800;color:var(--faint);letter-spacing:-.01em}
+.tr-i.on .tr-n{color:var(--accent)}
+
+/* ── La carte du palier ─────────────────────────────────────────────────
+   Une seule à l'écran, dans la couleur de son niveau. Le gain se montre —
+   autant de maillots dessinés que de maillots reçus — avant de s'écrire. */
+.tc{border-radius:22px;padding:22px 22px 24px;margin-top:16px;
+    animation:tcIn .3s cubic-bezier(.2,.8,.2,1) both}
+@keyframes tcIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@media(prefers-reduced-motion:reduce){.tc{animation:none}}
+.tc.t0{background:#EDF0F5;color:#1B2334}
+.tc.t1{background:var(--accent-soft);color:var(--ink)}
+.tc.t2{background:#FAF1D9;color:#3A2E08}
+.tc.t3{background:var(--sidebar);color:#fff}
+.tc-h{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.tc-e{font-size:30px;line-height:1}
+.tc-n{font-size:26px;font-weight:800;letter-spacing:-.04em;line-height:1}
+.tc-tag{margin-left:auto;font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;
+    font-weight:800;padding:5px 10px;border-radius:8px;
+    background:rgba(11,16,32,.08);color:currentColor}
+.tc.t3 .tc-tag{background:rgba(255,255,255,.16)}
+.tc-tag.got{background:var(--ok);color:#fff}
+.tc-tag.now{background:var(--accent);color:#fff}
+.tc-c{font-size:13px;font-weight:600;opacity:.72;margin-top:9px}
+/* Le gain, dessiné. Deux maillots ou six, ça se compte à l'œil. */
+.tc-gift{background:rgba(255,255,255,.62);border-radius:16px;padding:15px 17px;margin-top:16px}
+.tc.t3 .tc-gift{background:rgba(255,255,255,.08)}
+.tc-shirts{display:flex;gap:5px;flex-wrap:wrap}
+.tc-shirts svg{width:26px;height:26px;flex:none}
+.tc-g{display:flex;align-items:baseline;gap:7px;margin-top:11px}
+.tc-gn{font-size:27px;font-weight:800;letter-spacing:-.05em;line-height:1}
+.tc-gl{font-size:12.5px;font-weight:700;opacity:.78;line-height:1.3}
+.tc-perks{display:flex;flex-wrap:wrap;gap:6px;margin-top:15px}
+.tc-perk{font-size:12px;font-weight:600;padding:7px 11px;border-radius:9px;
+    background:rgba(255,255,255,.62);line-height:1.3}
+.tc.t3 .tc-perk{background:rgba(255,255,255,.1)}
+/* Ce qui manque, dit une seule fois et fort : c'est le hameçon. */
+.tc-need{display:flex;align-items:center;gap:11px;margin-top:16px;padding:13px 15px;
+    border-radius:14px;background:rgba(11,16,32,.07);font-size:13px;font-weight:700;
+    line-height:1.35}
+.tc.t3 .tc-need{background:rgba(255,255,255,.12)}
+.tc-need b{font-size:19px;font-weight:800;letter-spacing:-.04em}
+
+/* ── La paie : une échelle qui se remet à zéro à chaque période ───────── */
+.paie{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-top:16px}
+.ps{background:var(--surface);border:1px solid var(--line);border-radius:16px;
+    padding:15px 15px 16px;text-align:center}
+.ps.done{background:var(--ok-soft);border-color:transparent}
+.ps-n{font-size:11.5px;font-weight:800;color:var(--muted);letter-spacing:-.01em}
+.ps.done .ps-n{color:var(--ok)}
+.ps-v{font-size:24px;font-weight:800;letter-spacing:-.045em;line-height:1;margin-top:8px}
+.ps.done .ps-v{color:var(--ok)}
+.ps-w{font-size:11px;font-weight:600;color:var(--faint);margin-top:7px;line-height:1.35}
+.ps.done .ps-w{color:var(--ok)}
+.ps-y{font-size:10.5px;font-weight:700;color:var(--faint);margin-top:8px;
+    padding-top:8px;border-top:1px solid var(--line)}
+.ps.done .ps-y{border-color:rgba(31,138,91,.22);color:var(--ok)}
+.pay-note{background:var(--accent-soft);border-radius:16px;padding:17px 19px;margin-top:12px}
+.pay-note-t{font-size:9px;letter-spacing:.17em;text-transform:uppercase;
+    font-weight:700;color:var(--accent)}
+.pay-note-d{font-size:13px;color:var(--ink-2);margin-top:8px;line-height:1.6;font-weight:500}
+.pay-note-d b{color:var(--ink);font-weight:700}
+.pay-when{font-size:12.5px;color:var(--ink-2);font-weight:600;margin-top:11px;
+    padding-top:11px;border-top:1px solid rgba(47,80,241,.16);line-height:1.55}
+.pay-when b{color:var(--accent);font-weight:800}
+.sec-sub{font-size:13px;color:var(--muted);font-weight:500;margin-top:6px}
+@media (max-width:520px){
+    /* Une ligne par palier de paie : le seuil, où j'en suis, le montant — et
+       la projection annuelle dessous, parce que c'est elle qui fait rêver. */
+    .paie{grid-template-columns:1fr;gap:7px}
+    .ps{display:grid;grid-template-columns:auto 1fr auto;align-items:center;
+        column-gap:14px;text-align:left;padding:14px 16px;
+        grid-template-areas:"n w v" "y y y"}
+    .ps-n{grid-area:n}
+    .ps-w{grid-area:w;margin-top:0}
+    .ps-v{grid-area:v;margin-top:0;font-size:20px}
+    .ps-y{grid-area:y;margin-top:10px;padding-top:9px}
+}
 /* ── Le chemin : quatre paliers, tous lisibles d'un coup ──────────────── */
 /* Les cartes ne s'étirent pas sur toute la largeur : au-delà, la ligne
    de texte devient trop longue pour être lue en diagonale. */
@@ -1201,7 +1307,7 @@ function render(){
     if(TAB === 'home')      v.innerHTML = viewHome();
     else if(TAB==='missions') v.innerHTML = viewMissions();
     else if(TAB==='colis')    v.innerHTML = viewColis();
-    else if(TAB==='paliers'){ v.innerHTML = viewPaliers(); }
+    else if(TAB==='paliers'){ v.innerHTML = viewPaliers(); bindPaliers(); }
     else if(TAB==='contenus') v.innerHTML = viewContenus();
     else if(TAB==='profil'){
         v.innerHTML = viewProfil();
@@ -1961,6 +2067,22 @@ function viewColis(){
 }
 
 // ── Paliers ─────────────────────────────────────────────────────────────
+/* ── Avantages ─────────────────────────────────────────────────────────
+   Un menu de niveaux, pas une notice. Le palier sélectionné s'ouvre sur sa
+   propre couleur, du gris au noir ; on tape une pastille pour aller voir ce
+   que donne le suivant, ou le dernier. Par défaut, c'est le sien qui s'ouvre. */
+let PAL_SEL = null;
+
+const SHIRT = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8.5 2.6 12 4.7l3.5-2.1 5 2.6a1 1 0 0 1 .5.9v3.4a1 1 0 0 1-1 1h-2v9.6a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V10.5H4a1 1 0 0 1-1-1V6.1a1 1 0 0 1 .5-.9l5-2.6Z"/></svg>';
+
+function palChoisir(i){ PAL_SEL = i; render(); }
+
+function bindPaliers(){
+    document.querySelectorAll('[data-pal]').forEach(b=>{
+        b.onclick = () => palChoisir(+b.getAttribute('data-pal'));
+    });
+}
+
 function viewPaliers(){
     const t = D.tier, next = t.next, idx = t.index;
     const d = (t.details && t.details[0]) || null;
@@ -1971,8 +2093,12 @@ function viewPaliers(){
     const annuel = {};
     (R.year || []).forEach(y => { annuel[y.threshold] = y.yearly; });
 
+    const paliers = R.tiers || [];
+    const sel = Math.min(paliers.length - 1, Math.max(0, PAL_SEL === null ? idx : PAL_SEL));
+    const x = paliers[sel];
+
     return `
-    ${/* ── Où j'en suis. Une seule surface forte sur l'écran. ── */''}
+    ${/* ── Où j'en suis : la seule surface forte de l'écran. ── */''}
     ${isLight() ? '' : `
     <section class="rw-hero">
         <div class="rw-hero-k">Ton palier</div>
@@ -1987,46 +2113,58 @@ function viewPaliers(){
         </div>
     </section>`}
 
-    ${/* ── Le chemin. Les quatre paliers, tous ouverts : un palier qu'on ne
-         peut pas lire ne donne envie de rien. ── */''}
-    ${isLight() ? '' : `
+    ${/* ── Le menu de niveaux ── */''}
+    ${isLight() || !x ? '' : `
     <section class="sec">
         <div class="sec-k">Ta progression</div>
-        <div class="sec-t">Les quatre paliers</div>
-        <div class="sec-sub">Débloqués par tes <b>ventes depuis le début</b>, gardés à vie. Ils décident de tes maillots.</div>
-        <div class="path">
-            ${(R.tiers || []).map((x,i)=>{
-                const etat = i < idx ? 'done' : i === idx ? 'now' : 'lock';
-                const tag  = etat === 'done' ? 'Acquis'
-                           : etat === 'now'  ? 'Ton palier'
-                           : `Dans ${fmtFull(x.missing_sales)} vente${x.missing_sales>1?'s':''}`;
-                // Le premier avantage répète toujours les maillots, déjà en
-                // gros juste au-dessus : on ne le montre pas deux fois.
-                const perks = (x.perks || []).filter(pk => !/maillot/i.test(pk)).slice(0, 3);
-                return `
-                <div class="pn ${etat}">
-                    <div class="pn-dot">${esc(x.icon || '')}</div>
-                    <div class="pn-card">
-                        <div class="pn-top">
-                            <span class="pn-name">${esc(x.name)}</span>
-                            <span class="pn-tag">${esc(tag)}</span>
-                        </div>
-                        <div class="pn-cond">${x.req_sales === 0
-                            ? `Dès ton entrée dans le programme`
-                            : `À partir de ${fmtFull(x.req_sales)} ventes au total`}</div>
-                        <div class="pn-gain">
-                            <span class="pn-gn num">${fmtFull(x.jerseys)}</span>
-                            <span class="pn-gl">maillots floqués offerts<br>à chaque période</span>
-                        </div>
-                        ${perks.length ? `<ul class="pn-perks">${perks.map(pk=>`<li>${esc(pk)}</li>`).join('')}</ul>` : ''}
-                    </div>
-                </div>`;
+        <div class="sec-t">Touche un palier pour voir ce qu'il donne</div>
+
+        <div class="tr">
+            ${paliers.map((pl,i)=>{
+                const cls = [i <= idx ? 'got' : '', i === idx ? 'here' : '',
+                             i === sel ? 'on' : '', i > 0 && i <= idx ? 'fill' : ''].filter(Boolean).join(' ');
+                return `<button class="tr-i ${cls}" type="button" data-pal="${i}"
+                        aria-pressed="${i === sel}" aria-label="${escAttr(pl.name)}">
+                    <span class="tr-d">${esc(pl.icon || '')}</span>
+                    <span class="tr-l">${esc(pl.name)}</span>
+                    <span class="tr-n">${i === idx ? 'toi' : i < idx ? 'acquis' : `+${fmtFull(pl.missing_sales)}`}</span>
+                </button>`;
             }).join('')}
+        </div>
+
+        <div class="tc t${sel}">
+            <div class="tc-h">
+                <span class="tc-e">${esc(x.icon || '')}</span>
+                <span class="tc-n">${esc(x.name)}</span>
+                <span class="tc-tag ${sel < idx ? 'got' : sel === idx ? 'now' : ''}">${
+                    sel < idx ? 'Acquis' : sel === idx ? 'Ton palier' : 'À débloquer'}</span>
+            </div>
+            <div class="tc-c">${x.req_sales === 0
+                ? `Acquis dès ton entrée dans le programme`
+                : `À partir de ${fmtFull(x.req_sales)} ventes depuis le début`}</div>
+
+            <div class="tc-gift">
+                <div class="tc-shirts">${Array.from({length: x.jerseys}, ()=>SHIRT).join('')}</div>
+                <div class="tc-g">
+                    <span class="tc-gn num">${fmtFull(x.jerseys)}</span>
+                    <span class="tc-gl">maillots floqués offerts<br>à chaque période</span>
+                </div>
+            </div>
+
+            ${(() => {
+                // Le premier avantage répète toujours les maillots, déjà dessinés.
+                const pk = (x.perks || []).filter(v => !/maillot/i.test(v));
+                return pk.length ? `<div class="tc-perks">${pk.map(v=>`<span class="tc-perk">${esc(v)}</span>`).join('')}</div>` : '';
+            })()}
+
+            ${sel > idx ? `<div class="tc-need">
+                <b>${fmtFull(x.missing_sales)}</b>
+                <span>vente${x.missing_sales>1?'s':''} de plus et il est à toi, pour toujours.</span>
+            </div>` : ''}
         </div>
     </section>`}
 
-    ${/* ── La paie. Autre échelle, autres nombres, autre rythme : elle se
-         remet à zéro et ne dépend pas du palier. ── */''}
+    ${/* ── La paie : autre échelle, autre rythme, autres nombres. ── */''}
     <section class="sec">
         <div class="sec-k">Ta paie</div>
         <div class="sec-t">Ce que tu gagnes sur une période</div>
@@ -2226,6 +2364,7 @@ async function addVideo(){
 }
 
 function setTab(t){
+    if(t !== TAB) PAL_SEL = null;
     TAB = t;
     document.querySelectorAll('[data-tab]').forEach(b=>{
         b.classList.toggle('active', b.getAttribute('data-tab')===t);
