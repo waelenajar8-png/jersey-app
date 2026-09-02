@@ -4483,10 +4483,13 @@ INFLUENCER_TIERS = [
         "monthly_fixed": 50,
         "monthly_jerseys": 2,
         "jersey_cost": 25.52,
+        # À partir d'ici le programme est rentable pour la marque : c'est ce
+        # qui rend la personnalisation possible, et c'est la vraie rupture
+        # avec le palier de départ.
         "perks": [
-            "Tu choisis avant tout le monde à chaque réassort",
-            "Les nouveaux modèles avant leur sortie en boutique",
-            "Un flocage personnalisé au nom de ton choix",
+            "Tes maillots deviennent les tiens : flocage, numéro et taille au choix",
+            "Le catalogue avant les autres — tu réserves tes modèles en premier",
+            "Ton palier est acquis : un mois plus calme ne te fait jamais redescendre",
         ],
     },
     {
@@ -4500,9 +4503,9 @@ INFLUENCER_TIERS = [
         "monthly_jerseys": 4,
         "jersey_cost": 44.0,
         "perks": [
-            "Deux fois plus de maillots à chaque période",
             "Tes vidéos relayées sur nos comptes",
-            "Tu choisis avant tout le monde à chaque réassort",
+            "Priorité sur les modèles en tension, même quand il n'en reste qu'un",
+            "Deux flocages au choix : le tien, et celui que tu veux offrir",
         ],
     },
     {
@@ -4516,10 +4519,9 @@ INFLUENCER_TIERS = [
         "monthly_jerseys": 6,
         "jersey_cost": 62.0,
         "perks": [
-            "Trois fois plus de maillots à chaque période",
-            "Un maillot hors catalogue par saison, celui que tu veux",
-            "Tes vidéos relayées et sponsorisées sur nos comptes",
+            "Tes vidéos sponsorisées : on met un budget publicitaire derrière",
             "Une ligne directe avec l'équipe, sans passer par le support",
+            "Ton avis sur les prochains modèles avant qu'on les commande",
         ],
     },
 ]
