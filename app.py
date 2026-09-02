@@ -4461,10 +4461,14 @@ INFLUENCER_TIERS = [
         "monthly_fixed": None,
         "monthly_jerseys": 2,
         "jersey_cost": 25.52,
+        # Ce que l'influenceuse GAGNE, pas ce que la plateforme propose. Un
+        # avantage qui décrit une fonctionnalité (« ton espace personnel »)
+        # ne fait envie à personne : on ne garde que ce qui a une valeur pour
+        # elle, dit en euros, en objets ou en accès.
         "perks": [
-            "2 maillots floqués offerts",
-            "Code promo personnalisé −15 % pour ta communauté",
-            "Ton espace personnel et ton suivi de ventes",
+            "2 maillots floqués à ton nom, offerts",
+            "−15 % pour ta communauté avec ton code",
+            "Livraison offerte, rien à avancer",
         ],
     },
     {
@@ -4478,9 +4482,9 @@ INFLUENCER_TIERS = [
         "monthly_jerseys": 2,
         "jersey_cost": 25.52,
         "perks": [
-            "2 maillots floqués par mois",
-            "Accès anticipé aux nouveautés",
-            "Choix prioritaire sur les modèles disponibles",
+            "Tu choisis avant tout le monde à chaque réassort",
+            "Les nouveaux modèles avant leur sortie en boutique",
+            "Un flocage personnalisé au nom de ton choix",
         ],
     },
     {
@@ -4494,9 +4498,9 @@ INFLUENCER_TIERS = [
         "monthly_jerseys": 4,
         "jersey_cost": 44.0,
         "perks": [
-            "4 maillots floqués par mois",
-            "Mise en avant sur nos comptes",
-            "Accès anticipé aux nouveautés",
+            "Deux fois plus de maillots à chaque période",
+            "Tes vidéos relayées sur nos comptes",
+            "Tu choisis avant tout le monde à chaque réassort",
         ],
     },
     {
@@ -4510,10 +4514,10 @@ INFLUENCER_TIERS = [
         "monthly_jerseys": 6,
         "jersey_cost": 62.0,
         "perks": [
-            "6 maillots floqués par mois",
-            "Avant-première sur les nouveautés Volakits",
-            "Avantages exclusifs et accès direct à l'équipe",
-            "Mise en avant sur nos comptes",
+            "Trois fois plus de maillots à chaque période",
+            "Un maillot hors catalogue par saison, celui que tu veux",
+            "Tes vidéos relayées et sponsorisées sur nos comptes",
+            "Une ligne directe avec l'équipe, sans passer par le support",
         ],
     },
 ]
