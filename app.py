@@ -4714,7 +4714,9 @@ def _espace_rewards(inf, stats):
             "jerseys":       jerseys,
             # Les maillots ne partent que si l'influenceur a été actif dans le
             # mois : c'est le garde-fou du gifting, il doit être annoncé.
-            "gifting_threshold": GIFTING_THRESHOLD_BY_JERSEYS.get(jerseys, GIFTING_MIN_SALES),
+            # Le volume de ventes qui donne ce nombre de maillots — commun à
+            # tout le monde, identique au seuil de rémunération du même rang.
+            "gifting_threshold": next((s for s, n in GIFTING_BY_PERIOD if n == jerseys), GIFTING_MIN_SALES),
             "monthly_threshold": int(th) if th else None,
             "monthly_fixed":     float(fx) if fx else None,
             "yearly":            round(float(fx) * 12) if fx else None,
@@ -4727,9 +4729,12 @@ def _espace_rewards(inf, stats):
     # l'API est lisible depuis le navigateur de l'influenceur.
     return {
         "base_pct": BASE_COMMISSION_PCT,
+        # Une seule échelle : le même volume de ventes décide de l'argent ET
+        # des maillots. Les afficher séparément laissait croire à deux règles.
         "steps": [{
             "threshold": th,
             "fixed":     f,
+            "jerseys":   next((n for s_, n in GIFTING_BY_PERIOD if s_ == th), 0),
             "reached":   sales_month >= th,
             "missing":   max(0, th - sales_month),
         } for th, f in steps],
@@ -4738,27 +4743,50 @@ def _espace_rewards(inf, stats):
     }
 
 
+# Barème du matériel : il suit les ventes de la PÉRIODE, pas le palier.
+#
+# Le palier reste acquis à vie — c'est un titre, il ne se reperd pas sur un
+# mois creux. Mais le colis, lui, est une dépense réelle à chaque envoi : il
+# se règle sur ce qui vient d'être produit. Une VIP qui fait 20 ventes garde
+# son titre et reçoit 2 maillots, pas 6 ; avant, elle n'en recevait aucun,
+# parce qu'on exigeait d'elle les 30 ventes de son palier.
+#
+# Les seuils sont ceux de la rémunération (10 / 30 / 60) : une seule échelle
+# pour l'argent et le matériel, donc une seule chose à retenir.
+GIFTING_BY_PERIOD = [(60, 6), (30, 4), (10, 2)]
+
+
+def _jerseys_pour(sales_period):
+    """Maillots dus pour ce volume de ventes sur la période, et le prochain palier."""
+    ventes = _safe_int(sales_period, 0)
+    for seuil, nb in GIFTING_BY_PERIOD:
+        if ventes >= seuil:
+            suivant = next(((s, n) for s, n in reversed(GIFTING_BY_PERIOD) if s > seuil), None)
+            return nb, seuil, suivant
+    return 0, GIFTING_BY_PERIOD[-1][0], None
+
+
 def _monthly_gifting(stats):
     """
-    Gifting du mois : les maillots ne partent que si l'influenceur a été actif.
-    Le seuil dépend de la quantité envoyée (2 → 10 ventes, 4 → 20, 6 → 30),
-    pour que le coût du matériel reste proportionné à ce qu'il produit.
-    Retourne : jerseys, cost, unlocked, missing, threshold, tier_jerseys.
-    """
-    tier_idx, _, _, _ = _compute_tier_progress(stats)
-    tier = INFLUENCER_TIERS[tier_idx]
-    sales_month = _safe_int(stats.get("sales_month", 0))
+    Maillots dus sur la période en cours.
 
-    jerseys   = tier["monthly_jerseys"]
-    threshold = GIFTING_THRESHOLD_BY_JERSEYS.get(jerseys, GIFTING_MIN_SALES)
-    unlocked  = sales_month >= threshold
+    Retourne : jerseys, cost, unlocked, missing, threshold, next_step.
+    """
+    sales_month = _safe_int(stats.get("sales_month", 0))
+    jerseys, seuil, suivant = _jerseys_pour(sales_month)
+
+    # Le coût unitaire est celui du palier qui envoie cette quantité-là.
+    cout = next((float(t.get("jersey_cost") or 0) for t in INFLUENCER_TIERS
+                 if int(t.get("monthly_jerseys") or 0) == jerseys), 0.0)
 
     return {
-        "jerseys":      jerseys if unlocked else 0,
-        "cost":         tier["jersey_cost"] if unlocked else 0.0,
-        "unlocked":     unlocked,
-        "missing":      max(0, threshold - sales_month),
-        "threshold":    threshold,
+        "jerseys":      jerseys,
+        "cost":         cout if jerseys else 0.0,
+        "unlocked":     jerseys > 0,
+        # Ce qu'il manque pour le premier palier de maillots, ou pour le suivant.
+        "missing":      max(0, (suivant[0] if (jerseys and suivant) else seuil) - sales_month),
+        "threshold":    seuil,
+        "next_step":    ({"threshold": suivant[0], "jerseys": suivant[1]} if suivant else None),
         "tier_jerseys": jerseys,
     }
 
