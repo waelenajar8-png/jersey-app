@@ -5517,6 +5517,22 @@ def api_light_sellers_get():
 # champs sensibles le réclame, la lecture reste libre.
 ESPACE_PIN_FIELDS = {"shipping"}   # champs exigeant le code
 
+# Contact de l'équipe, affiché dans l'espace. Sans numéro renseigné, le lien
+# n'est simplement pas rendu — plutôt qu'un bouton qui ne fait rien.
+CONTACT_WHATSAPP = (os.environ.get("CONTACT_WHATSAPP") or "").strip()
+
+
+def _contact_url():
+    """Numéro français ou international → lien wa.me, ou chaîne vide."""
+    t = "".join(c for c in CONTACT_WHATSAPP if c.isdigit() or c == "+")
+    if t.startswith("+"):
+        t = t[1:]
+    elif t.startswith("00"):
+        t = t[2:]
+    elif t.startswith("0"):
+        t = "33" + t[1:]
+    return f"https://wa.me/{t}" if len(t) >= 8 else ""
+
 # Anti-force brute du code d'accès. Tenu ici, en mémoire du processus, et non
 # dans la session : un compteur rangé dans le cookie du client se remet à zéro
 # en jetant le cookie, ce qui ne freine personne.
@@ -5824,7 +5840,13 @@ def _espace_payload(inf):
         "videos": [{
             "id": v.get("id"), "type": v.get("type"), "orig_link": v.get("orig_link", ""),
             "uploaded_at": v.get("uploaded_at", ""), "filename": v.get("filename", ""),
+            # Une déclaration se retire ; un fichier posé par l'équipe, non.
+            "mine": not bool(v.get("r2_key")),
         } for v in my_vids],
+        # Le seul point de contact de l'espace était un lien mort. Le numéro
+        # vient de l'environnement pour ne pas vivre en dur dans un template
+        # que tout le monde peut lire.
+        "contact": {"whatsapp": CONTACT_WHATSAPP, "url": _contact_url()},
     }
 
 @app.route("/espace/<slug>")
@@ -6022,6 +6044,75 @@ def api_espace_add_video(slug):
         videos.append(meta)
         _save_influ_videos(videos)
     return jsonify({"success": True, "video": meta})
+
+@app.route("/api/espace/<slug>/video/<vid>", methods=["DELETE"])
+def api_espace_del_video(slug, vid):
+    """
+    Retire une vidéo qu'elle vient de déclarer.
+
+    Deux garde-fous : la vidéo doit lui appartenir, et elle doit être une
+    simple déclaration (pas de `r2_key`). Un fichier réellement téléversé par
+    l'équipe ne se supprime pas depuis l'espace — sinon un lien public
+    permettrait d'effacer des contenus qu'on a stockés.
+    """
+    inf = _get_influencer_by_slug(slug)
+    if not inf:
+        return jsonify({"success": False, "error": "introuvable"}), 404
+
+    with _influ_videos_lock:
+        videos = _load_influ_videos()
+        cible = next((v for v in videos if v.get("id") == vid), None)
+        if not cible or cible.get("influ_id") != inf.get("id"):
+            return jsonify({"success": False, "error": "vidéo introuvable"}), 404
+        if cible.get("r2_key"):
+            return jsonify({"success": False,
+                            "error": "Cette vidéo a été ajoutée par l'équipe."}), 403
+        videos = [v for v in videos if v.get("id") != vid]
+        _save_influ_videos(videos)
+    return jsonify({"success": True})
+
+
+# Les deux seules choses que l'influenceuse sait avant nous : que le colis est
+# arrivé, et qu'il y a un problème. Sans ces boutons, les deux passaient par un
+# message qu'il fallait lire, comprendre et reporter à la main dans la console.
+ESPACE_COLIS_ETATS = {"recu": "livre", "probleme": "probleme"}
+
+
+@app.route("/api/espace/<slug>/colis", methods=["POST"])
+def api_espace_colis(slug):
+    action = ((request.json or {}).get("action") or "").strip()
+    etat = ESPACE_COLIS_ETATS.get(action)
+    if not etat:
+        return jsonify({"success": False, "error": "action inconnue"}), 400
+
+    with _influenceurs_lock:
+        data = r2_get_json(INFLUENCEURS_R2_KEY) or {}
+        influenceurs = data.get("influenceurs", []) or []
+        cible = next((i for i in influenceurs
+                      if isinstance(i, dict) and _public_slug(i) == slug), None)
+        if not cible:
+            return jsonify({"success": False, "error": "introuvable"}), 404
+
+        # Rien avant l'expédition : confirmer la réception d'un colis qui n'est
+        # pas parti ferait sortir des maillots du stock par erreur.
+        if _safe_int(cible.get("status", 0)) < STATUS_COLIS_ENVOYE:
+            return jsonify({"success": False,
+                            "error": "Ton colis n'est pas encore parti."}), 409
+
+        cible["trackingStatus"] = etat
+        if action == "recu" and _safe_int(cible.get("status", 0)) < 6:
+            cible["status"] = 6                       # Livré
+        cible["colis_signale_at"] = datetime.now(timezone.utc).isoformat()
+        cible["lastModified"] = cible["colis_signale_at"]
+
+        data["influenceurs"] = influenceurs
+        data["version"] = data.get("version", 0) + 1
+        data["updated_at"] = cible["colis_signale_at"]
+        if not r2_put_json(INFLUENCEURS_R2_KEY, data):
+            return jsonify({"success": False, "error": "écriture échouée"}), 500
+
+    return jsonify({"success": True, "tracking_status": etat})
+
 
 @app.route("/api/espace/pin", methods=["POST"])
 @_require_admin_api
