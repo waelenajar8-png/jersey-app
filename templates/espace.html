@@ -405,17 +405,21 @@ input,select{font-family:inherit}
 .tr-i{flex:1 1 0;min-width:0;background:none;border:0;padding:0 0 2px;cursor:pointer;
     font-family:inherit;display:flex;flex-direction:column;align-items:center;gap:8px;
     position:relative;-webkit-tap-highlight-color:transparent}
-.tr-i::before{content:"";position:absolute;top:17px;left:-50%;width:100%;height:2px;
+.tr-i::before{content:"";position:absolute;top:20px;left:-50%;width:100%;height:2px;
     background:var(--line);z-index:0}
 .tr-i:first-child::before{display:none}
-.tr-i.fill::before{background:var(--ink-2)}
-.tr-d{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;
-    font-size:14px;line-height:1;background:var(--bg);
-    box-shadow:inset 0 0 0 1.5px var(--line-2);position:relative;z-index:1;
-    transition:box-shadow .2s ease,background .2s ease}
-.tr-i.got .tr-d{background:var(--ink-2);box-shadow:none;color:#fff}
-.tr-i.on .tr-d{box-shadow:inset 0 0 0 1.5px var(--ink),0 0 0 4px var(--bg),0 0 0 5.5px var(--ink)}
-.tr-i.got.on .tr-d{box-shadow:0 0 0 4px var(--bg),0 0 0 5.5px var(--ink)}
+.tr-i.fill::before{background:var(--accent)}
+/* Le numéro du palier EST le nombre de ventes qu'il demande : 0, 10, 30, 60.
+   Floqué comme au dos d'un maillot, c'est la seule chose à retenir — et
+   c'est vrai, contrairement à une icône décorative. */
+.tr-d{width:40px;height:40px;border-radius:50%;display:grid;place-items:center;
+    font-size:14.5px;font-weight:800;letter-spacing:-.035em;line-height:1;
+    background:var(--bg);color:var(--faint);font-variant-numeric:tabular-nums;
+    box-shadow:inset 0 0 0 2px var(--line-2);position:relative;z-index:1;
+    transition:box-shadow .2s ease,background .2s ease,color .2s ease,transform .2s ease}
+.tr-i.got .tr-d{color:var(--accent);box-shadow:inset 0 0 0 2px var(--accent)}
+.tr-i.on .tr-d{background:var(--accent);color:#fff;
+    box-shadow:inset 0 0 0 2px var(--accent);transform:scale(1.07)}
 .tr-l{font-size:10.5px;font-weight:700;color:var(--faint);text-align:center;
     line-height:1.2;letter-spacing:-.01em}
 .tr-i.on .tr-l{color:var(--ink);font-weight:800}
@@ -455,16 +459,44 @@ input,select{font-family:inherit}
     .tc-gains{grid-template-columns:1fr}
     .tc-gv{font-size:24px}
 }
-/* Les avantages : des lignes, pas des pastilles. */
-.tc-perks{list-style:none;margin:20px 0 0;padding:19px 0 0;
-    border-top:1px solid rgba(255,255,255,.2);display:flex;flex-direction:column;gap:0}
-.tc-perks li{font-size:13px;font-weight:600;line-height:1.45;padding:11px 0 11px 22px;
-    position:relative;border-top:1px solid rgba(255,255,255,.12)}
-.tc-perks li:first-child{border-top:0;padding-top:0}
-.tc-perks li:last-child{padding-bottom:0}
-.tc-perks li::before{content:"";position:absolute;left:4px;top:18px;width:6px;height:6px;
-    border-radius:50%;background:rgba(255,255,255,.55)}
-.tc-perks li:first-child::before{top:7px}
+/* Chaque carte ne montre que ce qui S'AJOUTE. Un « + » pour un avantage
+   neuf, une flèche pour celui qui en remplace un plus faible : il ne
+   s'additionne pas à l'ancien, il prend sa place. Sans cette distinction, la
+   carte Ambassadeur affichait « −20 % » et « −15 % » l'un sous l'autre. */
+.tc-add-w{margin-top:22px;padding-top:19px;border-top:1px solid rgba(255,255,255,.2)}
+.tc-add-k{font-size:9.5px;letter-spacing:.15em;text-transform:uppercase;font-weight:800;
+    color:rgba(255,255,255,.6)}
+.tc-add{list-style:none;margin:4px 0 0;padding:0}
+.tc-add li{display:grid;grid-template-columns:15px 1fr;gap:11px;padding:12px 0;
+    font-size:13px;font-weight:600;line-height:1.45;
+    border-top:1px solid rgba(255,255,255,.12)}
+.tc-add li:first-child{border-top:0}
+.tc-add li b{font-weight:800}
+.tc-marq{color:rgba(255,255,255,.75);font-size:14px;font-weight:800;
+    line-height:1.35;text-align:center}
+/* L'acquis : présent, mais replié — il n'a pas à être relu à chaque palier. */
+.tc-her{margin-top:18px}
+.tc-herb{width:100%;display:flex;align-items:center;gap:11px;padding:13px 15px;
+    border-radius:14px;background:rgba(255,255,255,.14);border:0;cursor:pointer;
+    font-family:inherit;color:#fff;font-size:12.5px;font-weight:700;text-align:left}
+.tc-hern{flex:0 0 auto;display:inline-grid;place-items:center;min-width:22px;height:22px;
+    padding:0 6px;border-radius:100px;background:rgba(255,255,255,.92);color:var(--ink);
+    font-size:11.5px;font-weight:800;font-variant-numeric:tabular-nums}
+.tc-chev{flex:0 0 auto;transition:transform .26s ease}
+.tc-herc{display:none}
+.tc-her.on .tc-herc{display:block}
+.tc-her.on .tc-chev{transform:rotate(180deg)}
+.tc-herc li{color:rgba(255,255,255,.78);font-size:12.5px}
+/* Le numéro du palier repris en filigrane, comme un dossard. */
+.tc{position:relative;overflow:hidden}
+.tc > *{position:relative;z-index:1}
+.tc-top{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.tc-puce{flex:0 0 auto;font-size:9.5px;font-weight:800;letter-spacing:.08em;
+    text-transform:uppercase;padding:4px 10px;border-radius:100px;
+    border:1px solid rgba(255,255,255,.5);color:rgba(255,255,255,.92)}
+.tc-doss{position:absolute;right:-16px;bottom:-46px;z-index:0;pointer-events:none;
+    font-size:158px;font-weight:800;letter-spacing:-.07em;line-height:1;
+    color:#fff;opacity:.11;font-variant-numeric:tabular-nums}
 /* Ce qui manque : dit une fois, en gros. */
 .tc-need{display:flex;align-items:baseline;gap:10px;margin-top:22px;padding:15px 17px;
     border-radius:14px;background:rgba(255,255,255,.14);font-size:13px;font-weight:600;
@@ -474,8 +506,9 @@ input,select{font-family:inherit}
     .tc{padding:22px 20px 24px}
     .tc-n{font-size:25px}
     .tc-gn{font-size:26px}
-    .tr-d{width:31px;height:31px;font-size:13px}
-    .tr-i::before{top:15px}
+    .tr-d{width:36px;height:36px;font-size:13.5px}
+    .tr-i::before{top:18px}
+    .tc-doss{font-size:132px;bottom:-38px}
 }
 
 /* ── La paie : une échelle qui se remet à zéro à chaque période ───────── */
@@ -2011,10 +2044,57 @@ const SHIRT = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><
 
 function palChoisir(i){ PAL_SEL = i; render(); }
 
+/* Le bloc « ce que tu gardes » est replié par défaut : il répète des choses
+   déjà lues, il n'a pas à occuper l'écran tant qu'on ne le demande pas. */
+let PAL_HER = false;
+
+/* Tout ce qui reste vrai en arrivant au palier i : les avantages des paliers
+   du dessous dont la clé n'a PAS été reprise plus haut. Sans ce tri, monter
+   d'un palier empilait « −20 % » à côté de « −15 % ». */
+function palAcquis(paliers, i){
+    const vus = new Set(((paliers[i] || {}).perks || []).map(a => a && a.cle));
+    const out = [];
+    // On descend du palier le plus proche vers le plus bas — c'est la version
+    // la plus haute d'un avantage qui survit — mais on RÉTABLIT l'ordre de
+    // lecture en remettant chaque étage devant, d'un bloc. Sans ça, la liste
+    // se lisait à l'envers, en commençant par le dernier ajout.
+    for(let k = i - 1; k >= 0; k--){
+        const lot = [];
+        for(const a of (paliers[k].perks || [])){
+            if(!a || vus.has(a.cle)) continue;
+            vus.add(a.cle);
+            lot.push(a);
+        }
+        out.unshift(...lot);
+    }
+    return out;
+}
+
+/* Le serveur marque d'astérisques ce qui doit ressortir. On échappe d'abord,
+   on met en gras ensuite — jamais l'inverse, sinon un pseudo malicieux
+   passerait en HTML. */
+function perkTexte(a){
+    const brut = (a && typeof a === 'object') ? (a.t || '') : (a || '');
+    return esc(String(brut)).replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
+}
+/* La flèche « remplace » n'a de sens que sur la carte où le remplacement a
+   lieu. Dans « ce que tu gardes », tout est simplement acquis : un « + ». */
+function perkListe(items, acquis){
+    return `<ul class="tc-add">${items.map(a =>
+        `<li><span class="tc-marq">${(!acquis && a && a.remp) ? '\u2191' : '+'}</span>` +
+        `<span>${perkTexte(a)}</span></li>`).join('')}</ul>`;
+}
+
 function bindPaliers(){
     document.querySelectorAll('[data-pal]').forEach(b=>{
         b.onclick = () => palChoisir(+b.getAttribute('data-pal'));
     });
+    const hb = document.getElementById('palHer');
+    if(hb) hb.onclick = () => {
+        PAL_HER = !PAL_HER;
+        document.getElementById('palHerBox').classList.toggle('on', PAL_HER);
+        hb.setAttribute('aria-expanded', PAL_HER);
+    };
 }
 
 function viewPaliers(){
@@ -2067,7 +2147,7 @@ function viewPaliers(){
                              i === sel ? 'on' : '', i > 0 && i <= idx ? 'fill' : ''].filter(Boolean).join(' ');
                 return `<button class="tr-i ${cls}" type="button" data-pal="${i}"
                         aria-pressed="${i === sel}" aria-label="${escAttr(pl.name)}">
-                    <span class="tr-d">${esc(pl.icon || '')}</span>
+                    <span class="tr-d">${fmtFull(pl.req_sales)}</span>
                     <span class="tr-l">${esc(pl.name)}</span>
                     <span class="tr-n">${i === idx ? 'toi' : i < idx ? 'acquis' : `+${fmtFull(pl.missing_sales)}`}</span>
                 </button>`;
@@ -2075,10 +2155,15 @@ function viewPaliers(){
         </div>
 
         <div class="tc t${sel}">
-            <div class="tc-k">Palier ${sel + 1} sur ${paliers.length} · ${
-                sel < idx ? 'Acquis' : sel === idx ? 'Le tien' : 'À débloquer'}</div>
+            <span class="tc-doss" aria-hidden="true">${fmtFull(x.req_sales)}</span>
+            <div class="tc-top">
+                <span class="tc-k">Palier ${sel + 1} sur ${paliers.length}</span>
+                <span class="tc-puce">${sel < idx ? 'Déjà atteint'
+                    : sel === idx ? 'Ton palier'
+                    : `Dès ${fmtFull(x.req_sales)} ventes`}</span>
+            </div>
             <div class="tc-h">
-                <span class="tc-n">${esc(x.icon || '')} ${esc(x.name)}</span>
+                <span class="tc-n">${esc(x.name)}</span>
             </div>
             <div class="tc-c">${x.req_sales === 0
                 ? `Le palier de départ, acquis dès ton inscription`
@@ -2096,7 +2181,7 @@ function viewPaliers(){
                     <div class="tc-gk">Ce que tu touches</div>
                     ${x.monthly_fixed
                         ? `<div class="tc-gv num">${fmtFull(x.monthly_fixed)} €</div>
-                           <div class="tc-gd">garantis dès <b>${fmtFull(x.monthly_threshold)} ventes</b> sur une période de 30 jours</div>`
+                           <div class="tc-gd">garantis dès <b>${fmtFull(x.monthly_threshold)} ventes</b> dans le mois</div>`
                         : `<div class="tc-gv num">10 %</div>
                            <div class="tc-gd">de commission sur toutes tes ventes</div>`}
                 </div>
@@ -2109,13 +2194,32 @@ function viewPaliers(){
                     <div class="tc-gv num">${fmtFull(x.jerseys)} maillots</div>
                     <div class="tc-gd">${x.req_sales === 0
                         ? `offerts pour démarrer et faire le contenu qu'on te demande`
-                        : `offerts et <b>personnalisables</b>, tous les 30 jours`}</div>
+                        : `offerts et <b>personnalisables</b>, tous les mois`}</div>
                 </div>
             </div>
 
-            ${(x.perks || []).length
-                ? `<ul class="tc-perks">${x.perks.map(v=>`<li>${esc(v)}</li>`).join('')}</ul>`
-                : ''}
+            ${(x.perks || []).length ? `
+            <div class="tc-add-w">
+                <div class="tc-add-k">${sel === 0
+                    ? 'Ce que tu as dès le départ' : 'Ce qui s\u2019ajoute à ce palier'}</div>
+                ${perkListe(x.perks)}
+            </div>` : ''}
+
+            ${(() => {
+                const gard = palAcquis(paliers, sel);
+                if(!gard.length) return '';
+                return `<div class="tc-her ${PAL_HER ? 'on' : ''}" id="palHerBox">
+                    <button class="tc-herb" id="palHer" type="button" aria-expanded="${PAL_HER}">
+                        <span class="tc-hern">${fmtFull(gard.length)}</span>
+                        <span style="flex:1">avantage${gard.length > 1 ? 's' : ''} des paliers
+                            précédents que tu gardes</span>
+                        <svg class="tc-chev" width="15" height="15" viewBox="0 0 24 24" fill="none"
+                             stroke="currentColor" stroke-width="2.4" stroke-linecap="round"
+                             stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+                    </button>
+                    <div class="tc-herc">${perkListe(gard, true)}</div>
+                </div>`;
+            })()}
 
             ${sel > idx ? `<div class="tc-need">
                 <b>${fmtFull(x.missing_sales)}</b>
@@ -2127,8 +2231,8 @@ function viewPaliers(){
     ${/* ── La paie : autre échelle, autre rythme, autres nombres. ── */''}
     <section class="sec">
         <div class="sec-k">Ta paie</div>
-        <div class="sec-t">Ce que tu gagnes sur 30 jours</div>
-        <div class="sec-sub">L'argent <b>et</b> les maillots suivent la même échelle : tes ventes <b>de la période en cours</b>. Ouvert à tout le monde, quel que soit ton palier.</div>
+        <div class="sec-t">Ce que tu gagnes chaque mois</div>
+        <div class="sec-sub">L'argent <b>et</b> les maillots suivent la même échelle : tes ventes <b>du mois en cours</b>. Ouvert à tout le monde, quel que soit ton palier.</div>
         <div class="paie">
             ${R.steps.map(st=>`
                 <div class="ps ${st.reached?'done':''}">
@@ -2143,7 +2247,7 @@ function viewPaliers(){
         </div>
         <div class="pay-note">
             <div class="pay-note-t">Comment c'est calculé</div>
-            <div class="pay-note-d">À chaque période, on te verse <b>le plus avantageux des deux</b> : ${base} % de tes ventes, ou le montant garanti le plus élevé que tu as atteint. Tu ne peux jamais y perdre.</div>
+            <div class="pay-note-d">Chaque mois, on te verse <b>le plus avantageux des deux</b> : ${base} % de tes ventes, ou le montant garanti le plus élevé que tu as atteint. Tu ne peux jamais y perdre.</div>
             <div class="pay-when">${quandPayee()}</div>
         </div>
     </section>`;
@@ -2325,7 +2429,7 @@ async function addVideo(){
 }
 
 function setTab(t){
-    if(t !== TAB) PAL_SEL = null;
+    if(t !== TAB){ PAL_SEL = null; PAL_HER = false; }
     TAB = t;
     document.querySelectorAll('[data-tab]').forEach(b=>{
         b.classList.toggle('active', b.getAttribute('data-tab')===t);
