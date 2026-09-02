@@ -435,14 +435,24 @@ input,select{font-family:inherit}
 .tc-h{display:flex;align-items:baseline;gap:11px;flex-wrap:wrap;margin-top:9px}
 .tc-n{font-size:29px;font-weight:800;letter-spacing:-.04em;line-height:1}
 .tc-c{font-size:12.5px;font-weight:600;color:rgba(255,255,255,.72);margin-top:8px}
-/* Le gain, dessiné : deux maillots ou six, ça se compte à l'œil. */
-.tc-gift{margin-top:20px;padding-top:19px;border-top:1px solid rgba(255,255,255,.2)}
-.tc-shirts{display:flex;gap:6px;flex-wrap:wrap;color:rgba(255,255,255,.92)}
-.tc-shirts svg{width:25px;height:25px;flex:none}
-.tc-g{display:flex;align-items:baseline;gap:8px;margin-top:13px}
-.tc-gn{font-size:30px;font-weight:800;letter-spacing:-.05em;line-height:1}
-.tc-gl{font-size:13px;font-weight:700;line-height:1.35}
-.tc-gy{font-size:12px;font-weight:600;color:rgba(255,255,255,.62);margin-top:7px}
+/* Les deux gains, côte à côte. L'argent tient la colonne de gauche : c'est
+   la première chose qu'on cherche, et elle manquait complètement. */
+.tc-gains{display:grid;grid-template-columns:1fr 1fr;gap:1px;margin-top:20px;
+    background:rgba(255,255,255,.2);border-radius:14px;overflow:hidden}
+.tc-gain{padding:16px 16px 17px;background:rgba(255,255,255,.07)}
+.tc-gk{font-size:9.5px;letter-spacing:.15em;text-transform:uppercase;font-weight:800;
+    color:rgba(255,255,255,.6)}
+.tc-gv{font-size:27px;font-weight:800;letter-spacing:-.045em;line-height:1;margin-top:9px}
+.tc-gd{font-size:11.5px;font-weight:600;color:rgba(255,255,255,.72);
+    margin-top:7px;line-height:1.45}
+.tc-gd b{color:#fff;font-weight:800}
+.tc-shirts{display:flex;gap:4px;flex-wrap:wrap;color:rgba(255,255,255,.92);margin-top:11px}
+.tc-shirts svg{width:19px;height:19px;flex:none}
+.tc-gain:last-child .tc-gv{margin-top:9px}
+@media (max-width:400px){
+    .tc-gains{grid-template-columns:1fr}
+    .tc-gv{font-size:24px}
+}
 /* Les avantages : des lignes, pas des pastilles. */
 .tc-perks{list-style:none;margin:20px 0 0;padding:19px 0 0;
     border-top:1px solid rgba(255,255,255,.2);display:flex;flex-direction:column;gap:0}
@@ -477,6 +487,8 @@ input,select{font-family:inherit}
 .ps.done .ps-v{color:var(--ok)}
 .ps-w{font-size:11px;font-weight:600;color:var(--faint);margin-top:7px;line-height:1.35}
 .ps.done .ps-w{color:var(--ok)}
+.ps-j{font-size:11px;font-weight:800;color:var(--accent);margin-top:6px}
+.ps.done .ps-j{color:var(--ok)}
 .ps-y{font-size:10.5px;font-weight:700;color:var(--faint);margin-top:8px;
     padding-top:8px;border-top:1px solid var(--line)}
 .ps.done .ps-y{border-color:rgba(31,138,91,.22);color:var(--ok)}
@@ -498,7 +510,9 @@ input,select{font-family:inherit}
         grid-template-areas:"n w v" "y y y"}
     .ps-n{grid-area:n}
     .ps-w{grid-area:w;margin-top:0}
+    .ps{grid-template-areas:"n w v" "j j j" "y y y"}
     .ps-v{grid-area:v;margin-top:0;font-size:20px}
+    .ps-j{grid-area:j;margin-top:9px}
     .ps-y{grid-area:y;margin-top:10px;padding-top:9px}
 }
 /* — Missions présentées comme des gains — */
@@ -2039,7 +2053,8 @@ function viewPaliers(){
     ${isLight() || !x ? '' : `
     <section class="sec">
         <div class="sec-k">Ta progression</div>
-        <div class="sec-t">Touche un palier pour voir ce qu'il donne</div>
+        <div class="sec-t">Les quatre paliers</div>
+        <div class="sec-sub">Choisis-en un pour voir exactement ce qu'il rapporte.</div>
 
         <div class="tr">
             ${paliers.map((pl,i)=>{
@@ -2061,16 +2076,27 @@ function viewPaliers(){
                 <span class="tc-n">${esc(x.icon || '')} ${esc(x.name)}</span>
             </div>
             <div class="tc-c">${x.req_sales === 0
-                ? `Acquis dès ton entrée dans le programme`
-                : `À partir de ${fmtFull(x.req_sales)} ventes depuis le début`}</div>
+                ? `Le palier de départ, acquis dès ton inscription`
+                : `Atteint à ${fmtFull(x.req_sales)} ventes cumulées`}</div>
 
-            <div class="tc-gift">
-                <div class="tc-shirts">${Array.from({length: x.jerseys}, ()=>SHIRT).join('')}</div>
-                <div class="tc-g">
-                    <span class="tc-gn num">${fmtFull(x.jerseys)}</span>
-                    <span class="tc-gl">maillots floqués offerts<br>à chaque période</span>
+            ${/* Les deux gains côte à côte : l'argent d'abord, parce que c'est
+                 la première question. Le montant garanti se déclenche au même
+                 nombre de ventes que le palier — d'où la lecture commune. */''}
+            <div class="tc-gains">
+                <div class="tc-gain">
+                    <div class="tc-gk">Ce que tu touches</div>
+                    ${x.monthly_fixed
+                        ? `<div class="tc-gv num">${fmtFull(x.monthly_fixed)} €</div>
+                           <div class="tc-gd">garantis dès <b>${fmtFull(x.monthly_threshold)} ventes</b> dans une période de 30 jours</div>`
+                        : `<div class="tc-gv num">10 %</div>
+                           <div class="tc-gd">de tes ventes nettes, dès ta toute première</div>`}
                 </div>
-                <div class="tc-gy">soit <b>${fmtFull(x.jerseys * 12)} maillots par an</b>, à toi, sans rien avancer</div>
+                <div class="tc-gain">
+                    <div class="tc-gk">Ce que tu reçois</div>
+                    <div class="tc-shirts">${Array.from({length: x.jerseys}, ()=>SHIRT).join('')}</div>
+                    <div class="tc-gv num">${fmtFull(x.jerseys)} maillots</div>
+                    <div class="tc-gd">floqués à ton nom, dès <b>${fmtFull(x.gifting_threshold)} ventes</b> dans la même période</div>
+                </div>
             </div>
 
             ${(() => {
@@ -2081,7 +2107,7 @@ function viewPaliers(){
 
             ${sel > idx ? `<div class="tc-need">
                 <b>${fmtFull(x.missing_sales)}</b>
-                <span>vente${x.missing_sales>1?'s':''} de plus et ce palier est à toi, définitivement.</span>
+                <span>vente${x.missing_sales>1?'s':''} et tout ce qui est au-dessus t'appartient.</span>
             </div>` : ''}
         </div>
     </section>`}
@@ -2089,8 +2115,8 @@ function viewPaliers(){
     ${/* ── La paie : autre échelle, autre rythme, autres nombres. ── */''}
     <section class="sec">
         <div class="sec-k">Ta paie</div>
-        <div class="sec-t">Ce que tu gagnes sur une période</div>
-        <div class="sec-sub">Ouverts à <b>tout le monde</b>, quel que soit ton palier. On compte tes ventes <b>de la période en cours</b>.</div>
+        <div class="sec-t">Ce que tu gagnes sur 30 jours</div>
+        <div class="sec-sub">L'argent <b>et</b> les maillots suivent la même échelle : tes ventes <b>de la période en cours</b>. Ouvert à tout le monde, quel que soit ton palier.</div>
         <div class="paie">
             ${R.steps.map(st=>`
                 <div class="ps ${st.reached?'done':''}">
@@ -2099,6 +2125,7 @@ function viewPaliers(){
                     <div class="ps-w">${st.reached
                         ? 'Débloqué'
                         : `Encore ${fmtFull(st.missing)} vente${st.missing>1?'s':''}`}</div>
+                    ${st.jerseys ? `<div class="ps-j">+ ${fmtFull(st.jerseys)} maillots offerts</div>` : ''}
                     ${annuel[st.threshold] ? `<div class="ps-y">${fmtFull(annuel[st.threshold])} € sur l'année</div>` : ''}
                 </div>`).join('')}
         </div>
