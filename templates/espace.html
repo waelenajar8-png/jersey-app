@@ -709,6 +709,11 @@ input,select{font-family:inherit}
 .v-act{display:flex;gap:7px;flex:none}
 .lien{color:var(--accent);font-weight:700;text-decoration:none}
 .lien:hover{text-decoration:underline}
+/* Un <button> porte sa propre police, son fond et ses marges : sans ça, le
+   raccourci vers « Mes contenus » ressort en gris au milieu de la phrase. */
+button.lien{font-family:inherit;font-size:inherit;line-height:inherit;
+    background:none;border:0;padding:0;cursor:pointer;text-decoration:underline}
+button.lien:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:3px}
 .v-del:hover{color:var(--danger);border-color:var(--danger)}
 .ca{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-top:16px;
     padding-top:16px;border-top:1px solid var(--line)}
@@ -853,6 +858,13 @@ input,select{font-family:inherit}
 }
 .mission:last-child{margin-bottom:0}
 .mission:hover{opacity:.65}
+/* Cliquable, donc : curseur, chevron, largeur pleine, alignement à gauche —
+   un <button> hérite sinon du centrage et de la police du navigateur. */
+.mission.go{width:100%;text-align:left;font-family:inherit;color:inherit;cursor:pointer}
+.mission-fl{width:15px;height:15px;flex-shrink:0;color:var(--faint);
+    transition:transform .16s ease,color .16s ease}
+.mission.go:hover .mission-fl{transform:translateX(2px);color:var(--muted)}
+.mission.go:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .mission.done{background:none}
 .mission-check{
     width:18px;height:18px;border-radius:50%;flex-shrink:0;display:grid;place-items:center;
@@ -1298,12 +1310,17 @@ function render(){
     else if(TAB==='contenus') v.innerHTML = viewContenus();
     else if(TAB==='profil'){
         v.innerHTML = viewProfil();
-        ensureCatalog().then(renderJerseyGrid);
+        // Inutile d'aller chercher le catalogue quand la sélection est
+        // verrouillée : c'est une requête réseau pour une grille jamais rendue.
+        if(!D.influencer.jerseys_locked) ensureCatalog().then(renderJerseyGrid);
         const sb = document.getElementById('profilSave');
         if(sb) sb.onclick = saveProfil;
     }
     requestAnimationFrame(animate);
     bindDynamic();
+    bindMissions();
+    const gv = document.getElementById('gdVersContenus');
+    if(gv) gv.onclick = ()=> setTab('contenus');
 }
 
 function animate(){
@@ -1828,15 +1845,56 @@ function blockColis(){
 }
 
 // ── Missions ────────────────────────────────────────────────────────────
+/* Chaque mission mène là où on l'accomplit. Une liste de choses à faire qui
+   ne mène nulle part oblige à deviner dans quel onglet aller, et une étape
+   qu'on doit chercher est une étape qu'on remet à plus tard. `champ` amène en
+   plus le curseur sur le premier champ concerné. */
+const MISSION_VERS = {
+    profil:    {tab:'profil',   champ:'[data-p="tiktok"][data-k="username"]'},
+    maillots:  {tab:'colis'},
+    livraison: {tab:'profil',   champ:'[data-s="firstname"]'},
+    unboxing:  {tab:'contenus'},
+    video1:    {tab:'contenus'},
+    video2:    {tab:'contenus'},
+};
+
 function missionRow(m){
-    return `<div class="mission ${m.done?'done':''}">
+    const vers = MISSION_VERS[m.id];
+    const bal  = vers ? 'button' : 'div';
+    const att  = vers ? ` type="button" data-mgo="${escAttr(m.id)}"` : '';
+    return `<${bal} class="mission ${m.done?'done':''} ${vers?'go':''}"${att}>
         <div class="mission-check">${m.done?ICO.check:''}</div>
         <div class="mission-body">
             <div class="mission-label">${esc(m.label)}</div>
             <div class="mission-desc">${esc(m.desc)}</div>
         </div>
         <span class="mission-state ${m.done?'st-done':'st-todo'}">${m.done?'Fait':'À faire'}</span>
-    </div>`;
+        ${vers ? `<svg class="mission-fl" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"
+             aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg>` : ''}
+    </${bal}>`;
+}
+
+/* Ouvre l'onglet, puis pose le curseur sur le champ visé. Le délai laisse
+   `render()` reconstruire la vue : sans lui, on cherche un champ qui n'existe
+   pas encore. */
+function allerMission(id){
+    const vers = MISSION_VERS[id];
+    if(!vers) return;
+    setTab(vers.tab);
+    if(!vers.champ) return;
+    setTimeout(()=>{
+        const el = document.querySelector(vers.champ);
+        if(!el) return;
+        el.scrollIntoView({block:'center', behavior:'smooth'});
+        el.focus({preventScroll:true});
+    }, 90);
+}
+
+function bindMissions(){
+    document.querySelectorAll('[data-mgo]').forEach(b=>{
+        b.onclick = ()=> allerMission(b.getAttribute('data-mgo'));
+    });
 }
 
 function viewMissions(){
@@ -1882,9 +1940,13 @@ function blockGuide(){
             k: 'Format 1',
             t: 'Unboxing',
             d: 'Ta vidéo de réception : tu ouvres le colis devant la caméra.',
+            // « comme dans l'exemple » ne se dit que s'il y a un exemple à
+            // regarder : renvoyer à une vidéo absente ferait chercher pour rien.
             l: ['Filme l\'ouverture du colis',
-                'Montre les maillots, essaie-en au moins un',
-                'Un plan où on lit le flocage vaut mieux qu\'un plan large'],
+                'Montre les maillots et essaie-les devant la caméra — bien l\'avant '
+                    + 'et le dos' + (exDe('unboxing').length ? ', comme dans l\'exemple' : ''),
+                'Mets-y ta personnalité : une vidéo naturelle marche mieux '
+                    + 'qu\'une vidéo parfaite'],
         },
         {
             id: 'playback',
@@ -1960,7 +2022,8 @@ function blockGuide(){
                 <span class="gd-n num">3</span>
                 <div class="gd-b">
                     <div class="gd-t">Déclare ta vidéo ici</div>
-                    <div class="gd-d">Onglet Mes contenus. C'est ce qui valide ta mission et nous permet de la relayer.</div>
+                    <div class="gd-d">Va dans <button type="button" class="lien" id="gdVersContenus">Mes contenus</button>
+                        et colle le lien de ta vidéo. C'est ce qui valide ta mission et nous permet de la relayer.</div>
                 </div>
             </div>
         </div>
@@ -2506,15 +2569,16 @@ async function ensureCatalog(){
     }catch(e){ CATALOG = {mode:'stock', jerseys:[]}; }
 }
 
+/* Les seuls réseaux qui comptent pour le programme. Les quatre autres (X,
+   Facebook, Pinterest, Threads) ont été retirés de l'espace : douze champs à
+   remplir pour des plateformes où personne ne publie, c'est un formulaire
+   qu'on abandonne. Le serveur les connaît toujours — une valeur déjà
+   enregistrée n'est pas perdue, juste plus affichée ici. */
 const PLATFORMS = [
     {key:'tiktok',    name:'TikTok',    ico:'🎵', bg:'#F1F1F3'},
     {key:'instagram', name:'Instagram', ico:'📸', bg:'#FCEEF5'},
     {key:'snapchat',  name:'Snapchat',  ico:'👻', bg:'#FEF9E0'},
     {key:'youtube',   name:'YouTube',   ico:'▶️', bg:'#FDEDED'},
-    {key:'x',         name:'X',         ico:'✖️', bg:'#F1F1F3'},
-    {key:'facebook',  name:'Facebook',  ico:'📘', bg:'#EDF2FC'},
-    {key:'pinterest', name:'Pinterest', ico:'📌', bg:'#FDECEC'},
-    {key:'threads',   name:'Threads',   ico:'🧵', bg:'#F3F1F1'},
 ];
 
 function viewProfil(){
@@ -2558,28 +2622,24 @@ function viewProfil(){
         }).join('')}
     </div>
 
+    ${/* La sélection des maillots a quitté le profil.
+         C'est l'équipe qui choisit : lui montrer un catalogue qu'elle ne peut
+         pas utiliser produit une attente, puis un message pour demander
+         pourquoi le bouton ne fait rien. Elle retrouve ses maillots — photo,
+         taille — dans « Mon colis », là où ils la concernent vraiment.
+         Le catalogue ne réapparaît que si tu déverrouilles sa fiche. */''}
+    ${LOCKED ? '' : `
     <div class="card">
         <div class="card-head">
             <div>
-                <div class="card-title"><span class="ico-box">${ICO.tag}</span>${LOCKED
-                    ? (PICKS.length ? 'Tes maillots' : 'Tes maillots')
-                    : 'Choisis tes 2 maillots'}</div>
-                <div class="card-sub" style="margin-top:5px">${LOCKED
-                    ? (PICKS.length ? 'Enregistrés par l\'équipe Volakits' : 'Ta sélection se fait avec l\'équipe')
-                    : 'Sélectionne un modèle, puis sa taille'}</div>
+                <div class="card-title"><span class="ico-box">${ICO.tag}</span>Choisis tes 2 maillots</div>
+                <div class="card-sub" style="margin-top:5px">Sélectionne un modèle, puis sa taille</div>
             </div>
-            ${LOCKED ? '' : `<span class="pick-count ${PICKS.length>=2?'full':''}" id="pickCount">${PICKS.length} / 2</span>`}
+            <span class="pick-count ${PICKS.length>=2?'full':''}" id="pickCount">${PICKS.length} / 2</span>
         </div>
-        ${LOCKED ? `<div class="lock-note">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
-            <div><div class="lock-note-t">${PICKS.length ? 'Sélection faite par l\'équipe' : 'On choisit ensemble'}</div>
-            <div class="lock-note-d">${PICKS.length
-                ? `Ces maillots ont été enregistrés pour toi. Pour en changer, ${lienAide('écris-nous')} — on s'en occupe tant que le colis n'est pas parti.`
-                : `On te montre le catalogue et tu nous dis lesquels tu veux : ${lienAide('écris-nous')} et on les enregistre pour toi.`}</div></div>
-        </div>` : ''}
         <div id="pickedZone"></div>
-        ${LOCKED ? '' : `<div id="jerseyGrid"><div class="empty" style="padding:20px"><div class="empty-text">Chargement du catalogue…</div></div></div>`}
-    </div>
+        <div id="jerseyGrid"><div class="empty" style="padding:20px"><div class="empty-text">Chargement du catalogue…</div></div></div>
+    </div>`}
 
     <div class="card">
         <div class="card-head">
@@ -2688,14 +2748,24 @@ async function saveProfil(){
     const btn = document.getElementById('profilSave');
     btn.disabled = true; btn.textContent = 'Enregistrement…';
 
+    // On repart de ce qui est déjà enregistré, puis on écrase seulement les
+    // réseaux affichés. Reconstruire à partir des seuls champs visibles
+    // effacerait X, Facebook, Pinterest et Threads au premier enregistrement.
     const platforms = {};
+    const dejaLa = D.influencer.platforms || {};
+    const affiches = new Set(PLATFORMS.map(pl => pl.key));
+    Object.keys(dejaLa).forEach(k=>{
+        if(!affiches.has(k)) platforms[k] = dejaLa[k];
+    });
     document.querySelectorAll('[data-p]').forEach(inp=>{
         const p = inp.getAttribute('data-p'), k = inp.getAttribute('data-k');
         platforms[p] = platforms[p] || {};
         const v = inp.value.trim();
         if(v) platforms[p][k] = (k==='username') ? v : (parseInt(v)||0);
     });
-    Object.keys(platforms).forEach(k=>{ if(!Object.keys(platforms[k]).length) delete platforms[k]; });
+    Object.keys(platforms).forEach(k=>{
+        if(affiches.has(k) && !Object.keys(platforms[k]).length) delete platforms[k];
+    });
 
     const shipping = {};
     document.querySelectorAll('[data-s]').forEach(inp=>{
