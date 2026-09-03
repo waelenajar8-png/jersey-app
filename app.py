@@ -3788,6 +3788,13 @@ def _stamp_light_sellers(stored, incoming):
             inf["program_start_date"] = old.get("program_start_date") or today
 
 
+# Champs dont le serveur est seul propriétaire. La console peut les lire, les
+# afficher, s'en servir pour décider quoi montrer — mais ce qu'elle en renvoie
+# est ignoré. Un état déduit d'une opération serveur ne doit jamais pouvoir
+# revenir en arrière parce qu'un onglet était ouvert depuis dix minutes.
+CHAMPS_SERVEUR = ("jerseys_shipped", "jerseys_shipped_at", "espace_code")
+
+
 def _merge_influenceurs(stored, incoming):
     """
     Fusionne la liste reçue du back-office avec celle déjà en base.
@@ -3804,10 +3811,24 @@ def _merge_influenceurs(stored, incoming):
             continue
         base = by_id.get(inf.get("id"))
         if not base:
-            out.append(inf)          # nouvel influenceur
+            # Un nouvel influenceur ne peut pas arriver déjà expédié : ces
+            # marqueurs se posent ici, jamais depuis une requête.
+            for k in CHAMPS_SERVEUR:
+                inf.pop(k, None)
+            out.append(inf)
             continue
         merged = dict(base)          # on part de ce qui existe
         for k, v in inf.items():
+            if k in CHAMPS_SERVEUR:
+                # Écrit par le serveur, jamais par la console.
+                #
+                # La console garde en mémoire la liste telle qu'elle l'a
+                # chargée. Après une expédition, sa copie porte encore
+                # `jerseys_shipped: false` alors que la base dit `true` : au
+                # premier enregistrement suivant, ce faux revenait écraser le
+                # vrai, la sortie de stock se rejouait, et le stock retombait
+                # d'un exemplaire à chaque frappe jusqu'à zéro.
+                continue
             if k == "stats":
                 # Les stats se fusionnent clé par clé : le front n'en renvoie
                 # que quelques-unes, les autres (commission, historique) restent.
@@ -4156,7 +4177,12 @@ def api_save_influenceurs():
                 return jsonify({"success": False, "error": "écriture R2 échouée"}), 500
 
         return jsonify({"success": True, "count": len(influenceurs), "version": new_version,
-                        "updated_at": now_iso, "stock_warnings": shortages})
+                        "updated_at": now_iso, "stock_warnings": shortages,
+                        # Les marqueurs d'expédition tels qu'ils sont vraiment
+                        # en base : la console repart de là au lieu de garder
+                        # la photo qu'elle avait au chargement.
+                        "shipped": [i.get("id") for i in influenceurs
+                                    if isinstance(i, dict) and i.get("jerseys_shipped")]})
     except Exception as e:
         print(f"[INFLU] Erreur sauvegarde: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
