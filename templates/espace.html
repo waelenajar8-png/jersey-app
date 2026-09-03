@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Mon espace — Volakits</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -33,8 +33,8 @@
     /* Texte */
     --ink:#101322;
     --ink-2:#3B3E4C;
-    --muted:#8A8C84;
-    --faint:#A0A198;
+    --muted:#63655C;
+    --faint:#6B6D64;
     --on-dark:#E8ECFA;
     --on-dark-dim:#7182BC;
 
@@ -950,16 +950,46 @@ button.lien:focus-visible{outline:2px solid var(--accent);outline-offset:2px;bor
     font-size:13px;font-weight:700;box-shadow:var(--sh-lg);z-index:99;
     transition:transform .32s cubic-bezier(.2,.8,.2,1);
 }
+/* L'action centrale du programme : coller le lien de sa vidéo. Elle portait la
+   classe d'un bouton fantôme — ni bordure, ni fond, texte en gris clair. Rien
+   n'indiquait qu'on pouvait taper dedans. */
+.inp-v{font-family:inherit;font-size:16px;font-weight:500;color:var(--ink);
+    padding:11px 13px;border:1px solid var(--line-2);border-radius:12px;
+    background:var(--surface);transition:border-color .15s,box-shadow .15s}
+.inp-v:focus{outline:none;border-color:var(--accent);
+    box-shadow:0 0 0 3px rgba(47,80,241,.11)}
+.inp-v::placeholder{color:var(--faint);font-weight:500}
+
+.sq-wrap{display:flex;flex-direction:column;gap:12px}
+.sq{border-radius:18px;background:linear-gradient(100deg,
+    var(--surface) 30%, var(--surface-2) 50%, var(--surface) 70%);
+    background-size:220% 100%;animation:sqGlisse 1.3s ease-in-out infinite}
+.sq-a{height:132px}
+.sq-b{height:88px}
+@keyframes sqGlisse{from{background-position:180% 0}to{background-position:-40% 0}}
+@media(prefers-reduced-motion:reduce){.sq{animation:none}}
+
 .toast.show{transform:translateX(-50%) translateY(0)}
+/* Une erreur est rouge : dans la même pastille bleue que « Vidéo ajoutée »,
+   « Copie impossible ici » se lisait comme une confirmation. */
+.toast.err{background:var(--danger)}
+@media(max-width:860px){
+    /* Sinon le message se pose sur les icônes de la barre du bas. */
+    .toast{bottom:84px}
+}
 .mob-nav{display:none}
 /* ── Formulaire profil ──────────────────────────────────────────────────── */
 .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
 .field{display:flex;flex-direction:column;gap:6px}
 .field.full{grid-column:1/-1}
 .field label{font-size:12px;font-weight:600;color:var(--muted);text-transform:none;letter-spacing:0}
+/* 16 px, pas moins : en dessous, Safari et les navigateurs intégrés
+   d'Instagram et TikTok agrandissent la page à la mise au point, et
+   elle reste agrandie — tout le reste de l'espace défile alors
+   latéralement. C'est la taille minimale, pas un choix graphique. */
 .field input,.field select{
     background:var(--surface-2);border:1px solid var(--line-2);border-radius:11px;
-    padding:11px 13px;font-size:13.5px;font-weight:500;color:var(--ink);width:100%;
+    padding:11px 13px;font-size:16px;font-weight:500;color:var(--ink);width:100%;
     transition:border-color .15s,background .15s;
 }
 .field input:focus,.field select:focus{outline:none;border-color:var(--accent);background:#fff;
@@ -1175,7 +1205,17 @@ button.lien:focus-visible{outline:2px solid var(--accent);outline-offset:2px;bor
                 </div>
             </div>
 
-            <div id="view"></div>
+            <div id="view">
+                <!-- Ce que l'on voit pendant que les données arrivent. Le mot
+                     « Chargement… » vit dans l'en-tête et la barre latérale,
+                     tous deux masqués sous 860 px : sur téléphone, en 4G, dans
+                     le navigateur d'Instagram, l'écran restait blanc. -->
+                <div class="sq-wrap" id="sqLoad" aria-hidden="true">
+                    <div class="sq sq-a"></div>
+                    <div class="sq sq-b"></div>
+                    <div class="sq sq-b"></div>
+                </div>
+            </div>
         </div>
     </main>
 </div>
@@ -1238,6 +1278,8 @@ async function load(){
         if(!r.ok) throw new Error('404');
         D = await r.json();
         paintChrome();
+        const voulu = ongletDepuisAdresse();
+        if(voulu && !LIGHT_HIDDEN.includes(voulu) || (voulu && !isLight())) TAB = voulu;
         render();
     }catch(e){
         // Une coupure réseau de deux secondes affichait « Espace introuvable » :
@@ -1312,6 +1354,28 @@ function paintChrome(){
 // ── Rendu par onglet ────────────────────────────────────────────────────
 function render(){
     const v = document.getElementById('view');
+    try{
+        peindreVue(v);
+    }catch(e){
+        // Une donnée manquante ne doit pas laisser l'écran figé sur l'onglet
+        // précédent, ni se faire passer pour une coupure réseau : elle a bien
+        // du réseau, c'est nous qui n'arrivons pas à afficher.
+        console.error('[espace] rendu impossible', e);
+        v.innerHTML = `<div class="empty" style="padding:44px 18px">
+            <div class="empty-ico">${ICO.alert || ''}</div>
+            <div class="empty-title">On n'arrive pas à afficher cette page</div>
+            <div class="empty-text">Ce n'est pas ta connexion — on est prévenus.
+                Essaie un autre onglet en attendant.</div>
+        </div>`;
+    }
+    requestAnimationFrame(animate);
+    bindDynamic();
+    bindMissions();
+    const gv = document.getElementById('gdVersContenus');
+    if(gv) gv.onclick = ()=> setTab('contenus');
+}
+
+function peindreVue(v){
     if(TAB === 'home')      v.innerHTML = viewHome();
     else if(TAB==='missions') v.innerHTML = viewMissions();
     else if(TAB==='colis')    v.innerHTML = viewColis();
@@ -1322,11 +1386,6 @@ function render(){
         const sb = document.getElementById('profilSave');
         if(sb) sb.onclick = saveProfil;
     }
-    requestAnimationFrame(animate);
-    bindDynamic();
-    bindMissions();
-    const gv = document.getElementById('gdVersContenus');
-    if(gv) gv.onclick = ()=> setTab('contenus');
 }
 
 function animate(){
@@ -2107,7 +2166,7 @@ async function signalerColis(action, btn){
         toast(action === 'recu' ? 'Réception confirmée, merci !' : 'C\'est noté, on regarde ça');
         render();
     }catch(e){
-        toast(e.message || 'Impossible pour le moment', true);
+        toast('Impossible pour le moment. Réessaie.', true);
         b.disabled = false;
     }
 }
@@ -2389,11 +2448,13 @@ function viewContenus(){
         </div>
 
         <div style="display:flex;gap:9px;flex-wrap:wrap;margin-bottom:16px">
-            <select id="vType" class="btn-ghost" style="padding:10px 13px">
+            <select id="vType" class="inp-v" style="flex:0 0 auto">
                 <option value="unboxing">Unboxing</option>
                 <option value="playback">Playback</option>
             </select>
-            <input id="vLink" class="btn-ghost" style="flex:1;min-width:180px;padding:10px 13px;font-weight:500" placeholder="Lien de ta vidéo (TikTok, Instagram…)">
+            <input id="vLink" class="inp-v" style="flex:1;min-width:180px" inputmode="url"
+                   autocapitalize="off" autocorrect="off" spellcheck="false"
+                   placeholder="Colle le lien de ta vidéo">
             <button class="btn" id="vAdd">Ajouter</button>
         </div>
 
@@ -2520,7 +2581,7 @@ async function supprimerVideo(id, btn){
         toast('Vidéo retirée');
         render();
     }catch(e){
-        toast(e.message || 'Suppression impossible', true);
+        toast("La suppression n'a pas fonctionné. Réessaie.", true);
         btn.disabled = false;
     }
 }
@@ -2536,12 +2597,20 @@ async function addVideo(){
         });
         const d = await r.json();
         if(d.success){ toast('Vidéo ajoutée'); await load(); setTab('contenus'); }
-        else toast('Erreur : ' + (d.error||''));
+        else toast(messageClair(d.error), true);
     }catch(e){ toast('Erreur réseau'); }
 }
 
-function setTab(t){
+/* Sans historique, le geste réflexe sur téléphone — le bouton « retour » —
+   faisait sortir complètement de l'espace au lieu de revenir à l'onglet
+   précédent, et un rafraîchissement ramenait toujours à l'accueil. */
+const ONGLETS = ['home','missions','colis','paliers','contenus','profil'];
+
+function setTab(t, sansHistorique){
     if(t !== TAB){ PAL_SEL = null; PAL_HER = false; }
+    if(!sansHistorique && t !== TAB){
+        try{ history.pushState({tab:t}, '', '#' + t); }catch(e){}
+    }
     TAB = t;
     document.querySelectorAll('[data-tab]').forEach(b=>{
         b.classList.toggle('active', b.getAttribute('data-tab')===t);
@@ -2553,11 +2622,47 @@ document.querySelectorAll('[data-tab]').forEach(b=>{
     b.addEventListener('click', ()=> setTab(b.getAttribute('data-tab')));
 });
 
+window.addEventListener('popstate', e=>{
+    const t = (e.state && e.state.tab) || (location.hash || '').slice(1) || 'home';
+    if(ONGLETS.includes(t)) setTab(t, true);
+});
+
+/* Au chargement, on rouvre l'onglet de l'adresse : un rafraîchissement garde
+   sa place, et tu peux envoyer un lien direct vers « Mes informations ». */
+function ongletDepuisAdresse(){
+    const t = (location.hash || '').slice(1);
+    return ONGLETS.includes(t) ? t : null;
+}
+
 let toastT=null;
-function toast(msg){
+/* Le serveur parle en noms de champs. Elle, non. On traduit ce qu'elle peut
+   voir, et tout le reste devient une phrase qui ne l'accuse de rien. */
+const MSG_SERVEUR = {
+    'type ou lien invalide': "Ce lien ne semble pas valide — colle l'adresse complète de ta vidéo.",
+    'aucun champ modifiable': "Il n'y a rien de nouveau à enregistrer.",
+    'introuvable': "On n'a pas retrouvé ton espace. Écris-nous, on regarde.",
+    'code requis': "Il faut ton code à 4 chiffres pour changer ton adresse.",
+};
+function messageClair(brut){
+    const t = String(brut || '').trim();
+    if(MSG_SERVEUR[t]) return MSG_SERVEUR[t];
+    // Une phrase écrite pour elle commence par une majuscule et finit par un
+    // point. Tout le reste est du jargon serveur, qu'on ne montre pas.
+    return /^[A-ZÀ-Ý].*[.!?]$/.test(t) ? t
+        : "Ça n'a pas pu s'enregistrer. Réessaie dans un instant.";
+}
+
+/* Le second paramètre était passé à trois endroits et purement ignoré :
+   « Copie impossible ici » s'affichait dans la même pastille bleu marine que
+   « Vidéo ajoutée », et disparaissait en 2,2 s. Elle croyait avoir copié son
+   code promo, publiait sans, et la vente n'était jamais attribuée. */
+function toast(msg, erreur){
     const el=document.getElementById('toast');
-    el.textContent=msg; el.classList.add('show');
-    clearTimeout(toastT); toastT=setTimeout(()=>el.classList.remove('show'),2200);
+    el.textContent=msg;
+    el.classList.toggle('err', !!erreur);
+    el.classList.add('show');
+    clearTimeout(toastT);
+    toastT=setTimeout(()=>el.classList.remove('show'), erreur ? 4200 : 2200);
 }
 
 // ── Vue : Mon profil ────────────────────────────────────────────────────
@@ -2768,7 +2873,14 @@ async function saveProfil(){
     // code à 4 chiffres — et sans parcours « code oublié », c'était un
     // message à traiter.
     const avant = D.influencer.shipping || {};
-    const memeAdresse = ['address','postal','city','country','name','phone','extra','note']
+    // La liste comparée DOIT être celle du formulaire. Elle contenait `name`,
+    // `extra` et `note` — trois champs qui n'existent pas — et oubliait
+    // `firstname`, `lastname` et `email` : corriger son prénom ne partait
+    // jamais au serveur. L'écran annonçait « enregistré », puis la valeur
+    // revenait à l'ancienne au rechargement, et le colis partait au mauvais nom.
+    const CHAMPS_ADRESSE = ['firstname','lastname','address','postal',
+                            'city','country','phone','email'];
+    const memeAdresse = CHAMPS_ADRESSE
         .every(k => (shipping[k] || '') === (avant[k] || ''));
 
     // Les maillots ne se choisissent plus depuis l'espace : on n'envoie que
@@ -2800,7 +2912,7 @@ async function saveProfil(){
         }
 
         if(d.success){ toast('Informations enregistrées ✓'); await load(); setTab('profil'); }
-        else toast('Erreur : ' + (d.error||''));
+        else toast(messageClair(d.error), true);
     }catch(e){ toast('Erreur réseau'); }
     finally{ btn.disabled=false; btn.textContent='Enregistrer mes informations'; }
 }
