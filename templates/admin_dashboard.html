@@ -831,6 +831,45 @@ select.inp{cursor:pointer}
     .jl-l{grid-template-columns:1fr;gap:2px}
     .jl-h{font-size:11.5px;color:var(--muted)}
 }
+/* ── Messages d'accès ────────────────────────────────────────────────────
+   Dix-neuf personnes à qui envoyer leur code, c'est dix-neuf fiches à
+   ouvrir et dix-neuf recopiages à la main — donc, tôt ou tard, un code
+   collé dans la mauvaise conversation. Le message se fabrique ici, à
+   partir du code réel de chacune, et on ne fait plus que copier. */
+#msgTpl{
+    width:100%;min-height:230px;resize:vertical;font-family:inherit;
+    font-size:12.5px;line-height:1.55;padding:13px 14px;border-radius:12px;
+    border:1px solid var(--line);background:var(--surface);color:var(--ink);
+}
+#msgTpl:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(47,80,241,.12)}
+.mg-jetons{display:flex;gap:6px;flex-wrap:wrap;margin-top:9px}
+.mg-jeton{font-size:10.5px;font-weight:700;padding:4px 9px;border-radius:99px;
+          border:1px solid var(--line);background:var(--surface);color:var(--muted);
+          cursor:pointer;font-family:inherit}
+.mg-jeton:hover{border-color:var(--accent);color:var(--accent)}
+.mg-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+        margin:18px 0 12px;padding-top:16px;border-top:1px solid var(--line)}
+.mg-bar .mg-n{font-size:12px;font-weight:700;color:var(--muted);flex:1;min-width:120px}
+.mg-sel{font-family:inherit;font-size:12px;font-weight:700;padding:7px 10px;
+        border-radius:9px;border:1px solid var(--line);background:var(--surface);color:var(--ink)}
+.mg-item{border:1px solid var(--line);border-radius:14px;padding:13px 15px;margin-bottom:9px;
+         background:var(--surface)}
+.mg-top{display:flex;align-items:center;gap:9px}
+.mg-nom{font-size:13.5px;font-weight:800;letter-spacing:-.02em;flex:1;min-width:0;
+        overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mg-code{font-size:11.5px;font-weight:800;letter-spacing:.09em;
+         font-variant-numeric:tabular-nums;color:var(--accent)}
+.mg-txt{margin-top:10px;font-size:11.5px;line-height:1.55;color:var(--ink-2);
+        white-space:pre-wrap;word-break:break-word;font-family:inherit;
+        /* Coupé sur un nombre de lignes entier : une ligne tranchée en deux
+           donne l'impression d'un message abîmé, pas d'un aperçu. */
+        display:-webkit-box;-webkit-line-clamp:5;-webkit-box-orient:vertical;overflow:hidden}
+.mg-txt.tout{display:block;-webkit-line-clamp:none}
+.mg-plus{margin-top:6px;font-size:11px;font-weight:700;color:var(--muted);
+         background:none;border:0;padding:0;cursor:pointer;font-family:inherit}
+.mg-plus:hover{color:var(--accent)}
+.mg-item.sans{border-color:#F0D6A8;background:#FDF8EE}
+.mg-sans{margin-top:8px;font-size:11.5px;font-weight:600;color:#8A6A16;line-height:1.5}
 </style>
 </head>
 <body>
@@ -881,6 +920,7 @@ select.inp{cursor:pointer}
                     </div>
                     <button class="btn" id="syncBtn" data-i="sync">Synchroniser</button>
                     <button class="btn" id="extBtn" onclick="openExt()" data-i="trophy">Hors boutique</button>
+                    <button class="btn" id="msgBtn" onclick="openMsg()" data-i="send">Messages</button>
                     <button class="btn" id="importBtn" data-i="upload">Importer</button>
                     <button class="btn" id="exportBtn" data-i="download">Export</button>
                     <button class="btn primary" id="addBtn" data-i="plus">Ajouter</button>
@@ -1456,6 +1496,43 @@ select.inp{cursor:pointer}
         <div class="sheet-foot" style="justify-content:flex-end">
             <button class="btn ghost sm" onclick="closeExt()">Annuler</button>
             <button class="btn primary sm" id="extSave" onclick="extSave()" data-i="check">Enregistrer</button>
+        </div>
+    </div>
+</div>
+
+<!-- ══ Messages d'accès ══ -->
+<div class="scrim" id="msgScrim">
+    <div class="sheet" style="max-width:700px" role="dialog" aria-modal="true">
+        <div class="sheet-head">
+            <div class="sheet-title">Messages d'accès<small>Le même message, le code de chacune dedans</small></div>
+            <button class="x" onclick="closeMsg()" aria-label="Fermer" data-i="x"></button>
+        </div>
+
+        <div class="sheet-body">
+            <div class="hint" style="margin-bottom:12px">
+                Écris ton message une fois, avec les repères ci-dessous : ils sont remplacés
+                par le prénom, le lien et le <b>vrai code</b> de chaque influenceuse. Tu choisis
+                ensuite le statut — « Colis envoyé », par exemple — et tu copies, une par une.
+                Ton texte est gardé sur cet ordinateur, tu ne le réécriras pas la prochaine fois.
+            </div>
+            <textarea id="msgTpl" spellcheck="false"></textarea>
+            <div class="mg-jetons">
+                <button type="button" class="mg-jeton" onclick="msgJeton('{prenom}')">{prenom}</button>
+                <button type="button" class="mg-jeton" onclick="msgJeton('{pseudo}')">{pseudo}</button>
+                <button type="button" class="mg-jeton" onclick="msgJeton('{code}')">{code}</button>
+                <button type="button" class="mg-jeton" onclick="msgJeton('{lien}')">{lien}</button>
+                <button type="button" class="mg-jeton" onclick="msgReset()">Remettre le modèle d'origine</button>
+            </div>
+
+            <div class="mg-bar">
+                <select class="mg-sel" id="msgFiltre" onchange="renderMsg()"></select>
+                <span class="mg-n" id="msgN"></span>
+            </div>
+
+            <div id="msgList"></div>
+        </div>
+        <div class="sheet-foot" style="justify-content:flex-end">
+            <button class="btn ghost sm" onclick="closeMsg()">Fermer</button>
         </div>
     </div>
 </div>
@@ -3759,6 +3836,147 @@ function lienEspace(inf){
     return inf._espace_url || '';
 }
 
+/* ── Messages d'accès ─────────────────────────────────────────────────────
+   Le code d'entrée ne vit que dans la fiche : l'envoyer à dix-neuf personnes
+   demandait dix-neuf ouvertures de panneau et autant de copies à la main.
+   Ici le message est écrit une fois et le code est lu dans la donnée, jamais
+   retapé — c'est la seule façon de ne pas envoyer à Léane le code de Yums. */
+const MSG_TPL_CLE = 'volakits_msg_acces';
+const MSG_TPL_DEFAUT = `Coucou {prenom} ! \u{1F389}
+
+Ton espace créateur Volakits est prêt.
+
+\u{1F517} Le lien : {lien}
+\u{1F511} Ton code d'accès : {code}
+
+Tu ouvres le lien, tu tapes ton code, et tu es chez toi. Garde bien ce message :
+c'est avec lui que tu reviendras, depuis n'importe quel téléphone.
+
+Ce que tu y trouves :
+\u{1F4E6} Mon colis — le suivi de ton envoi et ton adresse de livraison
+\u{1F4CB} Publier mes vidéos — tout ce qu'il y a à faire, étape par étape
+\u{1F381} Avantages — ton palier et ce qu'il te débloque
+\u{1F4CA} Tableau de bord — tes ventes et tes gains, en direct
+
+La moindre question, tu m'écris ici. À très vite ! \u{1F525}`;
+
+function msgTexte(){
+    // localStorage peut jeter (navigation privée, réglages stricts) : le
+    // panneau doit s'ouvrir quand même, avec le modèle d'origine.
+    try{ return localStorage.getItem(MSG_TPL_CLE) || MSG_TPL_DEFAUT; }
+    catch(e){ return MSG_TPL_DEFAUT; }
+}
+function msgGarder(t){ try{ localStorage.setItem(MSG_TPL_CLE, t); }catch(e){} }
+
+function openMsg(){
+    const ta = document.getElementById('msgTpl');
+    ta.value = msgTexte();
+    ta.oninput = () => { msgGarder(ta.value); renderMsg(); };
+
+    const sel = document.getElementById('msgFiltre');
+    sel.innerHTML = `<option value="">Toutes les influenceuses</option>`
+        + STATUSES.map((l,i)=>`<option value="${i}">${esc(l)}</option>`).join('');
+    // On arrive du filtre affiché à l'écran : neuf fois sur dix c'est déjà
+    // la bonne liste, et le contraire surprendrait.
+    sel.value = filterStatus;
+
+    document.getElementById('msgScrim').classList.add('open');
+    renderMsg();
+}
+function closeMsg(){ document.getElementById('msgScrim').classList.remove('open'); }
+
+function msgJeton(j){
+    const ta = document.getElementById('msgTpl');
+    const a = ta.selectionStart ?? ta.value.length, b = ta.selectionEnd ?? a;
+    ta.value = ta.value.slice(0,a) + j + ta.value.slice(b);
+    ta.focus();
+    ta.selectionStart = ta.selectionEnd = a + j.length;
+    msgGarder(ta.value);
+    renderMsg();
+}
+function msgReset(){
+    const ta = document.getElementById('msgTpl');
+    ta.value = MSG_TPL_DEFAUT;
+    msgGarder(ta.value);
+    renderMsg();
+}
+
+/* Un remplacement par repère, sur le texte tel quel : pas d'expression
+   régulière construite avec le contenu, un pseudo à parenthèses la casserait. */
+function msgPour(inf, modele){
+    const code = (inf.espace_code || '').trim();
+    return String(modele)
+        .split('{prenom}').join(prenom(inf))
+        .split('{pseudo}').join(String(inf.pseudo || '').trim())
+        .split('{code}').join(code)
+        .split('{lien}').join(location.origin);
+}
+
+let MSG_OUVERTS = {};
+
+function renderMsg(){
+    const st = document.getElementById('msgFiltre').value;
+    const modele = document.getElementById('msgTpl').value;
+    let list = ambassadeurs().slice().sort((a,b)=>
+        String(a.pseudo||'').localeCompare(String(b.pseudo||''), 'fr'));
+    if(st !== '') list = list.filter(i => String(i.status) === st);
+
+    const sans = list.filter(i => !(i.espace_code||'').trim()).length;
+    const prets = list.length - sans;
+    document.getElementById('msgN').textContent =
+        list.length
+            ? `${prets} message${prets>1?'s':''} prêt${prets>1?'s':''}`
+              + (sans ? ` — ${sans} sans code` : '')
+            : '';
+
+    const zone = document.getElementById('msgList');
+    if(!list.length){
+        zone.innerHTML = `<div class="empty">${ico('inbox')}
+            <div class="empty-t">Personne à ce statut</div>
+            <div class="empty-s">Change de statut au-dessus.</div></div>`;
+        paintIcons(zone);
+        return;
+    }
+
+    zone.innerHTML = list.map(inf => {
+        const code = (inf.espace_code || '').trim();
+        const nom = esc(inf.pseudo || 'Sans nom');
+        if(!code){
+            // Un message sans code est un message inutile : on ne propose pas
+            // de le copier, on dit quoi faire pour qu'il existe.
+            return `<div class="mg-item sans">
+                <div class="mg-top"><div class="mg-nom">${nom}</div></div>
+                <div class="mg-sans">Pas encore de code d'entrée. Ouvre sa fiche et
+                    enregistre-la : un code lui sera attribué, et son message apparaîtra ici.</div>
+            </div>`;
+        }
+        const txt = msgPour(inf, modele);
+        const ouvert = !!MSG_OUVERTS[inf.id];
+        return `<div class="mg-item">
+            <div class="mg-top">
+                <div class="mg-nom">${nom}</div>
+                <span class="mg-code">${esc(code)}</span>
+                <button class="btn sm" data-mg="${escAttr(inf.id)}">Copier</button>
+            </div>
+            <div class="mg-txt${ouvert?' tout':''}" id="mgt_${escAttr(inf.id)}">${esc(txt)}</div>
+            <button class="mg-plus" onclick="msgVoir('${escAttr(inf.id)}')">${ouvert?'Réduire':'Voir tout le message'}</button>
+        </div>`;
+    }).join('');
+
+    zone.querySelectorAll('[data-mg]').forEach(b => {
+        b.onclick = () => {
+            const inf = influenceurs.find(i => i.id === b.dataset.mg);
+            if(!inf) return;
+            copierTexte(msgPour(inf, document.getElementById('msgTpl').value), b, 'Copier');
+        };
+    });
+}
+
+function msgVoir(id){
+    MSG_OUVERTS[id] = !MSG_OUVERTS[id];
+    renderMsg();
+}
+
 function ouvrirWhatsApp(id, cle){
     const inf = find(id);
     if(!inf) return;
@@ -4373,7 +4591,7 @@ document.getElementById('impScrim').addEventListener('click', e => { if(e.target
 document.getElementById('scrim').addEventListener('click', e => { if(e.target.id==='scrim') closeSheet(); });
 document.getElementById('addScrim').addEventListener('click', e => { if(e.target.id==='addScrim') closeAdd(); });
 document.addEventListener('keydown', e => {
-    if(e.key === 'Escape'){ closeSheet(); closeAdd(); closeImp(); closeVidUpload(); }
+    if(e.key === 'Escape'){ closeSheet(); closeAdd(); closeImp(); closeVidUpload(); closeMsg(); }
 });
 
 document.getElementById('grid').innerHTML = Array.from({length:3}, ()=>'<div class="skel"></div>').join('');
