@@ -95,7 +95,7 @@ input[type=file]{display:none}
         <div class="navmenu" data-menu>
             <button class="navmenu-btn" data-menu-btn>🎨 Génération <span class="chev">▼</span></button>
             <div class="navmenu-drop">
-                <a href="/">🎨 Générateur</a>
+                <a href="/generateur">🎨 Générateur</a>
                 <a href="/templates">🗂️ Templates</a>
                 <a href="/categories">🏷️ Catégories S/A/B</a>
             </div>
@@ -263,7 +263,7 @@ document.getElementById('randSelectBtn').addEventListener('click', () => {
 document.getElementById('useSelectedBtn').addEventListener('click', () => {
     const keys = order.filter(k => selected.has(k));
     localStorage.setItem('selected_templates_v2', JSON.stringify(keys));
-    window.location.href = '/';
+    window.location.href = '/generateur';
 });
 
 async function deleteTemplate(e, key) {
