@@ -209,7 +209,7 @@ h1{font-size:24px;margin:0;font-weight:800;letter-spacing:-0.02em}
         <div class="navmenu" data-menu>
             <button class="navmenu-btn" data-menu-btn>🎨 Génération <span class="chev">▼</span></button>
             <div class="navmenu-drop">
-                <a href="/">🎨 Générateur</a>
+                <a href="/generateur">🎨 Générateur</a>
                 <a href="/templates">🗂️ Templates</a>
                 <a href="/categories">🏷️ Catégories S/A/B</a>
             </div>
@@ -641,7 +641,7 @@ function render(){
     selCountEl.textContent=selectedForMain.size>0?`${selectedForMain.size} sélectionné(s) → ${accounts.main||'compte principal'}`:'';
 
     if(!list.length){
-        grid.innerHTML='<div class="empty" style="grid-column:1/-1">📭 Aucun post Instagram trouvé<br><br>Génère des images sur le <a href="/" style="color:var(--accent)">Générateur</a></div>';
+        grid.innerHTML='<div class="empty" style="grid-column:1/-1">📭 Aucun post Instagram trouvé<br><br>Génère des images sur le <a href="/generateur" style="color:var(--accent)">Générateur</a></div>';
         return;
     }
 
