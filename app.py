@@ -4616,7 +4616,11 @@ INFLUENCER_TIERS = [
 # Missions par défaut (PROVISOIRE — configurable)
 DEFAULT_MISSIONS = [
     {"id": "profil",    "label": "Compléter ton profil",         "desc": "Réseaux sociaux et statistiques",     "auto": True},
-    {"id": "maillots",  "label": "Choisir tes 2 maillots",       "desc": "Depuis le catalogue Volakits",        "auto": True},
+    # Ce n'est plus une tâche : c'est l'équipe qui choisit. La ligne reste
+    # parce qu'elle marque une étape franchie du parcours, mais elle ne demande
+    # plus rien — une case à cocher qu'on ne peut pas cocher soi-même
+    # ressemble à une promesse non tenue.
+    {"id": "maillots",  "label": "Tes 2 maillots",               "desc": "Choisis pour toi par l'équipe",       "auto": True},
     {"id": "livraison", "label": "Renseigner ton adresse",       "desc": "Pour l'expédition de ton colis",      "auto": True},
     {"id": "unboxing",  "label": "Publier ton unboxing",         "desc": "Une vidéo de réception du colis",     "auto": False},
     {"id": "video1",    "label": "Publier ta 1ʳᵉ vidéo",         "desc": "Playback ou selon ton contenu",       "auto": False},
