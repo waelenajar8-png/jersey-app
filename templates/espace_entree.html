@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Espace créateur — Volakits</title>
+<meta name="robots" content="noindex, nofollow">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&display=swap" rel="stylesheet">
+<style>
+/* ══════════════════════════════════════════════════════════════════════════
+   La porte d'entrée.
+   C'est le premier écran d'une influenceuse, souvent depuis un lien WhatsApp,
+   sur un téléphone, dans le bus. Une seule chose à faire : entrer son code.
+   Tout ce qui n'y aide pas a été retiré — un menu, une présentation de la
+   marque, un « en savoir plus » sont autant de raisons de ne pas taper.
+   ══════════════════════════════════════════════════════════════════════════ */
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+    --bg:#F4F4F1; --surface:#FFFFFF; --ink:#0B1020; --ink-2:#3B4152;
+    --muted:#6B7089; --faint:#A3ABC0; --line:#E4E4DF;
+    --accent:#2F50F1; --danger:#D33A2C;
+}
+body{
+    font-family:'Archivo',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+    background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased;
+    min-height:100vh;display:flex;align-items:center;justify-content:center;
+    padding:28px 20px 40px;line-height:1.5;
+}
+.wrap{width:100%;max-width:390px}
+
+.mark{font-size:13px;font-weight:800;letter-spacing:.2em;color:var(--muted);text-align:center}
+h1{font-size:30px;font-weight:800;letter-spacing:-.038em;margin-top:14px;
+   text-align:center;font-variation-settings:'wdth' 112;text-wrap:balance}
+.lead{font-size:14px;font-weight:500;color:var(--muted);text-align:center;
+      margin-top:9px;line-height:1.55}
+
+form{margin-top:26px}
+label{display:block;font-size:10px;font-weight:800;letter-spacing:.15em;
+      text-transform:uppercase;color:var(--muted);margin-bottom:9px}
+/* Le champ est le seul objet fort de l'écran : gros, centré, chiffres
+   monospacés pour qu'on relise ce qu'on a tapé sans plisser les yeux. */
+#code{
+    width:100%;padding:17px 14px;border-radius:15px;
+    border:1.5px solid var(--line);background:var(--surface);
+    font-family:inherit;font-size:25px;font-weight:800;letter-spacing:.16em;
+    text-align:center;text-transform:uppercase;color:var(--ink);
+    font-variant-numeric:tabular-nums;transition:border-color .16s,box-shadow .16s;
+}
+#code::placeholder{color:#D3D6DE;letter-spacing:.16em;font-weight:700}
+#code:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 4px rgba(47,80,241,.11)}
+#code.faux{border-color:var(--danger);box-shadow:0 0 0 4px rgba(211,58,44,.1)}
+
+button{
+    width:100%;margin-top:12px;padding:16px;border:0;border-radius:15px;
+    background:var(--accent);color:#fff;font-family:inherit;
+    font-size:15px;font-weight:800;letter-spacing:-.015em;cursor:pointer;
+    transition:opacity .16s,transform .16s;
+}
+button:hover:not(:disabled){transform:translateY(-1px)}
+button:disabled{opacity:.55;cursor:default;transform:none}
+:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+
+.msg{min-height:19px;margin-top:12px;text-align:center;
+     font-size:12.5px;font-weight:600;line-height:1.45}
+.msg.err{color:var(--danger)}
+.msg.ok{color:var(--accent)}
+
+.aide{margin-top:26px;padding-top:18px;border-top:1px solid var(--line);
+      text-align:center;font-size:12.5px;font-weight:500;color:var(--muted);line-height:1.6}
+.aide b{font-weight:700;color:var(--ink-2)}
+.aide a{color:var(--accent);font-weight:700;text-decoration:none}
+.aide a:hover{text-decoration:underline}
+
+@media(max-width:360px){
+    #code{font-size:22px;letter-spacing:.12em}
+    h1{font-size:26px}
+}
+@media (prefers-reduced-motion:reduce){
+    *{transition-duration:.001ms!important}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+    <div class="mark">VOLAKITS</div>
+    <h1>Ton espace créateur</h1>
+    <p class="lead">Entre le code qu'on t'a envoyé pour retrouver tes maillots,
+        tes gains et ton palier.</p>
+
+    <form id="f" autocomplete="off">
+        <label for="code">Ton code d'accès</label>
+        <input id="code" name="code" type="text" inputmode="latin"
+               autocapitalize="characters" autocorrect="off" spellcheck="false"
+               maxlength="12" placeholder="XXXXXXX" autofocus
+               aria-describedby="msg">
+        <button type="submit" id="go">Entrer</button>
+        <div class="msg" id="msg" role="status" aria-live="polite"></div>
+    </form>
+
+    <p class="aide">Tu as reçu un <b>lien direct</b> ? Il fonctionne toujours,
+        tu n'as pas besoin de code.<br>
+        Code perdu ? Écris-nous, on te le redonne.</p>
+
+</div>
+
+<script>
+const champ = document.getElementById('code');
+const bouton = document.getElementById('go');
+const msg = document.getElementById('msg');
+
+/* On pardonne la mise en forme : espaces, tirets, minuscules. Un code recopié
+   depuis WhatsApp arrive rarement propre, et refuser « lyd-4k2 c9 » pour une
+   histoire de tiret ferait écrire une influenceuse pour rien. */
+champ.addEventListener('input', () => {
+    const propre = champ.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if(champ.value !== propre) champ.value = propre;
+    champ.classList.remove('faux');
+    msg.textContent = '';
+});
+
+document.getElementById('f').addEventListener('submit', async e => {
+    e.preventDefault();
+    const code = champ.value.trim();
+    if(!code){ champ.focus(); return; }
+
+    bouton.disabled = true;
+    bouton.textContent = 'Vérification…';
+    msg.className = 'msg';
+    msg.textContent = '';
+
+    try{
+        const r = await fetch('/api/espace/entrer', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({code})
+        });
+        const d = await r.json();
+        if(d.success && d.url){
+            msg.className = 'msg ok';
+            msg.textContent = 'C’est bon, on t’emmène…';
+            location.href = d.url;
+            return;                       // on ne réactive pas : la page part
+        }
+        champ.classList.add('faux');
+        msg.className = 'msg err';
+        msg.textContent = d.error || 'Ce code ne correspond à aucun espace.';
+        champ.select();
+    }catch(err){
+        msg.className = 'msg err';
+        msg.textContent = 'Connexion interrompue. Réessaie.';
+    }
+    bouton.disabled = false;
+    bouton.textContent = 'Entrer';
+});
+</script>
+</body>
+</html>
