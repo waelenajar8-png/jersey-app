@@ -4329,6 +4329,7 @@ def api_save_influenceurs():
                         cat = _load_gifting_catalog()
                     miss = _apply_shipment(inf, cat)
                     cat_dirty = True
+                    _journal(inf, "colis_envoye", (inf.get("tracking") or "").strip())
                     if miss:
                         shortages.extend([f"{inf.get('pseudo','?')} : {m}" for m in miss])
                 elif (not shipped) and inf.get("jerseys_shipped"):
@@ -6527,7 +6528,102 @@ def api_espace_entrer():
 
     with _code_lock:
         _code_essais.pop(ip, None)
+    _journal(trouve, "connexion")
     return jsonify({"success": True, "url": "/espace/" + _public_slug(trouve)})
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# JOURNAL D'ACTIVITÉ
+# « J'ai mis le lien, je te jure. » Sans trace, cette phrase se discute ; avec
+# une ligne horodatée, elle se vérifie en dix secondes. Le journal enregistre ce
+# que font les influenceuses dans leur espace — et les quelques événements
+# serveur qui rendent la suite lisible, comme le départ d'un colis.
+#
+# Un fichier unique, plafonné : à dix-neuf influenceuses et quelques gestes par
+# jour, on tient des mois. Au-delà du plafond, les plus anciennes lignes
+# tombent — un journal qui grossit sans fin finit par ralentir chaque requête.
+# ══════════════════════════════════════════════════════════════════════════════
+JOURNAL_KEY   = "meta/journal.json"
+JOURNAL_MAX   = 4000
+_journal_lock = threading.Lock()
+
+# Libellés lisibles. La clé technique ne sort jamais à l'écran.
+JOURNAL_ACTIONS = {
+    "connexion":      "S'est connectée à son espace",
+    "adresse":        "A renseigné son adresse de livraison",
+    "adresse_maj":    "A modifié son adresse de livraison",
+    "reseaux":        "A mis à jour ses réseaux",
+    "maillots":       "A choisi ses maillots",
+    "video":          "A déclaré une vidéo",
+    "video_suppr":    "A retiré une vidéo",
+    "colis_recu":     "A signalé avoir reçu son colis",
+    "colis_probleme": "A signalé un problème avec son colis",
+    "code_ok":        "A saisi son code de livraison",
+    "code_faux":      "Code de livraison refusé",
+    "colis_envoye":   "Colis expédié",
+}
+
+
+def _journal_lire():
+    try:
+        d = r2_get_json(JOURNAL_KEY) or {}
+        ev = d.get("events")
+        return ev if isinstance(ev, list) else []
+    except R2Indisponible:
+        raise
+    except Exception as e:
+        print(f"[JOURNAL] Lecture impossible: {e}")
+        return []
+
+
+def _journal(inf, action, detail=""):
+    """
+    Ajoute une ligne au journal. Ne lève jamais.
+
+    Un journal qui fait échouer l'action qu'il devait raconter serait pire que
+    pas de journal du tout : elle enregistre son adresse, l'écriture du journal
+    échoue, et elle reçoit une erreur alors que son adresse est bien enregistrée.
+    """
+    try:
+        ligne = {
+            "at":     datetime.now(timezone.utc).isoformat(),
+            "who_id": (inf or {}).get("id", ""),
+            "who":    (inf or {}).get("pseudo", "") or "—",
+            "action": action,
+            "detail": str(detail or "")[:300],
+        }
+        with _journal_lock:
+            events = _journal_lire()
+            events.append(ligne)
+            if len(events) > JOURNAL_MAX:
+                events = events[-JOURNAL_MAX:]
+            r2_put_json(JOURNAL_KEY, {"events": events,
+                                      "updated_at": ligne["at"]})
+    except Exception as e:
+        print(f"[JOURNAL] {action} non enregistré: {e}")
+
+
+@app.route("/api/journal", methods=["GET"])
+@_require_admin_api
+def api_journal():
+    """
+    Le journal, du plus récent au plus ancien.
+
+    `influ_id` limite à une personne — c'est l'usage principal : on ouvre sa
+    fiche et on regarde ce qu'elle a vraiment fait, et quand.
+    """
+    try:
+        events = _journal_lire()
+    except R2Indisponible as e:
+        return jsonify({"success": False, "error": str(e)}), 503
+    qui = (request.args.get("influ_id") or "").strip()
+    if qui:
+        events = [e for e in events if e.get("who_id") == qui]
+    limite = max(1, min(1000, _safe_int(request.args.get("limit"), 300)))
+    events = list(reversed(events))[:limite]
+    for e in events:
+        e["label"] = JOURNAL_ACTIONS.get(e.get("action"), e.get("action", ""))
+    return jsonify({"success": True, "events": events, "total": len(events)})
 
 
 @app.route("/espace/<slug>")
@@ -6605,6 +6701,11 @@ def api_espace_update(slug):
             updates["jerseys"] = [_jersey_durable(j) for j in updates["jerseys"]
                                   if isinstance(j, dict)]
 
+        # On note ce qui change AVANT d'écraser : distinguer une première
+        # adresse d'une correction est exactement ce qu'on vient chercher dans
+        # le journal quand une livraison part au mauvais endroit.
+        avait_adresse = bool((found.get("shipping") or {}).get("address")
+                             or found.get("address"))
         found.update(updates)
         found["lastModified"] = datetime.now(timezone.utc).isoformat()
         # Miroir de l'adresse principale pour le back-office
@@ -6616,7 +6717,26 @@ def api_espace_update(slug):
         data["influenceurs"] = influenceurs
         data["version"] = data.get("version", 0) + 1
         data["updated_at"] = datetime.now(timezone.utc).isoformat()
-        r2_put_json(INFLUENCEURS_R2_KEY, data)
+        if not r2_put_json(INFLUENCEURS_R2_KEY, data):
+            # Le retour n'était pas testé : elle voyait « enregistré » alors
+            # que rien n'avait été écrit.
+            return jsonify({"success": False,
+                            "error": "Ça n'a pas pu s'enregistrer. Réessaie."}), 500
+        traces = list(updates.keys())
+
+    if "shipping" in traces:
+        sh = updates.get("shipping") or {}
+        resume = ", ".join(x for x in [sh.get("firstname"), sh.get("lastname"),
+                                       sh.get("address"), sh.get("postal"),
+                                       sh.get("city")] if x)
+        _journal(found, "adresse_maj" if avait_adresse else "adresse", resume)
+    if "platforms" in traces:
+        noms = ", ".join(sorted((updates.get("platforms") or {}).keys()))
+        _journal(found, "reseaux", noms)
+    if "jerseys" in traces:
+        _journal(found, "maillots",
+                 " + ".join(f"{j.get('name','?')} {j.get('size','')}".strip()
+                            for j in (updates.get("jerseys") or [])))
 
     return jsonify({"success": True})
 
@@ -6667,6 +6787,7 @@ def api_espace_verify(slug):
             _pin_tries.pop(slug, None)
         session[f"espace_pin_{slug}"] = True
         session.permanent = True
+        _journal(inf, "code_ok")
         return jsonify({"success": True, "pin_required": True})
 
     with _pin_lock:
@@ -6685,6 +6806,10 @@ def api_espace_verify(slug):
                   f"verrouillé {int(entry['until'] - now)}s")
         _pin_tries[slug] = entry
         reste = max(0, ESPACE_PIN_MAX_TRIES - (entry["n"] % ESPACE_PIN_MAX_TRIES or ESPACE_PIN_MAX_TRIES))
+
+    # Un code refusé se note : c'est le signe qu'elle cherche son code — ou que
+    # quelqu'un d'autre essaie d'entrer.
+    _journal(inf, "code_faux", f"{entry['n']} essai(s)")
 
     return jsonify({
         "success": False,
@@ -6730,6 +6855,8 @@ def api_espace_add_video(slug):
         videos = _load_influ_videos()
         videos.append(meta)
         _save_influ_videos(videos)
+    _journal(inf, "video",
+             f"{'Unboxing' if vtype == 'unboxing' else 'Playback'} — {link}")
     return jsonify({"success": True, "video": meta})
 
 @app.route("/api/espace/<slug>/video/<vid>", methods=["DELETE"])
@@ -6756,6 +6883,7 @@ def api_espace_del_video(slug, vid):
                             "error": "Cette vidéo a été ajoutée par l'équipe."}), 403
         videos = [v for v in videos if v.get("id") != vid]
         _save_influ_videos(videos)
+    _journal(inf, "video_suppr", (cible or {}).get("orig_link", ""))
     return jsonify({"success": True})
 
 
@@ -6798,6 +6926,7 @@ def api_espace_colis(slug):
         if not r2_put_json(INFLUENCEURS_R2_KEY, data):
             return jsonify({"success": False, "error": "écriture échouée"}), 500
 
+    _journal(cible, "colis_recu" if action == "recu" else "colis_probleme")
     return jsonify({"success": True, "tracking_status": etat})
 
 
