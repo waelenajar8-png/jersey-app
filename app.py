@@ -6231,6 +6231,13 @@ def _espace_payload(inf):
         "access": {
             "pin_required": bool(_espace_pin(inf)),
             "pin_verified": _espace_pin_ok(inf, _public_slug(inf)),
+            # Son code d'entrée, à elle seule. Le montrer ici n'ouvre rien de
+            # plus : qui lit cette réponse est déjà dans son espace, et le code
+            # ne donne accès qu'à ce même espace. Ce qu'il évite, c'est le
+            # message « j'ai perdu le lien » — elle note son code et revient
+            # seule. Le code de LIVRAISON, lui, n'apparaît jamais ici : il
+            # protège justement contre quelqu'un qui détient déjà le lien.
+            "code": _normaliser_code(inf.get("espace_code")),
         },
         "tier": {
             "current": current_tier,
