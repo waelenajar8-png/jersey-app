@@ -2724,6 +2724,18 @@ async function doSave(force){
         const d = await r.json();
         if(d.success){
             dataVersion = d.version || dataVersion;
+            // On réaligne notre copie sur ce que la base dit vraiment de
+            // l'expédition. Sans ça, l'onglet reste persuadé que le colis n'est
+            // pas parti et rouvre les boutons de retrait de maillots.
+            if(Array.isArray(d.shipped)){
+                const partis = new Set(d.shipped);
+                let bouge = false;
+                influenceurs.forEach(i=>{
+                    const vrai = partis.has(i.id);
+                    if(!!i.jerseys_shipped !== vrai){ i.jerseys_shipped = vrai; bouge = true; }
+                });
+                if(bouge && VIEW === 'stock' && STOCK_TAB === 'envois') renderEnvois();
+            }
             // Le serveur détecte les tailles expédiées alors que le stock est
             // déjà à zéro. Avant, il le renvoyait ici et personne ne le lisait.
             if(Array.isArray(d.stock_warnings) && d.stock_warnings.length)
