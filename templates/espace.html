@@ -944,6 +944,47 @@ button.lien:focus-visible{outline:2px solid var(--accent);outline-offset:2px;bor
 .b-muted{color:var(--faint)}
 .skeleton{background:linear-gradient(90deg,#EAE9E2 25%,#F5F4F0 50%,#EAE9E2 75%);background-size:200% 100%;animation:sk 1.4s infinite;border-radius:8px}
 @keyframes sk{0%{background-position:200% 0}100%{background-position:-200% 0}}
+
+/* ── Les réglages de publication TikTok ─────────────────────────────────
+   Deux captures par geste, recadrées sur la zone entourée. Empilées en
+   pleine hauteur, les six écrans d'origine faisaient quatre écrans de
+   défilement : personne n'arrive au bout, donc personne n'active
+   l'autorisation publicitaire — et le budget ne peut pas suivre. */
+.tk{margin-top:11px}
+.tk-s{padding:12px 0;border-top:1px dashed var(--line)}
+.tk-s:first-child{border-top:0;padding-top:3px}
+.tk-x{display:grid;grid-template-columns:19px 1fr;gap:9px;
+    font-size:13px;font-weight:500;color:var(--ink-2);line-height:1.5}
+.tk-x b{font-weight:800;color:var(--ink)}
+.tk-n{font-size:10.5px;font-weight:800;color:var(--faint);padding-top:2px}
+.tk-g{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:9px 0 0 28px}
+.tk-g.solo{grid-template-columns:1fr}
+.tk-img{padding:0;border:1px solid var(--line);border-radius:10px;overflow:hidden;
+    background:var(--surface-2);cursor:zoom-in;display:block;width:100%;
+    transition:border-color .16s,transform .16s}
+.tk-img:hover{border-color:var(--accent);transform:translateY(-1px)}
+.tk-img:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.tk-img img{width:100%;display:block}
+.tk-pq{margin-top:14px;padding:14px 15px;border-radius:15px;
+    background:var(--accent);color:#fff}
+.tk-pq-t{font-size:15px;font-weight:800;letter-spacing:-.025em;line-height:1.3}
+.tk-pq-d{font-size:12.5px;font-weight:500;color:var(--on-accent);
+    margin-top:7px;line-height:1.55}
+.tk-res{margin-top:13px;padding:14px 15px;border-radius:15px;
+    background:var(--ok-soft);border:1px solid #C6E4D5}
+.tk-res-d{font-size:12.5px;font-weight:600;color:var(--ink-2);line-height:1.5}
+.tk-res img{width:100%;border-radius:10px;margin-top:10px;display:block;
+    border:1px solid #C6E4D5}
+@media(max-width:400px){
+    .tk-g{margin-left:0;gap:6px}
+    .tk-x{grid-template-columns:16px 1fr;gap:7px}
+}
+/* La loupe : la vignette dit où appuyer, l'agrandissement lève le doute. */
+.tk-loupe{position:fixed;inset:0;background:rgba(8,10,20,.9);z-index:120;
+    display:none;place-items:center;padding:20px;cursor:zoom-out}
+.tk-loupe.on{display:grid}
+.tk-loupe img{max-width:min(560px,94vw);max-height:88vh;border-radius:12px;display:block}
+
 .toast{
     position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(90px);
     background:var(--sidebar);color:#fff;padding:12px 20px;border-radius:100px;
@@ -1153,7 +1194,7 @@ button.lien:focus-visible{outline:2px solid var(--accent);outline-offset:2px;bor
             </button>
             <button class="nav-item" data-tab="missions">
                 <svg class="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M9 11l3 3L22 4M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                Mes missions
+                Publier mes vidéos
                 <span class="nav-badge" id="navMissions">0</span>
             </button>
             <button class="nav-item" data-tab="colis">
@@ -1226,8 +1267,8 @@ button.lien:focus-visible{outline:2px solid var(--accent);outline-offset:2px;bor
         Accueil
     </button>
     <button class="mob-item" data-tab="missions">
-        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        Missions
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="3"/><path d="m10 9 5 3-5 3z" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Publier
     </button>
     <button class="mob-item" data-tab="colis">
         <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -1248,6 +1289,7 @@ button.lien:focus-visible{outline:2px solid var(--accent);outline-offset:2px;bor
 </div>
 
 <div class="toast" id="toast"></div>
+<div class="tk-loupe" id="tkLoupe"><img id="tkLoupeImg" alt="Capture agrandie"></div>
 
 <script>
 const SLUG = {{ slug|tojson }};
@@ -1373,7 +1415,27 @@ function render(){
     bindMissions();
     const gv = document.getElementById('gdVersContenus');
     if(gv) gv.onclick = ()=> setTab('contenus');
+    // La vignette dit où appuyer ; l'agrandissement lève le doute quand elle
+    // ne reconnaît pas l'écran.
+    document.querySelectorAll('[data-zoom]').forEach(b=>{
+        b.onclick = ()=>{
+            document.getElementById('tkLoupeImg').src =
+                `/static/guide-${b.getAttribute('data-zoom')}.jpg`;
+            document.getElementById('tkLoupe').classList.add('on');
+        };
+    });
 }
+
+/* La loupe se ferme au doigt comme au clavier. Posée une seule fois : elle
+   vit hors de la vue, qui est reconstruite à chaque changement d'onglet. */
+(function(){
+    const l = document.getElementById('tkLoupe');
+    if(!l) return;
+    l.onclick = ()=> l.classList.remove('on');
+    document.addEventListener('keydown', e=>{
+        if(e.key === 'Escape') l.classList.remove('on');
+    });
+})();
 
 function peindreVue(v){
     if(TAB === 'home')      v.innerHTML = viewHome();
@@ -1961,17 +2023,16 @@ function bindMissions(){
 
 function viewMissions(){
     const done = D.missions.filter(m=>m.done).length;
-    return `<div class="card">
-        <div class="card-head">
-            <div>
-                <div class="card-title"><span class="ico-box">${ICO.target}</span>Tes missions</div>
-                <div class="card-sub" style="margin-top:5px">${done} sur ${D.missions.length} accomplies</div>
-            </div>
-            <span class="badge ${done===D.missions.length?'b-ok':'b-info'}">${Math.round(done/D.missions.length*100)}%</span>
-        </div>
-        ${D.missions.map(missionRow).join('')}
-    </div>
-    ${blockGuide()}`;
+    // Le guide d'abord, les missions ensuite. Elle ouvre cet onglet pour
+    // publier, pas pour contempler une liste de cases : ce qu'elle vient
+    // chercher doit être sous son pouce, pas trois écrans plus bas.
+    return `${blockGuide()}
+    <section class="sec">
+        <div class="sec-k">Ton parcours</div>
+        <div class="sec-t">Tes missions</div>
+        <div class="sec-sub">${done} sur ${D.missions.length} accomplies.</div>
+        <div style="margin-top:14px">${D.missions.map(missionRow).join('')}</div>
+    </section>`;
 }
 
 /* ── Comment publier ────────────────────────────────────────────────────
@@ -1984,6 +2045,23 @@ function viewMissions(){
    La description n'est écrite qu'UNE fois, en bas, parce qu'elle est la même
    pour les deux formats. La répéter dans chaque carte doublerait le texte et
    ferait douter qu'il s'agisse bien du même contenu à coller. */
+/* Les réglages TikTok, groupés par geste. Chaque geste montre ses écrans côte
+   à côte, recadrés sur la zone entourée — le fichier complet fait 2 556 px de
+   haut pour une ligne utile. */
+const TIKTOK_ETAPES = [
+    {t: 'Ouvre <b>Plus d\'options</b>, puis <b>Divulgation de contenu et publicités</b>.',
+     img: ['01-plus', '02-divulg']},
+    {t: 'Active <b>Présenter le contenu commercial</b>, coche <b>Contenu de marque</b>, '
+        + 'puis ouvre <b>Partenariat avec une marque</b>.',
+     img: ['03-toggle', '04-partner']},
+    {t: 'Tape <b>Volakits</b>, choisis <b>Autre marque</b>, valide. Descends et active '
+        + '<b>Autorisation publicitaire</b>.',
+     img: ['05-volakits', '06-autor']},
+    {t: 'Laisse <b>365 jours</b>, appuie sur <b>Générer</b>, active <b>Autorisation '
+        + 'd\'ancrage</b> — puis <b>Enregistrer</b>.',
+     img: ['07-365']},
+];
+
 function blockGuide(){
     const code = (D.influencer.promo_code || '').trim();
     const copySvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>`;
@@ -2073,13 +2151,46 @@ function blockGuide(){
                     </div>
                 </div>
             </div>
+
+            ${/* Les réglages de publication TikTok.
+                 Neuf lignes empilées faisaient quatre écrans de défilement, et
+                 une consigne qu'on n'atteint pas est une consigne qui n'existe
+                 pas. Les captures sont recadrées sur la seule zone entourée et
+                 posées deux par deux : elle reconnaît, elle reproduit. */''}
             <div class="gd-s">
                 <span class="gd-n num">2</span>
                 <div class="gd-b">
-                    <div class="gd-t">Active la Collaboration et identifie @Volakits</div>
-                    <div class="gd-d">Dans l'écran de publication TikTok : « Ajouter un lien » → « Collaboration ». Ta vidéo apparaît alors aussi sur notre compte, donc devant notre audience en plus de la tienne.</div>
+                    <div class="gd-t">Règle les options de publication</div>
+                    <div class="gd-d">Sur le même écran, avant de publier. Une minute, quatre gestes.</div>
+
+                    <div class="tk">
+                        ${TIKTOK_ETAPES.map((e, i) => `
+                            <div class="tk-s">
+                                <div class="tk-x"><span class="tk-n num">${i + 1}</span><span>${e.t}</span></div>
+                                <div class="tk-g ${e.img.length === 1 ? 'solo' : ''}">
+                                    ${e.img.map(k => `<button type="button" class="tk-img" data-zoom="${k}">
+                                        <img src="/static/guide-${k}.jpg" alt="" loading="lazy"></button>`).join('')}
+                                </div>
+                            </div>`).join('')}
+                    </div>
+
+                    <div class="tk-pq">
+                        <div class="tk-pq-t">C'est ce qui fait décoller ta vidéo</div>
+                        <div class="tk-pq-d">Ça nous autorise à mettre un budget publicitaire
+                            derrière. On la pousse, et elle passe de quelques milliers de vues
+                            à des centaines de milliers. Ta vidéo, ton compte et tes abonnés
+                            restent à toi.</div>
+                    </div>
+
+                    <div class="tk-res">
+                        <div class="tk-res-d">Une fois publiée, le badge
+                            <b>Collaboration commerciale</b> apparaît. C'est le signe que tout
+                            est bien réglé.</div>
+                        <img src="/static/guide-08-badge.jpg" alt="Badge Collaboration commerciale" loading="lazy">
+                    </div>
                 </div>
             </div>
+
             <div class="gd-s">
                 <span class="gd-n num">3</span>
                 <div class="gd-b">
