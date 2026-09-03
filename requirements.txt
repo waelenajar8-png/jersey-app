@@ -1,9 +1,13 @@
-flask
-requests
-gunicorn
-boto3
-piexif
-cryptography
-Pillow
-tzdata
-reportlab
+# Versions épinglées : sans elles, chaque redéploiement Railway réinstallait la
+# dernière version publiée de chaque paquet. Une version majeure sortie entre
+# deux déploiements casse la production sans qu'une ligne de ce dépôt ait bougé,
+# et « ça marchait la semaine dernière » devient indémontrable.
+flask==3.1.3
+requests==2.34.2
+gunicorn==26.2.0
+boto3==1.43.87
+piexif==1.1.3
+cryptography==50.0.1
+Pillow==12.3.0
+tzdata==2026.3
+reportlab==5.0.1
