@@ -1,4 +1,5 @@
 import os
+import re
 import base64
 import json
 import time
@@ -2934,7 +2935,19 @@ def call_gemini(img_bytes, mime, name, number, name_below=None, max_retries=5, r
 
 # ── Pages ──────────────────────────────────────────────────────────────────
 @app.route("/")
-def index(): return render_template("index.html")
+def index():
+    """
+    La racine appartient aux influenceuses, pas à l'outil interne.
+
+    C'est l'adresse qu'on communique, qu'on dicte, qu'on met en bio : elle doit
+    mener quelque part pour la personne à qui on l'a donnée. Le générateur de
+    flocages, lui, n'a jamais eu besoin d'une belle adresse.
+    """
+    return render_template("espace_entree.html")
+
+
+@app.route("/generateur")
+def page_generateur(): return render_template("index.html")
 
 @app.route("/queue")
 def queue_page(): return render_template("queue.html")
@@ -3676,6 +3689,7 @@ def api_get_influenceurs():
         # Migrations, une seule fois chacune, puis persistées ensemble.
         migrated = _migrate_status_scale(influenceurs)
         migrated = _migrate_external_ranked(influenceurs) or migrated
+        migrated = _migrate_espace_codes(influenceurs) or migrated
         if migrated:
             try:
                 with _influenceurs_lock:
@@ -6148,6 +6162,111 @@ def api_guide_exemples_set():
         enr["label"] = (p.get("label") or "").strip()
         store["slots"][slot] = enr
     return jsonify({"success": bool(_save_guide_exemples(store))})
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# CODE D'ACCÈS À L'ESPACE
+# Un lien par personne oblige à retrouver le bon lien pour la bonne personne, et
+# une influenceuse qui l'a perdu dans sa conversation WhatsApp écrit pour le
+# redemander. Un code court règle les deux : une seule adresse à communiquer,
+# et un code qu'elle peut noter, recoller, ou qu'on lui redonne en dix secondes.
+#
+# L'alphabet exclut I, O, 0 et 1 : ces caractères se confondent à l'oral comme à
+# l'écrit, et un code dicté au téléphone doit s'écrire sans hésitation.
+# ══════════════════════════════════════════════════════════════════════════════
+ESPACE_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+ESPACE_CODE_LEN      = 7          # 32^7 ≈ 34 milliards de combinaisons
+ESPACE_CODE_MAX      = 8          # essais autorisés par adresse
+ESPACE_CODE_FENETRE  = 600        # avant remise à zéro (secondes)
+
+_code_essais = {}
+_code_lock   = threading.Lock()
+
+
+def _normaliser_code(brut):
+    """« lyd-4k2 c9 » → « LYD4K2C9 ». On pardonne la mise en forme, pas le code."""
+    return re.sub(r"[^A-Z0-9]", "", str(brut or "").upper())
+
+
+def _nouveau_code_espace(pris):
+    while True:
+        c = "".join(secrets.choice(ESPACE_CODE_ALPHABET) for _ in range(ESPACE_CODE_LEN))
+        if c not in pris:
+            return c
+
+
+def _migrate_espace_codes(influenceurs):
+    """Donne un code à qui n'en a pas. Passe une seule fois par personne."""
+    pris = {_normaliser_code(i.get("espace_code"))
+            for i in influenceurs if isinstance(i, dict)}
+    pris.discard("")
+    change = False
+    for inf in influenceurs:
+        if not isinstance(inf, dict) or _normaliser_code(inf.get("espace_code")):
+            continue
+        code = _nouveau_code_espace(pris)
+        pris.add(code)
+        inf["espace_code"] = code
+        change = True
+    return change
+
+
+def _ip_visiteur():
+    envoye = (request.headers.get("X-Forwarded-For") or "").split(",")[0].strip()
+    return envoye or request.remote_addr or "?"
+
+
+@app.route("/api/espace/entrer", methods=["POST"])
+def api_espace_entrer():
+    """
+    Échange un code contre l'adresse de l'espace correspondant.
+
+    La réponse d'échec est volontairement identique dans tous les cas : dire
+    « ce code n'existe pas » plutôt que « code invalide » confirmerait à qui
+    essaie au hasard qu'il touche parfois juste. Et huit essais par adresse
+    suffisent à quelqu'un qui recopie mal son code, pas à qui balaie l'espace
+    des combinaisons.
+    """
+    ip  = _ip_visiteur()
+    now = time.time()
+    with _code_lock:
+        if len(_code_essais) > 2000:
+            for k in [k for k, v in _code_essais.items() if v["until"] < now]:
+                _code_essais.pop(k, None)
+        e = _code_essais.get(ip)
+        if e and e["until"] > now and e["n"] >= ESPACE_CODE_MAX:
+            reste = int((e["until"] - now) / 60) + 1
+            return jsonify({"success": False,
+                            "error": f"Trop d'essais. Réessaie dans {reste} minutes."}), 429
+
+    code = _normaliser_code((request.json or {}).get("code"))
+    trouve = None
+    if len(code) == ESPACE_CODE_LEN:
+        try:
+            data = r2_get_json(INFLUENCEURS_R2_KEY) or {}
+            for inf in (data.get("influenceurs") or []):
+                if not isinstance(inf, dict):
+                    continue
+                if secrets.compare_digest(_normaliser_code(inf.get("espace_code")), code):
+                    trouve = inf
+                    break
+        except Exception as ex:
+            print(f"[ESPACE] Lecture impossible pour un code: {ex}")
+            return jsonify({"success": False,
+                            "error": "Service indisponible, réessaie dans un instant."}), 503
+
+    if not trouve:
+        with _code_lock:
+            e = _code_essais.get(ip)
+            if not e or e["until"] < now:
+                e = {"n": 0, "until": now + ESPACE_CODE_FENETRE}
+            e["n"] += 1
+            _code_essais[ip] = e
+        return jsonify({"success": False, "error": "Ce code ne correspond à aucun espace."}), 401
+
+    with _code_lock:
+        _code_essais.pop(ip, None)
+    return jsonify({"success": True, "url": "/espace/" + _public_slug(trouve)})
 
 
 @app.route("/espace/<slug>")
