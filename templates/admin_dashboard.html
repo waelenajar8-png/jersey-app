@@ -797,6 +797,40 @@ select.inp{cursor:pointer}
 }
 .stat-sel:hover{border-color:var(--line-2)}
 .stat-sel:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(47,80,241,.12)}
+/* ── Journal d'activité ──────────────────────────────────────────────────
+   Une ligne = un geste, avec son heure. Regroupé par jour, parce que la
+   question qu'on se pose est toujours « quand », jamais « combien ». */
+.jl-jour{font-size:10.5px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;
+    color:var(--muted);margin:20px 0 8px;padding-bottom:7px;border-bottom:1px solid var(--line)}
+.jl-jour:first-child{margin-top:0}
+/* La carte ne portait pas de marge intérieure : le premier intitulé de jour
+   se retrouvait collé au bord et rogné. */
+.jl-card{padding:20px 22px 8px}
+.jl-l{display:grid;grid-template-columns:58px 1fr;gap:14px;padding:11px 0;
+    border-bottom:1px solid var(--line);align-items:baseline}
+.jl-l:last-child{border-bottom:0}
+.jl-h{font-size:12.5px;font-weight:700;color:var(--ink);font-variant-numeric:tabular-nums;
+    letter-spacing:-.01em}
+.jl-b{min-width:0}
+.jl-qui{font-size:13.5px;font-weight:700;letter-spacing:-.015em}
+.jl-act{font-size:13.5px;font-weight:500;color:var(--ink-2)}
+.jl-det{font-size:12px;color:var(--muted);margin-top:2px;word-break:break-word;
+    font-weight:500}
+.jl-det a{color:var(--accent);font-weight:600;text-decoration:none}
+.jl-det a:hover{text-decoration:underline}
+/* Deux gestes se distinguent d'un coup d'œil : ce qui va bien, ce qui coince. */
+.jl-l.pt .jl-act{color:var(--ok);font-weight:700}
+.jl-l.ko .jl-act{color:var(--danger);font-weight:700}
+.jl-vide{padding:34px 18px;text-align:center;color:var(--muted);font-size:13px}
+/* Dans la fiche, plus resserré et sans le nom — on sait de qui on parle. */
+#fJournal .jl-l{grid-template-columns:96px 1fr;gap:12px;padding:9px 0}
+#fJournal .jl-h{font-size:11.5px;color:var(--muted)}
+#fJournal .jl-act{font-size:13px}
+#fJournal{max-height:270px;overflow-y:auto}
+@media(max-width:560px){
+    .jl-l{grid-template-columns:1fr;gap:2px}
+    .jl-h{font-size:11.5px;color:var(--muted)}
+}
 </style>
 </head>
 <body>
@@ -813,6 +847,7 @@ select.inp{cursor:pointer}
         <button class="nav-item" id="navStock" onclick="setView('stock')" data-i="tag">Stock maillots<span class="nav-count" id="navStockCount"></span></button>
         <button class="nav-item" id="navVideos" onclick="setView('videos')" data-i="film">Vidéos<span class="nav-count" id="navVidCount"></span></button>
         <button class="nav-item" id="navPaie" onclick="setView('paie')" data-i="euro">À payer<span class="nav-count" id="navPaieCount"></span></button>
+        <button class="nav-item" id="navJournal" onclick="setView('journal')" data-i="clock">Journal</button>
         <div class="nav-label">Outils</div>
         <a href="/influenceurs" class="nav-item" data-i="ext">Ancien back-office</a>
         <div class="side-foot">
@@ -965,6 +1000,26 @@ select.inp{cursor:pointer}
             </div>
 
             <div id="paieList"></div>
+        </section>
+
+        <!-- ══ Vue Journal ══ -->
+        <section id="viewJournal" hidden>
+            <div class="topline">
+                <div>
+                    <h1>Journal</h1>
+                    <p class="subtitle">Tout ce que font tes influenceuses dans leur espace,
+                        horodaté. « J'ai mis le lien » se vérifie ici en dix secondes.</p>
+                </div>
+                <div class="toolbar">
+                    <div class="search">
+                        <span data-i="search"></span>
+                        <input type="text" id="jq" placeholder="Un nom, un lien…" autocomplete="off">
+                    </div>
+                    <button class="btn" id="jRefresh" data-i="sync">Actualiser</button>
+                </div>
+            </div>
+            <div class="filters" id="jFilters"></div>
+            <div id="jList"></div>
         </section>
 
         <!-- ══ Vue Vidéos ══ -->
@@ -1208,6 +1263,11 @@ select.inp{cursor:pointer}
             <div class="fieldset">
                 <div class="legend">Notes</div>
                 <textarea class="inp" id="fNotes" placeholder="Conditions, historique, remarques…"></textarea>
+            </div>
+
+            <div class="fieldset">
+                <div class="legend">Ce qu'elle a fait</div>
+                <div id="fJournal" class="jl"></div>
             </div>
         </div>
 
@@ -2248,6 +2308,7 @@ function openSheet(id){
     renderSheetJerseys(inf);
     renderSheetPin(inf);
     renderSheetCode(inf);
+    renderSheetJournal(inf);
 
     const n = inf.relances || 0;
     document.getElementById('relInfo').textContent = n ? `${n} relance${n>1?'s':''}` : 'Jamais relancé';
@@ -2804,10 +2865,12 @@ function setView(v){
     document.getElementById('viewVideos').hidden = v !== 'videos';
     document.getElementById('viewStock').hidden  = v !== 'stock';
     document.getElementById('viewPaie').hidden   = v !== 'paie';
+    document.getElementById('viewJournal').hidden = v !== 'journal';
     document.getElementById('navPeople').classList.toggle('active', v==='people');
     document.getElementById('navVideos').classList.toggle('active', v==='videos');
     document.getElementById('navStock').classList.toggle('active', v==='stock');
     document.getElementById('navPaie').classList.toggle('active', v==='paie');
+    document.getElementById('navJournal').classList.toggle('active', v==='journal');
     document.querySelectorAll('[data-mseg]').forEach(b => b.classList.toggle('on', b.dataset.mseg === v));
     // Les vidéos sont préchargées au démarrage pour le compteur : si c'est déjà
     // fait, il suffit d'afficher, sinon on va les chercher.
@@ -2820,6 +2883,7 @@ function setView(v){
         else stockData ? renderStock() : loadStock();
     }
     if(v === 'paie') paieLoaded ? renderPaie() : loadPaie();
+    if(v === 'journal') loadJournal();
 }
 
 /* ── Exemples vidéo du guide ─────────────────────────────────────────────
@@ -2920,6 +2984,135 @@ async function gxEnvoyer(slot, file){
         if(d.success){ toast('Exemple mis en ligne'); loadGuideEx(); }
         else if(st) st.textContent = d.error || 'Échec';
     }catch(e){ if(st) st.textContent = 'Erreur réseau'; }
+}
+
+/* ── Journal d'activité ──────────────────────────────────────────────────
+   « J'ai mis le lien, je te jure. » Sans trace, cette phrase se discute ;
+   avec une ligne horodatée, elle se règle en dix secondes. */
+let JOURNAL = [], jFiltre = '';
+
+const JL_TON = {
+    video:'pt', adresse:'pt', maillots:'pt', colis_recu:'pt', code_ok:'pt',
+    code_faux:'ko', colis_probleme:'ko', video_suppr:'ko',
+};
+const JL_GROUPES = [
+    ['',              'Tout'],
+    ['video',         'Vidéos'],
+    ['adresse',       'Adresses'],
+    ['connexion',     'Connexions'],
+    ['colis',         'Colis'],
+];
+
+/* L'heure de Paris, celle à laquelle il vit. Les dates sont stockées en UTC :
+   les afficher telles quelles décalerait tout de deux heures l'été. */
+function jlHeure(iso){
+    const d = new Date(iso);
+    if(isNaN(d)) return '—';
+    return d.toLocaleTimeString('fr-FR', {hour:'2-digit', minute:'2-digit',
+                                          timeZone:'Europe/Paris'});
+}
+function jlJour(iso){
+    const d = new Date(iso);
+    if(isNaN(d)) return 'Date inconnue';
+    const j = new Date(), h = new Date(j.getTime() - 864e5);
+    const meme = (a,b)=> a.toDateString() === b.toDateString();
+    if(meme(d, j)) return "Aujourd'hui";
+    if(meme(d, h)) return 'Hier';
+    return d.toLocaleDateString('fr-FR', {weekday:'long', day:'numeric',
+                                          month:'long', timeZone:'Europe/Paris'});
+}
+/* Un lien reste cliquable : la moitié de l'intérêt du journal, c'est d'aller
+   voir la vidéo qu'elle dit avoir postée. */
+function jlDetail(txt){
+    const t = esc(txt || '');
+    return t.replace(/(https?:\/\/[^\s]+)/g,
+        '<a href="$1" target="_blank" rel="noopener">$1</a>');
+}
+
+async function loadJournal(){
+    const el = document.getElementById('jList');
+    el.innerHTML = '<div class="skel" style="height:220px"></div>';
+    try{
+        const r = await fetch('/api/journal?limit=500');
+        const d = await r.json();
+        JOURNAL = d.events || [];
+    }catch(e){
+        JOURNAL = [];
+        toast('Journal indisponible', true);
+    }
+    renderJournalFiltres();
+    renderJournal();
+}
+
+function renderJournalFiltres(){
+    const el = document.getElementById('jFilters');
+    if(!el) return;
+    el.innerHTML = JL_GROUPES.map(([cle, lbl])=>{
+        const n = cle ? JOURNAL.filter(e=>(e.action||'').startsWith(cle)).length
+                      : JOURNAL.length;
+        return `<button class="chip ${jFiltre===cle?'on':''} ${n===0?'zero':''}"
+                 onclick="setJFiltre('${cle}')">${esc(lbl)}
+                 <span class="n num">${n}</span></button>`;
+    }).join('');
+}
+function setJFiltre(v){ jFiltre = v; renderJournalFiltres(); renderJournal(); }
+
+function renderJournal(){
+    const el = document.getElementById('jList');
+    const q = (document.getElementById('jq').value || '').toLowerCase().trim();
+    let list = JOURNAL;
+    if(jFiltre) list = list.filter(e => (e.action||'').startsWith(jFiltre));
+    if(q) list = list.filter(e =>
+        `${e.who} ${e.label} ${e.detail}`.toLowerCase().includes(q));
+
+    if(!list.length){
+        el.innerHTML = `<div class="card jl-vide">${
+            JOURNAL.length ? 'Rien ne correspond à cette recherche.'
+                           : "Rien pour l'instant. Dès qu'une influenceuse touche à son espace, ça s'écrit ici."
+        }</div>`;
+        return;
+    }
+
+    let html = '<div class="card jl-card">', jourCourant = null;
+    list.forEach(e=>{
+        const j = jlJour(e.at);
+        if(j !== jourCourant){
+            jourCourant = j;
+            html += `<div class="jl-jour">${esc(j)}</div>`;
+        }
+        html += `<div class="jl-l ${JL_TON[e.action]||''}">
+            <div class="jl-h">${jlHeure(e.at)}</div>
+            <div class="jl-b">
+                <span class="jl-qui">${esc(e.who||'—')}</span>
+                <span class="jl-act"> — ${esc(e.label||e.action||'')}</span>
+                ${e.detail ? `<div class="jl-det">${jlDetail(e.detail)}</div>` : ''}
+            </div>
+        </div>`;
+    });
+    el.innerHTML = html + '</div>';
+}
+
+/* Le fil d'une seule personne, dans sa fiche : c'est là qu'on regarde quand
+   elle affirme avoir fait quelque chose. */
+async function renderSheetJournal(inf){
+    const el = document.getElementById('fJournal');
+    if(!el) return;
+    el.innerHTML = '<div class="hint">Chargement…</div>';
+    try{
+        const r = await fetch(`/api/journal?limit=60&influ_id=${encodeURIComponent(inf.id)}`);
+        const ev = (await r.json()).events || [];
+        if(!ev.length){
+            el.innerHTML = `<div class="hint">Elle n'a encore rien fait dans son espace.</div>`;
+            return;
+        }
+        el.innerHTML = ev.map(e=>`<div class="jl-l ${JL_TON[e.action]||''}">
+            <div class="jl-h">${esc(jlJour(e.at))} ${jlHeure(e.at)}</div>
+            <div class="jl-b"><span class="jl-act">${esc(e.label||e.action||'')}</span>
+            ${e.detail ? `<div class="jl-det">${jlDetail(e.detail)}</div>` : ''}</div>
+        </div>`).join('');
+    }catch(e){
+        el.innerHTML = `<div class="hint">Journal indisponible.</div>`;
+    }
 }
 
 /* ── Vidéos ─────────────────────────────────────────────────────────── */
@@ -4161,6 +4354,8 @@ document.getElementById('vq').addEventListener('input', renderVideos);
 document.getElementById('sq').addEventListener('input',
     () => STOCK_TAB === 'envois' ? renderEnvois() : renderStock());
 document.getElementById('paieRefresh').addEventListener('click', () => loadPaie());
+document.getElementById('jRefresh').addEventListener('click', () => loadJournal());
+document.getElementById('jq').addEventListener('input', () => renderJournal());
 document.getElementById('stockRefresh').addEventListener('click',
     () => STOCK_TAB === 'envois' ? renderEnvois() : loadStock());
 document.getElementById('vidAddBtn').addEventListener('click', openVidUpload);
