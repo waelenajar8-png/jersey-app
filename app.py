@@ -5975,7 +5975,180 @@ def _espace_payload(inf):
         # vient de l'environnement pour ne pas vivre en dur dans un template
         # que tout le monde peut lire.
         "contact": {"whatsapp": CONTACT_WHATSAPP, "url": _contact_url()},
+        # Resignés à chaque ouverture : une URL R2 ne vit que sept jours.
+        "guide_examples": _guide_exemples_publics(),
     }
+
+# ══════════════════════════════════════════════════════════════════════════════
+# EXEMPLES VIDÉO DU GUIDE
+# Une consigne écrite se discute, un exemple se copie. « Filme l'ouverture du
+# colis » laisse dix interprétations ; deux vidéos côte à côte n'en laissent
+# aucune. Et surtout, la deuxième lève le vrai blocage : beaucoup n'osent pas
+# parler à la caméra, et abandonnent plutôt que de demander si c'est permis.
+#
+# Les fichiers vivent dans R2. On ne stocke JAMAIS l'URL signée — elle expire
+# au bout de sept jours — seulement la clé, resignée à chaque ouverture de
+# l'espace. C'est la même règle que pour les photos de maillots.
+# ══════════════════════════════════════════════════════════════════════════════
+GUIDE_EXEMPLES_KEY = "meta/guide_exemples.json"
+GUIDE_VIDEO_PFX    = "guide_exemples/"
+GUIDE_VIDEO_MAX    = 60 * 1024 * 1024   # 60 Mo : un exemple est court
+
+# Emplacements fixes. Le libellé est modifiable depuis la console, mais pas la
+# liste : quatre exemples, c'est ce que la page sait afficher.
+GUIDE_SLOTS = [
+    {"id": "unboxing_voix",  "format": "unboxing",
+     "label": "Elle parle à la caméra"},
+    {"id": "unboxing_muet",  "format": "unboxing",
+     "label": "Sans parler, en musique"},
+    {"id": "playback_1",     "format": "playback",
+     "label": "Playback"},
+    {"id": "playback_2",     "format": "playback",
+     "label": "Autre format"},
+]
+GUIDE_SLOT_IDS = {s["id"] for s in GUIDE_SLOTS}
+
+
+def _load_guide_exemples():
+    """{"slots": {id: {"r2_key","label","filename","at"}}} — jamais None."""
+    try:
+        d = r2_get_json(GUIDE_EXEMPLES_KEY) or {}
+        slots = d.get("slots") if isinstance(d.get("slots"), dict) else {}
+        return {"slots": {k: v for k, v in slots.items()
+                          if k in GUIDE_SLOT_IDS and isinstance(v, dict)}}
+    except Exception as e:
+        print(f"[GUIDE] Lecture exemples impossible: {e}")
+        return {"slots": {}}
+
+
+def _save_guide_exemples(data):
+    try:
+        return r2_put_json(GUIDE_EXEMPLES_KEY, {
+            "slots": data.get("slots") or {},
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        })
+    except Exception as e:
+        print(f"[GUIDE] Écriture exemples impossible: {e}")
+        return False
+
+
+def _guide_exemples_publics():
+    """Les exemples tels que l'influenceuse les reçoit : URL fraîche, ou rien.
+
+    Un emplacement vide n'est pas renvoyé — la page n'affiche que ce qui
+    existe, plutôt qu'un cadre gris promettant une vidéo qui n'arrive pas.
+    """
+    data = _load_guide_exemples()
+    out = []
+    for slot in GUIDE_SLOTS:
+        enr = (data["slots"] or {}).get(slot["id"]) or {}
+        cle = (enr.get("r2_key") or "").strip()
+        if not cle:
+            continue
+        url = r2_presigned(cle, expires=604800)
+        if not url:
+            continue
+        out.append({
+            "id":     slot["id"],
+            "format": slot["format"],
+            "label":  (enr.get("label") or slot["label"]).strip(),
+            "url":    url,
+        })
+    return out
+
+
+@app.route("/api/guide/exemples", methods=["GET"])
+@_require_admin_api
+def api_guide_exemples():
+    """Les quatre emplacements, remplis ou non, pour la console."""
+    data = _load_guide_exemples()
+    return jsonify({"slots": [{
+        "id":       s["id"],
+        "format":   s["format"],
+        "defaut":   s["label"],
+        "label":    ((data["slots"].get(s["id"]) or {}).get("label") or s["label"]),
+        "filename": (data["slots"].get(s["id"]) or {}).get("filename", ""),
+        "at":       (data["slots"].get(s["id"]) or {}).get("at", ""),
+        "url":      (r2_presigned((data["slots"].get(s["id"]) or {}).get("r2_key"), expires=604800)
+                     if (data["slots"].get(s["id"]) or {}).get("r2_key") else ""),
+    } for s in GUIDE_SLOTS]})
+
+
+@app.route("/api/guide/exemples/upload", methods=["POST"])
+@_require_admin_api
+def api_guide_exemples_upload():
+    """Dépose la vidéo d'un emplacement. Remplace celle qui s'y trouvait."""
+    slot = (request.form.get("slot") or "").strip()
+    if slot not in GUIDE_SLOT_IDS:
+        return jsonify({"success": False, "error": "emplacement inconnu"}), 400
+    f = request.files.get("video")
+    if not f:
+        return jsonify({"success": False, "error": "aucun fichier"}), 400
+    data = f.read()
+    if not data:
+        return jsonify({"success": False, "error": "fichier vide"}), 400
+    if len(data) > GUIDE_VIDEO_MAX:
+        return jsonify({"success": False,
+                        "error": f"vidéo trop lourde (max 60 Mo, reçu {len(data)//(1024*1024)} Mo)"}), 400
+
+    fname = f.filename or "exemple.mp4"
+    ext = fname.rsplit(".", 1)[-1].lower() if "." in fname else "mp4"
+    if ext not in ("mp4", "mov", "webm", "m4v"):
+        ext = "mp4"
+    cle = f"{GUIDE_VIDEO_PFX}{slot}-{uuid.uuid4().hex[:8]}.{ext}"
+
+    r2 = get_r2()
+    if not r2:
+        return jsonify({"success": False, "error": "R2 non configuré"}), 500
+    try:
+        r2.put_object(Bucket=R2_BUCKET, Key=cle, Body=data,
+                      ContentType=f.mimetype or "video/mp4")
+    except Exception as e:
+        print(f"[GUIDE] Upload R2 échoué: {e}")
+        return jsonify({"success": False, "error": "échec upload"}), 500
+
+    store = _load_guide_exemples()
+    ancien = (store["slots"].get(slot) or {}).get("r2_key")
+    store["slots"][slot] = {
+        "r2_key":   cle,
+        "label":    (request.form.get("label") or "").strip(),
+        "filename": fname,
+        "at":       datetime.now(timezone.utc).isoformat(),
+    }
+    if not _save_guide_exemples(store):
+        return jsonify({"success": False, "error": "écriture échouée"}), 500
+    # L'ancien fichier ne sert plus à personne : le garder, c'est payer du
+    # stockage pour une vidéo que plus aucune page ne référence.
+    if ancien and ancien != cle:
+        try: r2_delete(ancien)
+        except Exception as e: print(f"[GUIDE] Ancien exemple non supprimé: {e}")
+
+    return jsonify({"success": True, "url": r2_presigned(cle, expires=604800)})
+
+
+@app.route("/api/guide/exemples/set", methods=["POST"])
+@_require_admin_api
+def api_guide_exemples_set():
+    """Renomme un emplacement, ou le vide."""
+    p = request.json or {}
+    slot = (p.get("slot") or "").strip()
+    if slot not in GUIDE_SLOT_IDS:
+        return jsonify({"success": False, "error": "emplacement inconnu"}), 400
+    store = _load_guide_exemples()
+    enr = store["slots"].get(slot) or {}
+    if p.get("supprimer"):
+        cle = enr.get("r2_key")
+        store["slots"].pop(slot, None)
+        if cle:
+            try: r2_delete(cle)
+            except Exception as e: print(f"[GUIDE] Suppression échouée: {e}")
+    else:
+        if not enr:
+            return jsonify({"success": False, "error": "emplacement vide"}), 400
+        enr["label"] = (p.get("label") or "").strip()
+        store["slots"][slot] = enr
+    return jsonify({"success": bool(_save_guide_exemples(store))})
+
 
 @app.route("/espace/<slug>")
 def espace_influenceur(slug):
