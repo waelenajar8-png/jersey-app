@@ -1171,13 +1171,24 @@ select.inp{cursor:pointer}
                         <input class="inp" id="fAddress" placeholder="Adresse complète">
                     </div>
                     <div class="wide">
-                        <label>Code d'accès à l'espace</label>
+                        <label>Son code d'entrée</label>
+                        <div class="pinrow">
+                            <span class="pinval" id="fCodeVal">—</span>
+                            <button type="button" class="btn ghost sm" id="fCodeMsg">Copier le message</button>
+                            <button type="button" class="btn ghost sm" id="fCodeCopy">Copier le code</button>
+                        </div>
+                        <div class="hint">C'est ce qu'elle tape sur la page d'accueil pour entrer dans son
+                            espace. Attribué automatiquement, il ne change jamais — un code qu'on regénère
+                            est un code à renvoyer à quelqu'un qui l'avait déjà noté.</div>
+                    </div>
+                    <div class="wide">
+                        <label>Code pour modifier son adresse</label>
                         <div class="pinrow">
                             <span class="pinval" id="fPinVal">—</span>
                             <button type="button" class="btn ghost sm" id="fPinGen">Générer</button>
                             <button type="button" class="btn ghost sm" id="fPinClear">Retirer</button>
                         </div>
-                        <div class="hint">Sans code, quiconque détient le lien peut réécrire l'adresse de livraison. Transmets-le toi-même à l'influenceur : il ne lui sera demandé qu'au moment de modifier sa livraison, jamais pour consulter son espace.</div>
+                        <div class="hint">Différent du précédent. Sans lui, quiconque détient le lien peut réécrire l'adresse de livraison. Il n'est demandé qu'au moment de modifier la livraison, jamais pour entrer dans l'espace.</div>
                     </div>
                 </div>
             </div>
@@ -1491,6 +1502,9 @@ function normalize(i){
         jerseys_locked: i.jerseys_locked !== false,
         _espace_url: i._espace_url||'', program_start_date: i.program_start_date||'',
         espace_pin: i.espace_pin||'',
+        // Posé par le serveur, jamais modifié ici — mais s'il ne repartait
+        // pas avec la fiche, le premier enregistrement effacerait tous les codes.
+        espace_code: i.espace_code||'',
         // Vendeur hors boutique : volume renseigné à la main, pas de Shopify.
         // Les dates (sales_start, sales_checked_at) sont posées par le serveur
         // et ne transitent pas par ici — les renvoyer permettrait de faire
@@ -2181,6 +2195,7 @@ function openSheet(id){
     renderSheetMissions(inf);
     renderSheetJerseys(inf);
     renderSheetPin(inf);
+    renderSheetCode(inf);
 
     const n = inf.relances || 0;
     document.getElementById('relInfo').textContent = n ? `${n} relance${n>1?'s':''}` : 'Jamais relancé';
@@ -2189,7 +2204,52 @@ function openSheet(id){
     document.getElementById('scrim').classList.add('open');
 }
 
-/* ── Code d'accès à l'espace ─────────────────────────────────────────────
+/* ── Code d'entrée dans l'espace ─────────────────────────────────────────
+   Le message tout prêt existe parce que c'est ce qu'on envoie réellement :
+   copier le code seul obligeait à retaper l'adresse à côté, à chaque fois. */
+function renderSheetCode(inf){
+    const el = document.getElementById('fCodeVal');
+    const code = (inf.espace_code || '').trim();
+    el.textContent = code || 'Ouvre et enregistre la fiche pour en attribuer un';
+    el.classList.toggle('none', !code);
+
+    const racine = location.origin;
+    const message = code
+        ? `Salut ${prenom(inf)} ! Voici ton espace Volakits : ${racine}\n`
+          + `Ton code d'entrée : ${code}\n`
+          + `Tu y retrouves tes maillots, tes gains et ton palier.`
+        : '';
+
+    const bMsg = document.getElementById('fCodeMsg');
+    const bCod = document.getElementById('fCodeCopy');
+    bMsg.disabled = !code;
+    bCod.disabled = !code;
+    bMsg.onclick = () => copierTexte(message, bMsg, 'Copier le message');
+    bCod.onclick = () => copierTexte(code,    bCod, 'Copier le code');
+}
+
+/* Un bouton qui annonce « Copié » sans avoir copié fait perdre le contenu
+   sans prévenir : on vérifie avant de le dire. */
+async function copierTexte(txt, btn, libelle){
+    if(!txt) return;
+    let ok = false;
+    try{
+        await navigator.clipboard.writeText(txt);
+        ok = true;
+    }catch(e){
+        try{
+            const z = document.createElement('textarea');
+            z.value = txt; z.style.position = 'fixed'; z.style.opacity = '0';
+            document.body.appendChild(z); z.select();
+            ok = document.execCommand('copy');
+            z.remove();
+        }catch(e2){ ok = false; }
+    }
+    btn.textContent = ok ? 'Copié' : 'Échec — copie à la main';
+    setTimeout(() => { btn.textContent = libelle; }, 1800);
+}
+
+/* ── Code pour modifier l'adresse ────────────────────────────────────────
    Le code n'est jamais envoyé par saveSheet : il a sa propre route, pour
    qu'un enregistrement de fiche parti d'un onglet resté ouvert ne puisse pas
    réécrire un code régénéré entre-temps. */
