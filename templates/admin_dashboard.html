@@ -785,6 +785,18 @@ select.inp{cursor:pointer}
 .gx-act .gx-del{color:var(--danger)}
 .gx-act .gx-del:hover{background:var(--danger-soft);border-color:var(--danger)}
 .gx-st{font-size:11px;font-weight:700;color:var(--accent);margin-top:7px;min-height:14px}
+/* Le statut se change depuis la carte : il garde l'allure d'une étiquette,
+   et ne se signale comme modifiable qu'au survol. Une carte constellée de
+   menus déroulants se lit deux fois moins vite qu'une carte de texte. */
+.stat-sel{
+    -webkit-appearance:none;appearance:none;font-family:inherit;
+    border:1px solid transparent;cursor:pointer;padding-right:20px;
+    background-image:url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%237C859B' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat:no-repeat;background-position:right 7px center;
+    transition:border-color .15s,background-color .15s;
+}
+.stat-sel:hover{border-color:var(--line-2)}
+.stat-sel:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(47,80,241,.12)}
 </style>
 </head>
 <body>
@@ -1634,6 +1646,45 @@ function renderFilters(){
 }
 function setFilter(v){ filterStatus = v; renderFilters(); renderGrid(); }
 
+/* ── Changer le statut sans ouvrir la fiche ──────────────────────────────
+   Faire avancer dix-neuf personnes d'une étape demandait dix-neuf allers-
+   retours dans la fiche, dont dix-neuf fermetures de panneau. Le statut est
+   la donnée qui bouge le plus souvent et la plus rapide à décider : elle se
+   change là où on la lit. */
+function statutSelect(inf){
+    const cur = Math.max(0, Math.min(STATUS_LAST, +inf.status || 0));
+    return `<select class="tag stat-sel" data-st="${escAttr(inf.id)}"
+                    aria-label="Statut de ${escAttr(inf.pseudo || 'cette influenceuse')}">
+        ${STATUSES.map((lbl, i) =>
+            `<option value="${i}"${i === cur ? ' selected' : ''}>${esc(lbl)}</option>`).join('')}
+    </select>`;
+}
+
+function bindStatuts(racine){
+    racine.querySelectorAll('[data-st]').forEach(sel=>{
+        // La carte entière ouvre la fiche : sans ces deux gardes, dérouler le
+        // menu ouvrirait le panneau par-dessus.
+        sel.onclick = e => e.stopPropagation();
+        sel.onmousedown = e => e.stopPropagation();
+        sel.onchange = e => {
+            e.stopPropagation();
+            const inf = influenceurs.find(i => i.id === sel.dataset.st);
+            if(!inf) return;
+            inf.status = +sel.value;
+            inf.lastModified = new Date().toISOString();
+            scheduleSave();
+            toast(`${inf.pseudo || 'Fiche'} → ${STATUSES[inf.status]}`);
+            // Les compteurs des filtres et la file du jour dépendent du statut.
+            renderFilters();
+            if(typeof renderFile === 'function') renderFile();
+            // Sous un filtre actif, la carte ne doit plus être là : on ne
+            // redessine la grille que dans ce cas, pour ne pas la reconstruire
+            // sous la main de quelqu'un qui enchaîne les changements.
+            if(filterStatus !== '' && String(inf.status) !== filterStatus) renderGrid();
+        };
+    });
+}
+
 function renderGrid(){
     const q = document.getElementById('q').value.toLowerCase().trim();
     // Les vendeurs hors boutique n'ont pas de fiche à gérer — ni colis, ni
@@ -1653,6 +1704,7 @@ function renderGrid(){
     }
     grid.innerHTML = list.map((inf,idx) => cardHtml(inf, idx+1)).join('');
     paintIcons(grid);
+    bindStatuts(grid);
     requestAnimationFrame(()=>{
         grid.querySelectorAll('.prog-fill').forEach(el => el.style.width = el.dataset.w + '%');
     });
@@ -1678,7 +1730,7 @@ function cardHtml(inf, rank){
         <div class="card-body">
             <div class="row-tags">
                 <span class="tag tier" style="background:${t.color}1A;color:${t.color}">${ico(t.icon)}${esc(t.name)}</span>
-                <span class="tag">${esc(STATUSES[inf.status]||'—')}</span>
+                ${statutSelect(inf)}
             </div>
             <div class="prog">
                 <div class="prog-bar"><div class="prog-fill" data-w="${pct}"></div></div>
