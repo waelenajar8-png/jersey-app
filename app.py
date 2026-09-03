@@ -148,10 +148,32 @@ from functools import wraps
 from botocore.config import Config
 
 app = Flask(__name__)
-app.secret_key = os.environ.get("FLASK_SECRET_KEY") or os.urandom(32)
-# NB: sans FLASK_SECRET_KEY défini sur Railway, une clé aléatoire est générée
-# au démarrage — ça déconnecte tout le monde à chaque redéploiement. Pour des
-# sessions qui survivent aux redéploiements, définis FLASK_SECRET_KEY.
+_cle_flask = os.environ.get("FLASK_SECRET_KEY")
+if not _cle_flask:
+    # Sans clé fixe, une clé aléatoire est tirée à CHAQUE démarrage : toutes les
+    # sessions sautent à chaque redéploiement, et passer à plusieurs workers
+    # casserait silencieusement connexions et codes déjà saisis.
+    print("=" * 72)
+    print("[CONFIG] FLASK_SECRET_KEY absente — clé aléatoire générée.")
+    print("         Tu seras déconnecté à chaque redéploiement.")
+    print("         Définis FLASK_SECRET_KEY dans les variables Railway.")
+    print("=" * 72)
+    _cle_flask = os.urandom(32)
+app.secret_key = _cle_flask
+
+app.config.update(
+    # Le cookie de session admin ne doit jamais transiter en clair, ni partir
+    # sur une requête déclenchée depuis un autre site.
+    SESSION_COOKIE_SECURE=os.environ.get("FORCE_HTTP_COOKIES") != "1",
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE="Lax",
+    # Par défaut Flask garde une session permanente 31 jours. Une session admin
+    # volée restait valable un mois.
+    PERMANENT_SESSION_LIFETIME=timedelta(hours=12),
+    # Les routes publiques de l'espace acceptaient des corps de taille
+    # arbitraire, dans un fichier relu à chaque requête.
+    MAX_CONTENT_LENGTH=int(os.environ.get("MAX_UPLOAD_MB", "120")) * 1024 * 1024,
+)
 
 
 @app.after_request
@@ -872,7 +894,7 @@ def get_schedule_times_for_account(account):
     return SCHEDULE_TIMES_BY_ACCOUNT.get(account, SCHEDULE_TIMES_DEFAULT)
 
 R2_ENDPOINT   = os.environ.get("R2_ENDPOINT")
-R2_PUBLIC_URL = os.environ.get("R2_PUBLIC_URL", "https://pub-2041419f649b434681cde993145feaee.r2.dev")
+R2_PUBLIC_URL = os.environ.get("R2_PUBLIC_URL", "")
 R2_ACCESS_KEY = os.environ.get("R2_ACCESS_KEY_ID")
 R2_SECRET_KEY = os.environ.get("R2_SECRET_ACCESS_KEY")
 R2_BUCKET     = os.environ.get("R2_BUCKET", "jersey-templates")
@@ -880,7 +902,7 @@ R2_BUCKET     = os.environ.get("R2_BUCKET", "jersey-templates")
 
 # Metricool API
 METRICOOL_TOKEN = os.environ.get("METRICOOL_TOKEN")  # À définir dans Railway
-METRICOOL_USER_ID = os.environ.get("METRICOOL_USER_ID", "5037969")
+METRICOOL_USER_ID = os.environ.get("METRICOOL_USER_ID", "")
 METRICOOL_ACCOUNTS = {
     "Volakits Main (wael)": {"blog_id": "6542376", "active": True},
     "Volakits 1 (seik)":    {"blog_id": "6675120", "active": True},
@@ -905,11 +927,14 @@ KEY_USED_SLOTS_IG = "meta/used_slots_ig.json"
 # ── Auth utilisateurs ──────────────────────────────────────────────────────
 # Format: { "prenom": "mot_de_passe" }
 # Change les mots de passe dans les variables Railway (AUTH_USERS en JSON)
+# Plus aucun mot de passe par défaut : ceux qui étaient ici (prénom + « 2024 »)
+# vivaient en clair dans le dépôt, et devenaient les mots de passe de production
+# dès qu'une variable manquait. Un compte sans variable définie n'existe pas.
 _DEFAULT_USERS = {
-    "Wael": os.environ.get("AUTH_PASS_WAEL", "wael2024"),
-    "Moh": os.environ.get("AUTH_PASS_MOH", "moh2024"),
-    "Wassim": os.environ.get("AUTH_PASS_WASSIM", "wassim2024"),
-    "Seik": os.environ.get("AUTH_PASS_SEIK", "seik2024"),
+    nom: os.environ[cle]
+    for nom, cle in (("Wael", "AUTH_PASS_WAEL"), ("Moh", "AUTH_PASS_MOH"),
+                     ("Wassim", "AUTH_PASS_WASSIM"), ("Seik", "AUTH_PASS_SEIK"))
+    if os.environ.get(cle)
 }
 
 def get_auth_users():
@@ -925,7 +950,12 @@ def api_auth_login():
     name = data.get("name", "").strip()
     password = data.get("password", "").strip()
     users = get_auth_users()
-    if name in users and users[name] == password:
+    if name in users and hmac.compare_digest(str(users[name]), password):
+        # C'est ici que se pose la session. Sans elle, l'authentification ne
+        # protégeait rien : elle se contentait de dire au navigateur d'afficher
+        # l'interface.
+        session["user"] = name
+        session.permanent = True
         return jsonify({"success": True, "user": name})
     return jsonify({"success": False, "error": "Prénom ou mot de passe incorrect"}), 401
 
@@ -1533,14 +1563,34 @@ def r2_put_json(key, data):
         print(f"[R2 put_json error] {key}: {e}")
         return False
 
+class R2Indisponible(RuntimeError):
+    """Le stockage n'a pas répondu — à ne jamais confondre avec « c'est vide »."""
+
+
 def r2_get_json(key):
+    """
+    Contenu JSON d'une clé, ou None si la clé n'existe pas.
+
+    Toute autre erreur — réseau, identifiants, quota, timeout — lève désormais.
+    Avant, elle renvoyait None comme une clé absente : un incident passager
+    pendant un enregistrement faisait repartir la fusion d'une liste vide, et
+    le fichier des influenceuses était réécrit sans elles. Aucune sauvegarde
+    n'était prise dans ce cas, puisque la condition de sauvegarde vérifie
+    justement que l'ancien contenu n'est pas vide.
+    """
     r2 = get_r2()
-    if not r2: return None
+    if not r2:
+        raise R2Indisponible("stockage non configuré (variables R2_* manquantes)")
     try:
         obj = r2.get_object(Bucket=R2_BUCKET, Key=key)
         return json.loads(obj["Body"].read().decode())
-    except Exception:
-        return None
+    except Exception as e:
+        nom = e.__class__.__name__
+        absente = nom in ("NoSuchKey", "404") or "NoSuchKey" in str(e) or "Not Found" in str(e)
+        if absente:
+            return None
+        print(f"[R2] Lecture impossible ({nom}) sur {key}: {e}")
+        raise R2Indisponible(f"lecture de {key} impossible: {e}") from e
 
 def r2_list_keys(prefix, suffix=".json"):
     """Liste les clés R2 avec pagination complète"""
@@ -2964,8 +3014,8 @@ def categories_page(): return render_template("categories.html")
 # ── Module de suivi des influenceurs ──────────────────────────────────────
 INFLUENCEURS_R2_KEY = "meta/influenceurs.json"
 INFLUENCEURS_BACKUP_PREFIX = "meta/influenceurs_backups/"
-INFLUENCEURS_BACKUP_KEEP = 5  # nombre de sauvegardes de secours conservées
-INFLUENCEURS_BACKUP_MIN_SEC = 15 * 60   # intervalle minimum entre deux sauvegardes
+INFLUENCEURS_BACKUP_KEEP = 40  # nombre de sauvegardes de secours conservées
+INFLUENCEURS_BACKUP_MIN_SEC = 5 * 60   # intervalle minimum entre deux sauvegardes
 _backup_dernier = {"at": 0.0}
 
 
@@ -3002,6 +3052,28 @@ def _require_admin_page(view_func):
         if not _is_admin():
             return render_template("admin_login.html", error=None,
                                     configured=bool(ADMIN_PASSWORD))
+        return view_func(*args, **kwargs)
+    return wrapper
+
+
+# ── Accès à l'outil interne ────────────────────────────────────────────────
+# La connexion « prénom + mot de passe » ne posait aucune session : elle
+# renvoyait `{"success": true}` et le navigateur se contentait d'afficher
+# l'interface. Résultat, quatre-vingt-seize routes sur cent vingt-six étaient
+# ouvertes à qui connaissait l'adresse — dont la génération d'images (qui
+# consomme la clé Gemini à la commande), la publication sur les comptes de la
+# marque, et plusieurs suppressions définitives.
+def _est_connecte():
+    return bool(session.get("user")) or _is_admin()
+
+
+def _require_user(view_func):
+    """Réservé à l'équipe. Les espaces influenceurs n'en dépendent pas."""
+    @wraps(view_func)
+    def wrapper(*args, **kwargs):
+        if not _est_connecte():
+            return jsonify({"success": False,
+                            "error": "Connecte-toi pour utiliser cet outil."}), 401
         return view_func(*args, **kwargs)
     return wrapper
 
@@ -3175,7 +3247,16 @@ def _shopify_fetch_orders_for_code(code, since_iso=None, max_pages=20):
     if not code:
         return [], None
 
-    search = f"discount_code:{code}"
+    # Un code promo est saisi à la main dans la fiche. Une espace, un « : » ou
+    # un « OR » modifient la requête et font remonter les commandes d'une autre
+    # influenceuse — une faute de frappe suffit à fausser des chiffres d'argent.
+    if not re.fullmatch(r"[A-Za-z0-9_-]{2,40}", code or ""):
+        return [], f"code promo invalide: {code!r}"
+
+    # `financial_status:paid` : sans lui, une commande remboursée ou en attente
+    # de paiement comptait comme une vente. Les seuils étant secs (10/30/60),
+    # trois remboursements pouvaient déclencher 50 € pour sept ventes réelles.
+    search = f"discount_code:{code} AND financial_status:paid AND test:false"
     if since_iso:
         search += f" AND created_at:>={since_iso}"
 
@@ -3187,7 +3268,9 @@ def _shopify_fetch_orders_for_code(code, since_iso=None, max_pages=20):
           node {
             createdAt
             cancelledAt
+            displayFinancialStatus
             currentTotalPriceSet { shopMoney { amount } }
+            totalRefundedSet { shopMoney { amount } }
           }
         }
       }
@@ -3204,10 +3287,22 @@ def _shopify_fetch_orders_for_code(code, since_iso=None, max_pages=20):
         edges = data["orders"]["edges"]
         for e in edges:
             n = e["node"]
+            brut = float((n.get("currentTotalPriceSet") or {})
+                         .get("shopMoney", {}).get("amount", 0) or 0)
+            # Un remboursement partiel laisse la commande « payée » : le
+            # montant remboursé doit sortir du chiffre d'affaires, sinon la
+            # commission se calcule sur de l'argent rendu au client.
+            rembourse = float((n.get("totalRefundedSet") or {})
+                              .get("shopMoney", {}).get("amount", 0) or 0)
+            statut = (n.get("displayFinancialStatus") or "").upper()
             orders.append({
                 "created_at": n.get("createdAt"),
-                "net_amount": float((n.get("currentTotalPriceSet") or {}).get("shopMoney", {}).get("amount", 0) or 0),
-                "cancelled": bool(n.get("cancelledAt")),
+                "net_amount": max(0.0, brut - rembourse),
+                # Une commande intégralement remboursée n'est pas une vente,
+                # même si Shopify la laisse remonter dans `paid`.
+                "cancelled": bool(n.get("cancelledAt"))
+                             or statut in ("REFUNDED", "VOIDED", "EXPIRED")
+                             or (brut > 0 and rembourse >= brut),
             })
         page_info = data["orders"]["pageInfo"]
         if not page_info.get("hasNextPage"):
@@ -3484,8 +3579,19 @@ def sync_influencer_stats(force=False):
                     if not code:
                         skipped += 1
                         continue
+                    # Sans date d'ancrage, aucun filtre de date ne partait vers
+                    # Shopify : la synchro remontait TOUTES les commandes de ce
+                    # code depuis toujours et les transformait en commission due.
+                    # Une influenceuse dont le code servait déjà avant le
+                    # programme arrivait avec des mois d'historique à payer.
+                    # On refuse plutôt que de payer à l'aveugle.
+                    since_iso = (inf.get("program_start_date") or "").strip()
+                    if not _parse_day(since_iso):
+                        skipped += 1
+                        errors.append(f"{inf.get('pseudo','?')} : pas de date de début, "
+                                      f"synchro ignorée (sa période de paie serait fausse)")
+                        continue
                     try:
-                        since_iso = inf.get("program_start_date") or None  # YYYY-MM-DD ou None
                         orders, fetch_err = _shopify_fetch_orders_for_code(code, since_iso=since_iso)
                         if fetch_err:
                             errors.append(f"{inf.get('pseudo','?')} ({code}): {fetch_err}")
@@ -3690,6 +3796,8 @@ def api_get_influenceurs():
         migrated = _migrate_status_scale(influenceurs)
         migrated = _migrate_external_ranked(influenceurs) or migrated
         migrated = _migrate_espace_codes(influenceurs) or migrated
+        migrated = _ancrer_periodes(influenceurs) or migrated
+        migrated = _ancrer_codes_pin(influenceurs) or migrated
         if migrated:
             try:
                 with _influenceurs_lock:
@@ -3792,7 +3900,39 @@ def _stamp_light_sellers(stored, incoming):
 # afficher, s'en servir pour décider quoi montrer — mais ce qu'elle en renvoie
 # est ignoré. Un état déduit d'une opération serveur ne doit jamais pouvoir
 # revenir en arrière parce qu'un onglet était ouvert depuis dix minutes.
-CHAMPS_SERVEUR = ("jerseys_shipped", "jerseys_shipped_at", "espace_code")
+CHAMPS_SERVEUR = ("jerseys_shipped", "jerseys_shipped_at",
+                  "shipped_jerseys", "espace_code")
+
+
+def _ancrer_codes_pin(influenceurs):
+    """Un code de livraison à 4 chiffres pour chaque fiche qui n'en a pas."""
+    change = False
+    for inf in influenceurs:
+        if not isinstance(inf, dict) or str(inf.get("espace_pin") or "").strip():
+            continue
+        inf["espace_pin"] = f"{secrets.randbelow(10000):04d}"
+        change = True
+    return change
+
+
+def _ancrer_periodes(influenceurs):
+    """
+    Toute fiche a une date de début. Sans elle, la période de paie est fausse
+    et la synchro Shopify remonterait l'historique entier du code promo.
+
+    On pose la date d'entrée dans le programme : ni rétroactif, ni au premier
+    du mois. Les fiches déjà datées ne bougent pas.
+    """
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    change = False
+    for inf in influenceurs:
+        if not isinstance(inf, dict):
+            continue
+        if (inf.get("program_start_date") or "").strip():
+            continue
+        inf["program_start_date"] = (inf.get("addedAt") or today)[:10]
+        change = True
+    return change
 
 
 def _merge_influenceurs(stored, incoming):
@@ -3915,6 +4055,15 @@ def _apply_shipment(inf, cat):
             sizes[size] = left - 1
     inf["jerseys_shipped"] = True
     inf["jerseys_shipped_at"] = datetime.now(timezone.utc).isoformat()
+    # Ce qui est VRAIMENT parti, figé ici. Sans cet instantané, corriger une
+    # erreur de saisie après l'expédition puis revenir en arrière recréditait
+    # les maillots actuels de la fiche, pas ceux du colis : deux tailles
+    # disparaissaient du stock, deux autres apparaissaient de nulle part.
+    inf["shipped_jerseys"] = [
+        {"id": j.get("id"), "size": (j.get("size") or "").strip()}
+        for j in (inf.get("jerseys") or [])
+        if isinstance(j, dict) and not _hors_catalogue(j) and j.get("id") and j.get("size")
+    ]
     return shortages
 
 
@@ -3926,10 +4075,16 @@ def _undo_shipment(inf, cat):
     """
     if not inf.get("jerseys_shipped"):
         return
+    # On rend ce qui est parti, pas ce que la fiche contient aujourd'hui : entre
+    # l'expédition et le retour, la sélection a pu être corrigée. Les fiches
+    # expédiées avant l'existence de l'instantané retombent sur l'ancien
+    # comportement, faute de mieux.
+    partis = inf.get("shipped_jerseys")
+    if not isinstance(partis, list):
+        partis = [j for j in (inf.get("jerseys") or [])
+                  if isinstance(j, dict) and not _hors_catalogue(j)]
     by_id = {j.get("id"): j for j in cat.get("jerseys", [])}
-    for pick in (inf.get("jerseys") or []):
-        if _hors_catalogue(pick):
-            continue
+    for pick in partis:
         jid, size = pick.get("id"), (pick.get("size") or "").strip()
         j = by_id.get(jid)
         if not j or not size:
@@ -3938,8 +4093,13 @@ def _undo_shipment(inf, cat):
         sizes[size] = _safe_int(sizes.get(size, 0)) + 1
     inf["jerseys_shipped"] = False
     inf.pop("jerseys_shipped_at", None)
+    inf.pop("shipped_jerseys", None)
 
 
+# Le verrou du catalogue était pris par un écrivain sur trois. Les deux autres
+# — le recomptage manuel et la sortie de stock automatique — lisaient puis
+# réécrivaient sans lui : un recomptage lancé pendant une expédition réécrivait
+# l'ancienne quantité, et le maillot parti n'était jamais sorti du stock.
 @app.route("/api/stock/set", methods=["POST"])
 @_require_admin_api
 def api_stock_set():
@@ -3962,19 +4122,23 @@ def api_stock_set():
         if not jid or not size:
             return jsonify({"success": False, "error": "maillot ou taille manquant"}), 400
 
-        cat = _load_gifting_catalog()
-        target = next((j for j in cat.get("jerseys", []) if j.get("id") == jid), None)
-        if not target:
-            return jsonify({"success": False, "error": "maillot introuvable"}), 404
+        # Lecture et écriture sous le même verrou que les deux autres
+        # écrivains du catalogue, dans le même ordre d'acquisition partout
+        # (influenceurs puis catalogue) pour ne pas créer d'interblocage.
+        with _influenceurs_lock, _gifting_lock:
+            cat = _load_gifting_catalog()
+            target = next((j for j in cat.get("jerseys", []) if j.get("id") == jid), None)
+            if not target:
+                return jsonify({"success": False, "error": "maillot introuvable"}), 404
 
-        reserved = 0
-        if mode != "physical":
-            data = r2_get_json(INFLUENCEURS_R2_KEY) or {}
-            reserved = _reserved_map(data.get("influenceurs", []) or []).get((jid, size), 0)
+            reserved = 0
+            if mode != "physical":
+                data = r2_get_json(INFLUENCEURS_R2_KEY) or {}
+                reserved = _reserved_map(data.get("influenceurs", []) or []).get((jid, size), 0)
 
-        target.setdefault("sizes", {})[size] = qty + reserved
-        if not _save_gifting_catalog(cat):
-            return jsonify({"success": False, "error": "écriture catalogue échouée"}), 500
+            target.setdefault("sizes", {})[size] = qty + reserved
+            if not _save_gifting_catalog(cat):
+                return jsonify({"success": False, "error": "écriture catalogue échouée"}), 500
         return jsonify({"success": True, "qty": qty,
                         "reserved": reserved, "physical": qty + reserved})
     except Exception as e:
@@ -4071,6 +4235,42 @@ def api_save_influenceurs():
         base_version = payload.get("base_version")   # version que le client avait au chargement
         force        = bool(payload.get("force", False))
 
+        # ── Garde-fous sur ce qui arrive ────────────────────────────────
+        # Deux fiches portant le même code promo reçoivent chacune la
+        # totalité des commandes de ce code : la commission est payée deux
+        # fois, sans qu'aucun écran ne le signale.
+        vus, doublons = {}, []
+        for inf in influenceurs:
+            if not isinstance(inf, dict):
+                continue
+            code = (inf.get("promo_code") or "").strip().upper()
+            if not code:
+                continue
+            if code in vus:
+                doublons.append(f"{code} ({vus[code]} et {inf.get('pseudo','?')})")
+            else:
+                vus[code] = inf.get("pseudo", "?")
+        if doublons:
+            return jsonify({"success": False,
+                            "error": "Code promo en double : " + ", ".join(doublons)
+                                     + ". Chaque influenceuse doit avoir le sien, "
+                                       "sinon la commission est payée deux fois."}), 409
+
+        # Des ventes ou un chiffre d'affaires négatifs produisent une
+        # rémunération négative qui remonte jusqu'à l'écran « À payer ».
+        for inf in influenceurs:
+            if not isinstance(inf, dict):
+                continue
+            for champ in ("stats_sales", "stats_sales_month",
+                          "stats_revenue", "stats_revenue_month",
+                          "baseline_sales", "sales_manual"):
+                if champ in inf:
+                    val = _safe_float(inf.get(champ), 0)
+                    if val < 0:
+                        inf[champ] = 0
+                        print(f"[INFLU] Valeur négative ramenée à 0 : "
+                              f"{inf.get('pseudo','?')}.{champ}")
+
         # Normaliser les champs stats_* → sous-objet stats avant persistance
         for inf in influenceurs:
             s = inf.get("stats") or {}
@@ -4138,7 +4338,8 @@ def api_save_influenceurs():
                     _undo_shipment(inf, cat)
                     cat_dirty = True
             if cat_dirty and cat is not None:
-                _save_gifting_catalog(cat)
+                with _gifting_lock:
+                    _save_gifting_catalog(cat)
                 if shortages:
                     print(f"[STOCK] Manques signalés: {shortages}")
 
@@ -5726,9 +5927,17 @@ def _espace_pin(inf):
 
 
 def _espace_pin_ok(inf, slug):
-    """Le visiteur a-t-il déjà présenté le bon code dans cette session ?"""
+    """
+    Le visiteur a-t-il présenté le bon code dans cette session ?
+
+    L'absence de code valait autorisation : n'importe qui disposant du lien
+    d'espace — un lien qui circule sur WhatsApp, c'est sa raison d'être —
+    pouvait réécrire l'adresse de livraison et détourner le colis. Chaque fiche
+    reçoit désormais un code à la création (`_ancrer_codes_pin`), et l'absence
+    de code est traitée comme un refus, pas comme un passe-droit.
+    """
     if not _espace_pin(inf):
-        return True                      # aucun code configuré : rien à vérifier
+        return False
     return bool(session.get(f"espace_pin_{slug}"))
 
 
@@ -5832,15 +6041,32 @@ def _espace_share_link(inf):
     }
 
 
+def _cle_visuel_ok(cle):
+    """
+    Une clé R2 acceptable pour un visuel de maillot, et rien d'autre.
+
+    Sans ce filtre, la clé arrivait du navigateur et repartait signée : il
+    suffisait d'envoyer `{"r2_key": "meta/influenceurs.json"}` dans son propre
+    profil pour recevoir, au chargement suivant, une URL signée valable sept
+    jours sur le fichier de TOUTES les influenceuses — adresses, téléphones,
+    e-mails, codes d'entrée, PIN en clair, commissions. On ne signe désormais
+    que ce qui vit sous le préfixe des visuels.
+    """
+    c = (cle or "").strip()
+    return bool(c) and c.startswith(GIFTING_IMG_PFX) and ".." not in c
+
+
 def _jersey_durable(j):
     """Réduit un maillot choisi à ce qui ne périme pas : id, nom, taille, clé R2."""
     garde = {k: j.get(k) for k in ("id", "name", "sub", "size") if j.get(k)}
     if _hors_catalogue(j):
         garde["hors_cat"] = True
-        if (j.get("r2_key") or "").strip():
+        if _cle_visuel_ok(j.get("r2_key")):
             garde["r2_key"] = j["r2_key"].strip()
         return garde
     cle = (j.get("r2_key") or "").strip()
+    if cle and not _cle_visuel_ok(cle):
+        cle = ""                      # clé refusée : on la retrouvera par l'id
     if not cle and j.get("id"):
         try:
             cat = _load_gifting_catalog()
@@ -5880,6 +6106,11 @@ def _espace_jerseys(inf):
     for j in picks:
         item = dict(j)
         cle = item.get("r2_key") or cles.get(item.get("id")) or ""
+        if cle and not _cle_visuel_ok(cle):
+            # Deuxième barrière : une fiche ancienne peut porter une clé posée
+            # avant que le filtre existe. On ne la signe pas pour autant.
+            print(f"[ESPACE] Clé de visuel refusée: {cle!r}")
+            cle = ""
         if cle:
             try:
                 item["r2_key"] = cle
@@ -6471,8 +6702,14 @@ def api_espace_add_video(slug):
     payload = request.json or {}
     vtype = payload.get("type")
     link  = (payload.get("link") or "").strip()
-    if vtype not in ("unboxing", "playback") or not link:
-        return jsonify({"success": False, "error": "type ou lien invalide"}), 400
+    if vtype not in ("unboxing", "playback"):
+        return jsonify({"success": False, "error": "Choisis Unboxing ou Playback."}), 400
+    # « ma vidéo », ou le texte de partage TikTok collé en entier, validaient la
+    # mission sans qu'aucun lien ne soit exploitable.
+    if not re.match(r"^https?://[^\s]+\.[^\s]{2,}", link):
+        return jsonify({"success": False,
+                        "error": "Colle le lien complet de ta vidéo, "
+                                 "il doit commencer par https://"}), 400
 
     meta = {
         "id": f"vid_{int(time.time())}_{uuid.uuid4().hex[:8]}",
@@ -6663,6 +6900,10 @@ def _load_gifting_catalog():
             "mode": data.get("mode", "stock"),
             "jerseys": data.get("jerseys", []) if isinstance(data.get("jerseys"), list) else [],
         }
+    except R2Indisponible:
+        # Surtout pas de catalogue vide en repli : il repartirait à l'écriture
+        # et effacerait le vrai. Mieux vaut faire échouer la requête.
+        raise
     except Exception as e:
         print(f"[GIFTING] Erreur lecture catalogue: {e}")
         return {"mode": "stock", "jerseys": []}
@@ -6705,6 +6946,10 @@ def _gifting_public_view(cat, except_id=None, with_image=True):
             for j in ((moi or {}).get("jerseys") or []):
                 if isinstance(j, dict) and j.get("id") and j.get("size"):
                     siens.add((j["id"], str(j["size"]).strip()))
+    except R2Indisponible:
+        # Afficher le stock physique au lieu du disponible ferait réserver à
+        # plusieurs le même dernier exemplaire. On préfère ne rien afficher.
+        raise
     except Exception as e:
         print(f"[GIFTING] Réservations illisibles, stock physique utilisé: {e}")
         reserved = {}
@@ -7146,24 +7391,28 @@ def stats():
 
 # ── API Buffer ──────────────────────────────────────────────────────────────
 @app.route("/api/buffer")
+@_require_user
 def api_buffer():
     buf = get_buffer()
     pending = len(buf.get("images_b64", []))
     return jsonify({"pending": pending, "needed": max(0, 7 - pending), "note": "target_size dynamique selon carousel"})
 
 @app.route("/api/buffer/clear", methods=["POST"])
+@_require_user
 def api_buffer_clear():
     _save_buffer({"images_b64": [], "flockages": [], "user": None})
     return jsonify({"success": True})
 
 # ── API Comptes ─────────────────────────────────────────────────────────────
 @app.route("/api/accounts")
+@_require_user
 def api_get_accounts():
     data = get_accounts()
     data["available"] = list(METRICOOL_ACCOUNTS.keys())
     return jsonify(data)
 
 @app.route("/api/accounts", methods=["POST"])
+@_require_user
 def api_save_accounts():
     data = request.json
     save_accounts({"main": data.get("main",""), "others": data.get("others",[])})
@@ -7171,6 +7420,7 @@ def api_save_accounts():
 
 # ── API Queue ───────────────────────────────────────────────────────────────
 @app.route("/api/queue")
+@_require_user
 def api_queue():
     page = int(request.args.get("page", 0))
     per_page = int(request.args.get("per_page", 20))
@@ -7178,6 +7428,7 @@ def api_queue():
     return jsonify({"tiktoks": tiktoks, "total": total, "page": page, "per_page": per_page})
 
 @app.route("/api/queue/all")
+@_require_user
 def api_queue_all():
     """Retourne tous les TikToks en une seule requête — pour le cache frontend"""
     keys = sorted(r2_list_keys(PFX_QUEUE))
@@ -7196,6 +7447,7 @@ def api_queue_all():
     return jsonify({"tiktoks": result, "total": len(result)})
 
 @app.route("/api/scheduled")
+@_require_user
 def api_scheduled():
     page = int(request.args.get("page", 0))
     per_page = int(request.args.get("per_page", 20))
@@ -7203,6 +7455,7 @@ def api_scheduled():
     return jsonify({"tiktoks": tiktoks, "total": total, "page": page, "per_page": per_page})
 
 @app.route("/api/queue/assign", methods=["POST"])
+@_require_user
 def api_assign():
     data = request.json; key = data.get("key"); account = data.get("account")
     if not key: return jsonify({"error":"key requis"}),400
@@ -7213,6 +7466,7 @@ def api_assign():
     return jsonify({"success": True})
 
 @app.route("/api/queue/unassign_all", methods=["POST"])
+@_require_user
 def api_unassign_all():
     """Désassigne tous les TikToks en une seule passe R2"""
     keys = sorted(r2_list_keys(PFX_QUEUE))
@@ -7227,6 +7481,7 @@ def api_unassign_all():
     return jsonify({"success": True, "unassigned": done})
 
 @app.route("/api/queue/assign_batch", methods=["POST"])
+@_require_user
 def api_assign_batch():
     """Assigne plusieurs TikToks d'un coup — évite les 100 appels R2 séquentiels"""
     data = request.json or {}
@@ -7245,6 +7500,7 @@ def api_assign_batch():
     return jsonify({"success": True, "updated": done})
 
 @app.route("/api/queue/dispatch_smart", methods=["POST"])
+@_require_user
 def api_dispatch_smart():
     """Auto-dispatch intelligent — répartit les TikToks proportionnellement aux créneaux de chaque compte"""
     r2 = get_r2()
@@ -7306,6 +7562,7 @@ def api_dispatch_smart():
     return jsonify({"success": True, "count": idx, "by_account": by_account})
 
 @app.route("/api/queue/dispatch", methods=["POST"])
+@_require_user
 def api_dispatch():
     data = request.json; accounts = data.get("accounts",[])
     if not accounts: return jsonify({"error":"Aucun compte"}),400
@@ -7320,6 +7577,7 @@ def api_dispatch():
 _schedule_result = {}
 
 @app.route("/api/queue/schedule", methods=["POST"])
+@_require_user
 def api_schedule():
     if not _schedule_lock.acquire(blocking=False):
         return jsonify({"error": "Une programmation est déjà en cours, réessaie dans quelques secondes."}), 429
@@ -7358,6 +7616,7 @@ def api_schedule():
     return jsonify({"success": True, "message": "Programmation lancée en arrière-plan", "background": True})
 
 @app.route("/api/queue/schedule/status")
+@_require_user
 def api_schedule_status():
     """Retourne le résultat de la dernière programmation"""
     result = _schedule_result.get("last")
@@ -7711,6 +7970,7 @@ def _do_schedule_data(data=None):
     return jsonify(final_result)
 
 @app.route("/api/queue/tiktok")
+@_require_user
 def api_queue_tiktok():
     """Retourne les métadonnées complètes d'un TikTok (flockages, template_keys...)"""
     key = request.args.get("key")
@@ -7720,6 +7980,7 @@ def api_queue_tiktok():
     return jsonify(t)
 
 @app.route("/api/queue/replace_image", methods=["POST"])
+@_require_user
 def api_replace_image():
     """Remplace une image dans un TikTok par une nouvelle version régénérée"""
     data = request.json or {}
@@ -7750,6 +8011,7 @@ def api_replace_image():
         return jsonify({"error": str(e)}), 500
 
 @app.route("/api/queue/images")
+@_require_user
 def api_queue_images():
     """Retourne toutes les URLs signées d'un TikTok — appelé seulement quand l'user clique pour voir tout"""
     key = request.args.get("key")
@@ -7760,6 +8022,7 @@ def api_queue_images():
     return jsonify({"image_urls": image_urls})
 
 @app.route("/api/queue/reorder", methods=["POST"])
+@_require_user
 def api_reorder_images():
     """Réordonne les images d'un TikTok"""
     data = request.json
@@ -7781,6 +8044,7 @@ def api_reorder_images():
         return jsonify({"error": str(e)}), 400
 
 @app.route("/api/queue/delete_image", methods=["POST"])
+@_require_user
 def api_delete_image():
     """Supprime une image d'un TikTok"""
     data = request.json
@@ -7801,6 +8065,7 @@ def api_delete_image():
     return jsonify({"success": True, "remaining": len(tiktok["image_keys"])})
 
 @app.route("/api/scheduled/check_status", methods=["POST"])
+@_require_user
 def api_check_status():
     """Vérifie le vrai statut de publication sur Metricool pour des TikToks donnés"""
     data = request.json or {}
@@ -7843,6 +8108,7 @@ def api_check_status():
     return jsonify({"results": results})
 
 @app.route("/api/scheduled/fix_slots", methods=["POST"])
+@_require_user
 def api_fix_slots():
     """Recalcule et corrige les créneaux de tous les TikToks programmés d'un compte"""
     data = request.json or {}
@@ -7954,6 +8220,7 @@ def api_fix_slots():
     })
 
 @app.route("/api/scheduled/find_duplicates")
+@_require_user
 def api_find_duplicates():
     """Détecte les TikToks programmés au même horaire sur le même compte"""
     keys = r2_list_keys(PFX_SCHEDULED)
@@ -7976,6 +8243,7 @@ def api_find_duplicates():
     return jsonify({"duplicates": duplicates, "count": len(duplicates)})
 
 @app.route("/api/scheduled/recover_robinreach", methods=["POST"])
+@_require_user
 def api_recover_robinreach():
     """Remet dans la file d'attente tous les TikToks programmés via RobinReach (qui ont échoué)"""
     data = request.json or {}
@@ -8027,6 +8295,7 @@ def api_recover_robinreach():
     return jsonify({"success": True, "recovered": recovered, "by_account": by_account})
 
 @app.route("/api/scheduled/unschedule", methods=["POST"])
+@_require_user
 def api_unschedule():
     """Remet des TikToks programmés dans la file d'attente ET supprime de Metricool"""
     data = request.json
@@ -8091,6 +8360,7 @@ def api_unschedule():
     return jsonify({"success": True, "count": count, "errors": errors})
 
 @app.route("/api/autopilot/plan", methods=["POST"])
+@_require_user
 def api_autopilot_plan():
     """Calcule combien de TikToks manquent pour remplir N jours sur tous les comptes"""
     data = request.json or {}
@@ -8151,6 +8421,7 @@ def api_autopilot_plan():
     })
 
 @app.route("/api/metricool/failed_posts")
+@_require_user
 def api_metricool_failed_posts():
     """Vérifie sur Metricool les posts qui auraient dû être publiés mais ne l'ont pas été"""
     if not METRICOOL_TOKEN:
@@ -8183,6 +8454,7 @@ def api_metricool_failed_posts():
     return jsonify({"failed": failed, "count": len(failed)})
 
 @app.route("/api/queue_ig/all")
+@_require_user
 def api_queue_ig_all():
     """Retourne tous les posts Instagram en attente"""
     keys = sorted(r2_list_keys(PFX_QUEUE_IG))
@@ -8196,6 +8468,7 @@ def api_queue_ig_all():
     return jsonify({"tiktoks": tiktoks, "total": len(tiktoks)})
 
 @app.route("/api/queue_ig/schedule", methods=["POST"])
+@_require_user
 def api_schedule_ig():
     """Programme des posts Instagram"""
     if not _schedule_lock.acquire(blocking=False):
@@ -8219,6 +8492,7 @@ def api_schedule_ig():
     return jsonify({"success": True, "background": True, "message": "Programmation Instagram lancée"})
 
 @app.route("/api/queue_ig/schedule/status")
+@_require_user
 def api_schedule_ig_status():
     result = _schedule_result_ig.get("last")
     if result is None:
@@ -8330,6 +8604,7 @@ def _do_schedule_ig(data=None):
 _schedule_result_ig = {}
 
 @app.route("/api/queue_ig/dispatch_smart", methods=["POST"])
+@_require_user
 def api_dispatch_ig_smart():
     """Auto-dispatch Instagram — assigne tous les posts non assignés au compte Instagram"""
     keys = [k for k in r2_list_keys(PFX_QUEUE_IG) if "/imgs/" not in k]
@@ -8344,6 +8619,7 @@ def api_dispatch_ig_smart():
     return jsonify({"success": True, "count": count, "by_account": {ig_account: count}})
 
 @app.route("/api/queue_ig/copy_from_tiktok", methods=["POST"])
+@_require_user
 def api_copy_tiktok_to_ig():
     """Copie tous les TikToks de la file d'attente vers la file d'attente Instagram"""
     keys = [k for k in r2_list_keys(PFX_QUEUE) if "/imgs/" not in k]
@@ -8364,6 +8640,7 @@ def api_copy_tiktok_to_ig():
     return jsonify({"success": True, "copied": copied, "skipped": skipped})
 
 @app.route("/api/queue_ig/unassign_all", methods=["POST"])
+@_require_user
 def api_unassign_ig_all():
     keys = [k for k in r2_list_keys(PFX_QUEUE_IG) if "/imgs/" not in k]
     done = 0
@@ -8375,90 +8652,21 @@ def api_unassign_ig_all():
             done += 1
     return jsonify({"success": True, "unassigned": done})
 
-@app.route("/api/metricool/test")
-def api_metricool_test():
-    """Test endpoint Metricool — diagnostic upload"""
-    TOKEN = METRICOOL_TOKEN
-    USER_ID = METRICOOL_USER_ID
-    BLOG_ID = "6542376"
-    TEST_URLS = [
-        "https://pub-2041419f649b434681cde993145feaee.r2.dev/queue/imgs/tiktok_0295_01.png",
-        "https://pub-2041419f649b434681cde993145feaee.r2.dev/queue/imgs/tiktok_0295_02.png",
-    ]
-    
-    media_urls = []
-    upload_results = []
-    
-    for i, url in enumerate(TEST_URLS):
-        try:
-            img = requests.get(url, timeout=30)
-            files = {"picture": (f"image_{i+1}.png", img.content, "image/png")}
-            data = {"userId": USER_ID, "blogId": BLOG_ID}
-            r = requests.post(
-                f"https://app.metricool.com/api/utils/upload",
-                headers={"X-Mc-Auth": TOKEN},
-                files=files,
-                data=data,
-                timeout=60
-            )
-            upload_results.append({"status": r.status_code, "resp": r.text[:300]})
-            if r.status_code == 200:
-                resp_text = r.text.strip()
-                if resp_text.startswith("http"):
-                    media_urls.append(resp_text)
-                else:
-                    try:
-                        d = r.json()
-                        media_url = d.get("url") or d.get("mediaUrl") or str(d)
-                        media_urls.append(media_url)
-                    except Exception:
-                        pass
-        except Exception as e:
-            upload_results.append({"error": str(e)})
-    
-    if not media_urls:
-        return jsonify({"error": "Upload failed", "upload_results": upload_results})
-    
-    payload = {
-        "publicationDate": {"dateTime": "2026-08-20T10:00:00", "timezone": "Europe/Paris"},
-        "text": "Test bot images",
-        "firstCommentText": "",
-        "providers": [{"network": "tiktok"}],
-        "media": media_urls,
-        "mediaAltText": [None] * len(media_urls),
-        "autoPublish": False,
-        "shortener": False,
-        "draft": False,
-        "hasNotReadNotes": False,
-        "tiktokData": {
-            "disableComment": False,
-            "disableDuet": False,
-            "disableStitch": False,
-            "autoAddMusic": True,
-            "privacyOption": "public_to_everyone",
-            "photoCoverIndex": 0
-        }
-    }
-    resp = requests.post(
-        f"https://app.metricool.com/api/v2/scheduler/posts?userId={USER_ID}&blogId={BLOG_ID}",
-        headers={"X-Mc-Auth": TOKEN, "Content-Type": "application/json"},
-        json=payload,
-        timeout=60
-    )
-    
-    return jsonify({
-        "upload_results": upload_results,
-        "media_urls": media_urls,
-        "post_status": resp.status_code,
-        "post_response": resp.text[:800],
-    })
+# La route de diagnostic /api/metricool/test a été supprimée.
+#
+# Publique, sans authentification, elle publiait un contenu de test sur le
+# compte TikTok de production avec le token de la marque, et renvoyait les
+# réponses brutes de l'API Metricool à qui la visitait. Un endpoint de mise
+# au point n'a rien à faire dans une application accessible sur Internet.
 
 @app.route("/api/metricool/accounts")
+@_require_user
 def api_metricool_accounts():
     """Liste les comptes Metricool configurés"""
     return jsonify({"accounts": [{"name": k, "blog_id": v["blog_id"], "active": v.get("active", False)} for k,v in METRICOOL_ACCOUNTS.items()]})
 
 @app.route("/api/queue/delete", methods=["POST"])
+@_require_user
 def api_delete():
     data = request.json; key = data.get("key")
     if not key: return jsonify({"error":"key requis"}),400
@@ -8470,6 +8678,7 @@ def api_delete():
 
 # ── Generate single ─────────────────────────────────────────────────────────
 @app.route("/api/flocages/reset", methods=["GET", "POST"])
+@_require_user
 def api_reset_flocages():
     global _pepites_deck_mem, _normaux_cache
     r2_put_json("meta/flocages.json", {"flocages": DEFAULT_FLOCAGES, "pepites": PEPITE_FLOCAGES})
@@ -8482,6 +8691,7 @@ def api_reset_flocages():
     return jsonify({"success": True, "count": len(DEFAULT_FLOCAGES)})
 
 @app.route("/api/flocages", methods=["GET"])
+@_require_user
 def api_get_flocages():
     data = r2_get_json("meta/flocages.json")
     if not data:
@@ -8494,6 +8704,7 @@ def api_get_flocages():
     return jsonify(data)
 
 @app.route("/api/flocages", methods=["POST"])
+@_require_user
 def api_save_flocages():
     data = request.json
     # Merger au lieu d'écraser — préserve les catégories S/A/B et les pepites existants
@@ -8504,11 +8715,13 @@ def api_save_flocages():
 
 # ── Routes catégories templates S/A/B (BLOC 2) ──────────────────────────────
 @app.route("/api/templates/categories", methods=["GET"])
+@_require_user
 def api_get_templates_categories():
     """Retourne les catégories S/A/B des templates"""
     return jsonify(_load_templates_categories())
 
 @app.route("/api/templates/categories", methods=["POST"])
+@_require_user
 def api_save_templates_categories():
     """Sauvegarde les catégories S/A/B des templates"""
     data = request.json or {}
@@ -8517,11 +8730,13 @@ def api_save_templates_categories():
 
 # ── Routes catégories flocages S/A/B (BLOC 2) ───────────────────────────────
 @app.route("/api/flocages/categories", methods=["GET"])
+@_require_user
 def api_get_flocages_categories():
     """Retourne les catégories S/A/B des flocages"""
     return jsonify(_load_flocages_categories())
 
 @app.route("/api/flocages/categories", methods=["POST"])
+@_require_user
 def api_save_flocages_categories():
     """Sauvegarde les catégories S/A/B des flocages"""
     data = request.json or {}
@@ -8530,11 +8745,13 @@ def api_save_flocages_categories():
 
 # ── Routes anti-répétition (BLOC 2) ─────────────────────────────────────────
 @app.route("/api/recent_used", methods=["GET"])
+@_require_user
 def api_get_recent_used_route():
     """Retourne les éléments récemment utilisés (debug/info)"""
     return jsonify(_get_recent_used())
 
 @app.route("/api/recent_used/reset", methods=["POST"])
+@_require_user
 def api_reset_recent_used():
     """Remet à zéro l'historique anti-répétition"""
     try:
@@ -8545,6 +8762,7 @@ def api_reset_recent_used():
 
 # ── Routes scheduler plan persisté (BLOC 7) ─────────────────────────────────
 @app.route("/api/scheduler/slots_plan", methods=["GET"])
+@_require_user
 def api_get_slots_plan():
     """Retourne le plan d'heures persistées par créneau (debug/info)"""
     try:
@@ -8554,6 +8772,7 @@ def api_get_slots_plan():
         return jsonify({"error": str(e)})
 
 @app.route("/api/scheduler/slots_plan/reset", methods=["POST"])
+@_require_user
 def api_reset_slots_plan():
     """Vide le plan d'heures persistées (force recalcul des créneaux)"""
     try:
@@ -8567,6 +8786,7 @@ def remove_box_page():
     return render_template("remove_box.html")
 
 @app.route("/api/remove_box", methods=["POST"])
+@_require_user
 def api_remove_box():
     if not API_KEY:
         return jsonify({"error": "Clé API manquante"}), 500
@@ -8613,6 +8833,7 @@ def api_remove_box():
         return jsonify({"error": str(e)}), 500
 
 @app.route("/generate_single", methods=["POST"])
+@_require_user
 def generate_single():
     import random as _rnd
     if not API_KEY: return jsonify({"error":"Clé API manquante"}),500
@@ -8649,6 +8870,7 @@ def generate_single():
 
 # ── Generate bulk (ASYNC — plus de timeout Railway) ─────────────────────────
 @app.route("/generate_bulk", methods=["POST"])
+@_require_user
 def generate_bulk():
     if not API_KEY: return jsonify({"error": "Clé API manquante"}), 500
 
@@ -8712,6 +8934,7 @@ def _result_with_image(r, fallback_index):
     }
 
 @app.route("/api/jobs/progress/<session_id>")
+@_require_user
 def api_jobs_progress(session_id):
     """Polling endpoint — retourne aussi les nouvelles images depuis last_seen"""
     last_seen = int(request.args.get("last_seen", 0))
@@ -8780,6 +9003,7 @@ def monitor_page():
     return render_template("monitor.html")
 
 @app.route("/api/monitor/sessions")
+@_require_user
 def api_monitor_sessions():
     """Retourne toutes les sessions actives en RAM pour le monitoring en temps réel"""
     active = []
@@ -8803,6 +9027,7 @@ def api_monitor_sessions():
     return jsonify({"active": active})
 
 @app.route("/api/sessions")
+@_require_user
 def api_sessions():
     """Retourne les sessions récentes avec leurs stats"""
     session_keys = sorted(r2_list_keys("sessions/"), reverse=True)[:30]
@@ -8813,6 +9038,7 @@ def api_sessions():
     return jsonify({"sessions": sessions})
 
 @app.route("/api/session/stats", methods=["POST"])
+@_require_user
 def api_session_stats():
     """Sauvegarde les stats de durée d'une session de génération"""
     data = request.json or {}
@@ -8830,6 +9056,7 @@ def api_session_stats():
     return jsonify({"success": True})
 
 @app.route("/api/jobs/cancel/<session_id>", methods=["POST"])
+@_require_user
 def api_jobs_cancel(session_id):
     """Marque une session comme annulée (les workers en cours finissent leur image)"""
     with _job_sessions_lock:
@@ -8840,6 +9067,7 @@ def api_jobs_cancel(session_id):
 
 # ── API Templates ───────────────────────────────────────────────────────────
 @app.route("/api/templates2")
+@_require_user
 def api_templates2():
     """Liste les templates de la variante v2 (flat lay)"""
     r2 = get_r2()
@@ -8861,6 +9089,7 @@ def api_templates2():
         return jsonify({"templates": [], "error": str(e)})
 
 @app.route("/api/template2_image")
+@_require_user
 def api_template2_image():
     """Retourne une image template v2 en base64"""
     key = request.args.get("key")
@@ -8877,6 +9106,7 @@ def api_template2_image():
         return jsonify({"error": str(e)}), 404
 
 @app.route("/api/box_ref/upload", methods=["POST"])
+@_require_user
 def api_box_ref_upload():
     """Upload la photo de référence de la boîte Volakits pour le générateur v2"""
     global _box_ref_cache
@@ -8890,6 +9120,7 @@ def api_box_ref_upload():
     return jsonify({"success": True})
 
 @app.route("/api/templates2/upload", methods=["POST"])
+@_require_user
 def api_templates2_upload():
     """Upload une template v2"""
     files = request.files.getlist("images")
@@ -8905,6 +9136,7 @@ def api_templates2_upload():
     return jsonify({"success": True, "uploaded": uploaded})
 
 @app.route("/api/templates2/random")
+@_require_user
 def api_templates2_random():
     """Retourne N templates v2 aléatoires"""
     import random as _random
@@ -8950,6 +9182,7 @@ def api_templates2_random():
         return jsonify({"templates": [], "error": str(e)})
 
 @app.route("/api/templates")
+@_require_user
 def api_templates():
     r2 = get_r2()
     if not r2: return jsonify({"templates":[],"error":"R2 non configuré"})
@@ -8973,6 +9206,7 @@ def api_templates():
         return jsonify({"templates":[],"error":str(e)})
 
 @app.route("/api/templates/used", methods=["POST"])
+@_require_user
 def api_mark_template_used():
     """Marque une template comme utilisée récemment"""
     key = (request.json or {}).get("key")
@@ -8986,6 +9220,7 @@ def api_mark_template_used():
     return jsonify({"success": True})
 
 @app.route("/api/templates/random")
+@_require_user
 def api_templates_random():
     """Retourne N templates aléatoires avec leurs images base64 — évite N appels séparés"""
     import random as _random
@@ -9036,6 +9271,7 @@ def api_templates_random():
         return jsonify({"templates": [], "error": str(e)})
 
 @app.route("/api/templates/upload", methods=["POST"])
+@_require_user
 def api_templates_upload():
     r2 = get_r2()
     if not r2: return jsonify({"error":"R2 non configuré"}),500
@@ -9048,6 +9284,7 @@ def api_templates_upload():
     return jsonify({"uploaded":uploaded})
 
 @app.route("/api/templates2/delete", methods=["POST"])
+@_require_user
 def api_templates2_delete():
     """Supprime une template v2"""
     key = (request.json or {}).get("key")
@@ -9062,6 +9299,7 @@ def api_templates2_delete():
         return jsonify({"error": str(e)}), 500
 
 @app.route("/api/templates/delete", methods=["POST"])
+@_require_user
 def api_templates_delete():
     key = (request.json or {}).get("key")
     if not key: return jsonify({"error":"key requis"}),400
@@ -9069,6 +9307,7 @@ def api_templates_delete():
     return jsonify({"deleted":key})
 
 @app.route("/api/template_image")
+@_require_user
 def api_template_image():
     key = request.args.get("key")
     if not key: return jsonify({"error":"key requis"}),400
@@ -9090,6 +9329,7 @@ def calendar_page():
     return render_template("calendar.html")
 
 @app.route("/api/calendar/live")
+@_require_user
 def api_calendar_live():
     """Fetch les posts programmés depuis Metricool pour tous les comptes"""
     all_posts = []
@@ -9135,6 +9375,7 @@ def api_calendar_live():
     return jsonify({"posts": all_posts, "total": len(all_posts)})
 
 @app.route("/api/calendar")
+@_require_user
 def api_calendar():
     """Retourne tous les TikToks programmés groupés par compte et par date"""
     account_filter = request.args.get("account", "all")
