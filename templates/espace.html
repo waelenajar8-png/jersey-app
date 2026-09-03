@@ -247,6 +247,9 @@ input,select{font-family:inherit}
 .sec + .sec,
 .gains + .sec, .goal + .sec, .promo + .sec,
 .card + .sec,
+/* Le pendant manquait : une section suivie d'une carte se retrouvait collée
+   au titre suivant, comme si les deux ne faisaient qu'un bloc. */
+.sec + .card,
 .sec + .gains, .sec + .goal{margin-top:52px}
 .gains + .goal{margin-top:16px}
 .sec-k{font-size:11px;font-weight:700;letter-spacing:.13em;text-transform:uppercase;
@@ -368,6 +371,7 @@ input,select{font-family:inherit}
     border-bottom:1px solid transparent;transition:border-color .16s ease}
 .shr-url:hover{border-bottom-color:var(--line-2)}
 .shr-why{font-size:12.5px;color:var(--muted);margin-top:12px;font-weight:500;line-height:1.55}
+.shr-why b{color:var(--ink-2);font-weight:700}
 .shr-soon{flex:1;font-size:15px;font-weight:600;color:var(--ink-2);letter-spacing:-.02em}
 .shr-wait .shr-k{color:var(--muted)}
 /* Le code, en pied de bloc : présent, jamais dominant. */
@@ -2830,22 +2834,26 @@ function viewProfil(){
     ${monCode ? `
     <section class="sec">
         <div class="sec-k">Ton accès</div>
-        <div class="sec-t">Revenir ici quand tu veux</div>
+        <div class="sec-t">Comment te reconnecter</div>
+        <div class="sec-sub">Ton espace n'a pas de mot de passe. Pour y revenir plus tard,
+            depuis n'importe quel téléphone : tu ouvres l'adresse, tu tapes ton code,
+            tu es chez toi.</div>
 
         <div class="shr">
             <div class="shr-main">
-                <div class="shr-k">L'adresse</div>
+                <div class="shr-k">1 · L'adresse à ouvrir</div>
                 <div class="shr-row">
                     <a class="shr-url" href="${escAttr(racine)}" target="_blank" rel="noopener"
-                       title="Ouvrir la page d'entrée">${esc(racine.replace(/^https?:\/\//, ''))}</a>
+                       title="Ouvrir la page de connexion">${esc(racine.replace(/^https?:\/\//, ''))}</a>
                     <button class="copy-btn" data-copy="${escAttr(aRetenir)}">${copyIco}<span>Copier</span></button>
                 </div>
-                <div class="shr-why">Note ton code quelque part. Si tu perds le lien qu'on
-                    t'a envoyé, c'est lui qui te ramène ici — le bouton copie les deux.</div>
+                <div class="shr-why">Ce bouton copie l'adresse <b>et</b> ton code ensemble.
+                    Envoie-toi le message, ou note-les quelque part : c'est ce qui te ramène
+                    ici le jour où tu perds le lien qu'on t'a envoyé.</div>
             </div>
 
             <div class="shr-code">
-                <span class="shr-code-k">Ton code</span>
+                <span class="shr-code-k">2 · Le code à taper</span>
                 <span class="shr-code-v">${esc(monCode)}</span>
                 <button class="copy-btn ghost" data-copy="${escAttr(monCode)}">${copyIco}<span>Copier</span></button>
             </div>
