@@ -724,14 +724,19 @@ button.lien:focus-visible{outline:2px solid var(--accent);outline-offset:2px;bor
     font-size:13px;font-weight:600;color:var(--ok)}
 .ca-ok.warn{background:var(--warn-soft);color:#96590A}
 .ca-ok svg{width:15px;height:15px;flex:none}
-.gd-two{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px}
-.gd-f{background:var(--surface);border:1px solid var(--line);border-radius:20px;
+/* Les deux colonnes n'ont pas le même nombre de lignes de texte : sans rien,
+   le bloc d'exemples de gauche démarre plus bas que celui de droite et les
+   vidéos se retrouvent en escalier. On colle donc les exemples au bas de
+   chaque carte — les cartes ayant la même hauteur, tout se réaligne. */
+.gd-two{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px;align-items:stretch}
+.gd-f{display:flex;flex-direction:column;
+    background:var(--surface);border:1px solid var(--line);border-radius:20px;
     padding:18px 20px 20px}
 .gd-fk{font-size:10.5px;font-weight:800;letter-spacing:.09em;text-transform:uppercase;
     color:var(--accent)}
 .gd-ft{font-size:16px;font-weight:800;letter-spacing:-.025em;color:var(--ink);margin-top:7px}
 .gd-fd{font-size:13px;font-weight:500;color:var(--muted);line-height:1.55;margin-top:5px}
-.gd-fl{list-style:none;margin:13px 0 0;padding:0;display:flex;flex-direction:column;gap:8px}
+.gd-fl{list-style:none;margin:13px 0 0;padding:0;display:flex;flex-direction:column;gap:8px;flex:none}
 .gd-fl li{position:relative;padding-left:16px;font-size:13px;font-weight:500;
     color:var(--ink);line-height:1.5}
 .gd-fl li::before{content:"";position:absolute;left:1px;top:8px;width:5px;height:5px;
@@ -741,7 +746,11 @@ button.lien:focus-visible{outline:2px solid var(--accent);outline-offset:2px;bor
    la deuxième lève le vrai blocage : beaucoup n'osent pas parler à la
    caméra et abandonnent plutôt que de demander si c'est permis. Format
    9:16 : c'est celui dans lequel elles filment, autant le montrer tel quel. */
-.gd-ex{margin-top:16px;padding-top:15px;border-top:1px solid var(--line)}
+.gd-ex{margin-top:auto;padding-top:15px;border-top:1px solid var(--line)}
+/* La marge minimale reste, `auto` ne devant coller le trait au texte que
+   lorsqu'il n'y a plus de place à distribuer. */
+.gd-fl + .gd-ex{margin-top:16px}
+@supports(display:grid){ .gd-fl + .gd-ex{margin-top:auto} }
 .gd-exk{font-size:10px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;
     color:var(--faint);margin-bottom:10px}
 .gd-exg{display:grid;grid-template-columns:1fr 1fr;gap:10px}
@@ -1310,9 +1319,6 @@ function render(){
     else if(TAB==='contenus') v.innerHTML = viewContenus();
     else if(TAB==='profil'){
         v.innerHTML = viewProfil();
-        // Inutile d'aller chercher le catalogue quand la sélection est
-        // verrouillée : c'est une requête réseau pour une grille jamais rendue.
-        if(!D.influencer.jerseys_locked) ensureCatalog().then(renderJerseyGrid);
         const sb = document.getElementById('profilSave');
         if(sb) sb.onclick = saveProfil;
     }
@@ -1813,11 +1819,8 @@ function blockColis(){
     if(st === 'livre')          msg = 'Ton colis est arrivé. Il ne reste plus qu\'à filmer.';
     else if(st === 'probleme')  msg = 'On regarde ce qui s\'est passé et on revient vers toi.';
     else if(inf.tracking)       msg = 'Ton colis est parti. Tu peux suivre son trajet.';
-    else if(!jerseysDone)     { msg = inf.jerseys_locked
-                                    ? 'On enregistre tes 2 maillots avec toi, puis le colis part.'
-                                    : 'Choisis tes 2 maillots pour lancer l\'expédition.';
-                                cta = {label: inf.jerseys_locked ? 'Voir mes maillots' : 'Choisir mes maillots',
-                                       tab:'profil'}; }
+    else if(!jerseysDone)     { msg = 'On enregistre tes 2 maillots avec toi, puis le colis part.';
+                                cta = {label:'Voir mes maillots', tab:'colis'}; }
     else if(!addrDone)        { msg = 'Renseigne ton adresse et ton colis part.';
                                 cta = {label:'Renseigner mon adresse', tab:'profil'}; }
     else                        msg = 'Tout est bon de ton côté. On prépare ton colis.';
@@ -2622,25 +2625,12 @@ function viewProfil(){
         }).join('')}
     </div>
 
-    ${/* La sélection des maillots a quitté le profil.
-         C'est l'équipe qui choisit : lui montrer un catalogue qu'elle ne peut
-         pas utiliser produit une attente, puis un message pour demander
-         pourquoi le bouton ne fait rien. Elle retrouve ses maillots — photo,
-         taille — dans « Mon colis », là où ils la concernent vraiment.
-         Le catalogue ne réapparaît que si tu déverrouilles sa fiche. */''}
-    ${LOCKED ? '' : `
-    <div class="card">
-        <div class="card-head">
-            <div>
-                <div class="card-title"><span class="ico-box">${ICO.tag}</span>Choisis tes 2 maillots</div>
-                <div class="card-sub" style="margin-top:5px">Sélectionne un modèle, puis sa taille</div>
-            </div>
-            <span class="pick-count ${PICKS.length>=2?'full':''}" id="pickCount">${PICKS.length} / 2</span>
-        </div>
-        <div id="pickedZone"></div>
-        <div id="jerseyGrid"><div class="empty" style="padding:20px"><div class="empty-text">Chargement du catalogue…</div></div></div>
-    </div>`}
-
+    ${/* La sélection des maillots ne figure plus ici, dans aucun cas.
+         C'est l'équipe qui choisit : montrer un catalogue de quarante maillots
+         dans « Mes informations » invite à un choix qui ne sera pas retenu, et
+         personne ne comprend pourquoi sa sélection n'a pas été suivie. Elle
+         retrouve ses deux maillots — photo et taille — dans « Mon colis », là
+         où ils la concernent vraiment. */''}
     <div class="card">
         <div class="card-head">
             <div>
@@ -2781,7 +2771,9 @@ async function saveProfil(){
     const memeAdresse = ['address','postal','city','country','name','phone','extra','note']
         .every(k => (shipping[k] || '') === (avant[k] || ''));
 
-    const corps = D.influencer.jerseys_locked ? {platforms} : {platforms, jerseys:PICKS};
+    // Les maillots ne se choisissent plus depuis l'espace : on n'envoie que
+    // ce que cet écran contient encore.
+    const corps = {platforms};
     if(!memeAdresse) corps.shipping = shipping;
 
     try{
