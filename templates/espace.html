@@ -986,28 +986,6 @@ button.lien:focus-visible{outline:2px solid var(--accent);outline-offset:2px;bor
 .tk-loupe img{max-width:min(560px,94vw);max-height:88vh;border-radius:12px;display:block}
 
 
-/* ── Sa clé d'entrée, chez elle ──────────────────────────────────────────
-   Le code est le seul objet fort de la carte : c'est ce qu'elle vient
-   recopier. Chiffres tabulaires et lettres espacées, pour qu'on le relise
-   sans hésiter entre un B et un 8 — l'alphabet exclut déjà I, O, 0 et 1. */
-.acc{background:var(--accent);border-color:var(--accent);color:#fff;text-align:center}
-.acc-k{font-size:9.5px;font-weight:800;letter-spacing:.15em;text-transform:uppercase;
-    color:var(--on-accent-dim)}
-.acc-l{font-size:12.5px;font-weight:600;color:var(--on-accent);margin-top:7px;
-    word-break:break-all;line-height:1.4}
-.acc-c{font-size:29px;font-weight:800;letter-spacing:.14em;margin-top:9px;
-    font-variant-numeric:tabular-nums;line-height:1.1}
-.acc-b{margin-top:13px;background:rgba(255,255,255,.15);border-color:transparent;
-    color:#fff;width:100%;justify-content:center}
-/* Sans taille explicite, l'icône de confirmation — réinjectée par le code de
-   copie — s'étirait à toute la largeur du bouton et chassait le mot « Copié ». */
-.acc-b svg{width:15px;height:15px;flex:none}
-.acc-b:hover{background:rgba(255,255,255,.24);border-color:transparent}
-.acc-b.done{background:#fff;color:var(--accent)}
-.acc-d{font-size:11.5px;font-weight:500;color:var(--on-accent);margin-top:11px;
-    line-height:1.5}
-@media(max-width:360px){ .acc-c{font-size:25px;letter-spacing:.1em} }
-
 .toast{
     position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(90px);
     background:var(--sidebar);color:#fff;padding:12px 20px;border-radius:100px;
@@ -2831,31 +2809,48 @@ function viewProfil(){
     // Verrou posé par l'admin : la sélection devient une simple présentation.
     const LOCKED = !!D.influencer.jerseys_locked;
 
+    const copyIco = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>`;
     const monCode = (D.access && D.access.code) || '';
     const racine = location.origin;
     const aRetenir = `Mon espace Volakits : ${racine}\nMon code : ${monCode}`;
 
     return `
     ${/* Son code d'entrée, chez elle.
-         Il ne protège rien une fois qu'elle est dedans — il sert à entrer. Le
-         montrer ici ne donne donc rien de plus à personne, et ça supprime le
+         Il ne protège rien une fois qu'elle est dedans — il sert à entrer.
+         L'afficher ici ne donne donc rien de plus à personne, et ça supprime le
          message le plus fréquent : « j'ai perdu le lien ». Le code de
          LIVRAISON, lui, n'apparaît jamais dans l'espace : il protège contre
-         quelqu'un qui détient déjà le lien, l'afficher le viderait de son
-         sens. */''}
+         quelqu'un qui détient déjà le lien, l'afficher le viderait de son sens.
+
+         Présenté comme « Ton lien et ton code » sur l'accueil, avec les mêmes
+         classes : c'est le même geste — lire une valeur, la copier. Une carte
+         inventée pour l'occasion, en aplat bleu, faisait deux fautes à la
+         fois : elle prenait l'aplat fort de l'écran pour un élément
+         utilitaire, et elle centrait tout dans une page alignée à gauche. */''}
     ${monCode ? `
-    <div class="card acc">
-        <div class="acc-k">Ton accès à cet espace</div>
-        <div class="acc-l">${esc(racine.replace(/^https?:\/\//, ''))}</div>
-        <div class="acc-c num">${esc(monCode)}</div>
-        <button class="btn-ghost acc-b" data-copy="${escAttr(aRetenir)}">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"
-                 stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-            <span>Copier le lien et le code</span>
-        </button>
-        <div class="acc-d">Note-le quelque part. C'est ce qui te permet de revenir ici
-            si tu perds le lien qu'on t'a envoyé.</div>
-    </div>` : ''}
+    <section class="sec">
+        <div class="sec-k">Ton accès</div>
+        <div class="sec-t">Revenir ici quand tu veux</div>
+
+        <div class="shr">
+            <div class="shr-main">
+                <div class="shr-k">L'adresse</div>
+                <div class="shr-row">
+                    <a class="shr-url" href="${escAttr(racine)}" target="_blank" rel="noopener"
+                       title="Ouvrir la page d'entrée">${esc(racine.replace(/^https?:\/\//, ''))}</a>
+                    <button class="copy-btn" data-copy="${escAttr(aRetenir)}">${copyIco}<span>Copier</span></button>
+                </div>
+                <div class="shr-why">Note ton code quelque part. Si tu perds le lien qu'on
+                    t'a envoyé, c'est lui qui te ramène ici — le bouton copie les deux.</div>
+            </div>
+
+            <div class="shr-code">
+                <span class="shr-code-k">Ton code</span>
+                <span class="shr-code-v">${esc(monCode)}</span>
+                <button class="copy-btn ghost" data-copy="${escAttr(monCode)}">${copyIco}<span>Copier</span></button>
+            </div>
+        </div>
+    </section>` : ''}
 
     <div class="card">
         <div class="card-head">
