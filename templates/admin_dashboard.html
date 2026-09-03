@@ -755,6 +755,36 @@ select.inp{cursor:pointer}
     .sheet-foot{position:sticky;bottom:0}
     .foot-r{flex:1;justify-content:flex-end}
 }
+/* ── Exemples vidéo du guide ─────────────────────────────────────────────
+   Quatre emplacements fixes. On voit ce qui est en ligne, pas une liste de
+   noms de fichiers : c'est la vidéo elle-même qui dit si c'est la bonne. */
+.gx{margin-bottom:18px}
+.gx-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+@media(max-width:1100px){ .gx-grid{grid-template-columns:repeat(2,1fr)} }
+@media(max-width:560px){ .gx-grid{grid-template-columns:1fr} }
+.gx-s{border:1px solid var(--line);border-radius:16px;padding:12px;background:var(--surface-2)}
+.gx-k{font-size:9.5px;font-weight:800;letter-spacing:.11em;text-transform:uppercase;
+    color:var(--muted);margin-bottom:9px}
+.gx-v{position:relative;aspect-ratio:9/16;border-radius:12px;overflow:hidden;
+    background:#0B1020;border:1px solid var(--line)}
+.gx-v video{width:100%;height:100%;object-fit:cover;display:block}
+.gx-vide{width:100%;height:100%;display:grid;place-items:center;text-align:center;
+    padding:14px;background:var(--surface);color:var(--faint);
+    font-size:11.5px;font-weight:700;line-height:1.5;cursor:pointer;
+    border:2px dashed var(--line-2);border-radius:12px}
+.gx-vide:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+.gx-lbl{width:100%;margin-top:10px;padding:7px 9px;border:1px solid var(--line-2);
+    border-radius:9px;background:var(--surface);font-family:inherit;
+    font-size:12px;font-weight:700;color:var(--ink)}
+.gx-lbl:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(47,80,241,.1)}
+.gx-act{display:flex;gap:6px;margin-top:8px}
+.gx-act button{flex:1;padding:6px 8px;border-radius:8px;border:1px solid var(--line-2);
+    background:var(--surface);font-family:inherit;font-size:11px;font-weight:700;
+    color:var(--ink-2);cursor:pointer}
+.gx-act button:hover{border-color:var(--muted)}
+.gx-act .gx-del{color:var(--danger)}
+.gx-act .gx-del:hover{background:var(--danger-soft);border-color:var(--danger)}
+.gx-st{font-size:11px;font-weight:700;color:var(--accent);margin-top:7px;min-height:14px}
 </style>
 </head>
 <body>
@@ -958,6 +988,17 @@ select.inp{cursor:pointer}
                     <div class="board-label">Déjà utilisées</div>
                     <div class="board-value num" id="vUsed">—</div>
                 </div>
+            </div>
+
+            <div class="card gx">
+                <div class="card-head">
+                    <div>
+                        <div class="card-title">Les exemples montrés aux influenceuses</div>
+                        <div class="card-sub">Deux unboxings, deux playbacks. Ils s'affichent
+                            dans leur guide, juste sous le format concerné. MP4 ou MOV, 60 Mo max.</div>
+                    </div>
+                </div>
+                <div class="gx-grid" id="gxGrid"></div>
             </div>
 
             <div class="filters" id="vFilters"></div>
@@ -1396,6 +1437,10 @@ const TIERS = [
 let influenceurs = [], dataVersion = 0, saveTimer = null, filterStatus = '', currentId = null;
 
 const esc = s => String(s??'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+/* `esc` échappe déjà les guillemets : dans un attribut, c'est le même
+   traitement. L'alias existe pour que l'intention se lise à l'appel — et
+   parce que l'avoir cru présent m'a déjà coûté un écran blanc. */
+const escAttr = esc;
 const genId = () => 'inf_'+Date.now()+'_'+Math.random().toString(36).slice(2,9);
 function initials(n){
     const p = String(n||'?').trim().split(/\s+/);
@@ -2642,12 +2687,115 @@ function setView(v){
     document.querySelectorAll('[data-mseg]').forEach(b => b.classList.toggle('on', b.dataset.mseg === v));
     // Les vidéos sont préchargées au démarrage pour le compteur : si c'est déjà
     // fait, il suffit d'afficher, sinon on va les chercher.
-    if(v === 'videos') videosLoaded ? renderVideos() : loadVideos();
+    if(v === 'videos'){
+        videosLoaded ? renderVideos() : loadVideos();
+        if(!GX.length) loadGuideEx();
+    }
     if(v === 'stock'){
         if(STOCK_TAB === 'envois') renderEnvois();
         else stockData ? renderStock() : loadStock();
     }
     if(v === 'paie') paieLoaded ? renderPaie() : loadPaie();
+}
+
+/* ── Exemples vidéo du guide ─────────────────────────────────────────────
+   Une consigne écrite se discute, un exemple se copie. Le deuxième
+   emplacement de l'unboxing existe pour une raison précise : beaucoup
+   n'osent pas parler à la caméra et abandonnent au lieu de demander si
+   c'est permis. La vidéo muette répond à la question sans qu'on la pose. */
+let GX = [], gxLblT = null;
+
+async function loadGuideEx(){
+    const g = document.getElementById('gxGrid');
+    if(!g) return;
+    g.innerHTML = Array.from({length:4},()=>'<div class="skel" style="height:280px"></div>').join('');
+    try{
+        const r = await fetch('/api/guide/exemples');
+        GX = (await r.json()).slots || [];
+    }catch(e){ GX = []; }
+    renderGuideEx();
+}
+
+function renderGuideEx(){
+    const g = document.getElementById('gxGrid');
+    if(!g) return;
+    g.innerHTML = GX.map(s=>`
+        <div class="gx-s" data-slot="${escAttr(s.id)}">
+            <div class="gx-k">${s.format === 'unboxing' ? 'Unboxing' : 'Playback'}</div>
+            <div class="gx-v">
+                ${s.url
+                    ? `<video src="${escAttr(s.url)}" preload="metadata" playsinline controls></video>`
+                    : `<div class="gx-vide" data-pick="${escAttr(s.id)}">
+                           Aucune vidéo<br>Clique pour en déposer une</div>`}
+            </div>
+            <input class="gx-lbl" value="${escAttr(s.label || '')}"
+                   placeholder="${escAttr(s.defaut)}" data-lbl="${escAttr(s.id)}">
+            <div class="gx-act">
+                <button data-pick="${escAttr(s.id)}">${s.url ? 'Remplacer' : 'Déposer'}</button>
+                ${s.url ? `<button class="gx-del" data-del="${escAttr(s.id)}">Retirer</button>` : ''}
+            </div>
+            <div class="gx-st" data-st="${escAttr(s.id)}"></div>
+        </div>`).join('');
+    bindGuideEx();
+}
+
+function bindGuideEx(){
+    const g = document.getElementById('gxGrid');
+    g.querySelectorAll('[data-pick]').forEach(b=>{
+        b.onclick = ()=> gxChoisir(b.dataset.pick);
+    });
+    g.querySelectorAll('[data-del]').forEach(b=>{
+        b.onclick = async ()=>{
+            if(!confirm('Retirer cette vidéo d\'exemple ?')) return;
+            await fetch('/api/guide/exemples/set', {method:'POST',
+                headers:{'Content-Type':'application/json'},
+                body: JSON.stringify({slot:b.dataset.del, supprimer:true})});
+            toast('Exemple retiré'); loadGuideEx();
+        };
+    });
+    /* On ne redessine jamais la grille pendant la frappe : reconstruire le
+       HTML enlèverait le curseur du champ à chaque lettre. */
+    g.querySelectorAll('[data-lbl]').forEach(inp=>{
+        inp.oninput = ()=>{
+            const s = GX.find(x=>x.id === inp.dataset.lbl);
+            if(s) s.label = inp.value;
+            clearTimeout(gxLblT);
+            gxLblT = setTimeout(async ()=>{
+                await fetch('/api/guide/exemples/set', {method:'POST',
+                    headers:{'Content-Type':'application/json'},
+                    body: JSON.stringify({slot:inp.dataset.lbl, label:inp.value})});
+            }, 700);
+        };
+    });
+}
+
+function gxChoisir(slot){
+    const inp = document.createElement('input');
+    inp.type = 'file';
+    inp.accept = 'video/mp4,video/quicktime,video/webm,video/*';
+    inp.onchange = ()=>{ if(inp.files[0]) gxEnvoyer(slot, inp.files[0]); };
+    inp.click();
+}
+
+async function gxEnvoyer(slot, file){
+    const st = document.querySelector(`[data-st="${slot}"]`);
+    const mo = (file.size / 1048576).toFixed(1);
+    if(file.size > 60 * 1048576){
+        if(st) st.textContent = `Trop lourde : ${mo} Mo (60 Mo max)`;
+        return;
+    }
+    if(st) st.textContent = `Envoi… ${mo} Mo`;
+    const fd = new FormData();
+    fd.append('slot', slot);
+    fd.append('video', file);
+    const lbl = (GX.find(x=>x.id === slot) || {}).label || '';
+    if(lbl) fd.append('label', lbl);
+    try{
+        const r = await fetch('/api/guide/exemples/upload', {method:'POST', body:fd});
+        const d = await r.json();
+        if(d.success){ toast('Exemple mis en ligne'); loadGuideEx(); }
+        else if(st) st.textContent = d.error || 'Échec';
+    }catch(e){ if(st) st.textContent = 'Erreur réseau'; }
 }
 
 /* ── Vidéos ─────────────────────────────────────────────────────────── */
