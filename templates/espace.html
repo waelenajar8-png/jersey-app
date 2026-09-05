@@ -231,6 +231,10 @@ input,select{font-family:inherit}
 .pin-acts{display:flex;align-items:center;justify-content:flex-end;gap:10px;margin-top:10px}
 .pin-ghost{font-size:13.5px;font-weight:600;color:var(--muted);padding:10px 14px;border-radius:100px}
 .pin-ghost:hover{color:var(--ink)}
+.pin-aide{margin-top:14px;padding-top:13px;border-top:1px solid var(--line);
+    font-size:12.5px;font-weight:500;color:var(--muted);line-height:1.55}
+.pin-aide a{color:var(--accent);font-weight:700;text-decoration:none}
+.pin-aide a:hover{text-decoration:underline}
 @keyframes pinIn{from{opacity:0}to{opacity:1}}
 /* Rail des paliers : la position rendue tangible, sans donnée nouvelle. */
 .rail{display:flex;align-items:center;gap:5px;flex-shrink:0}
@@ -3083,14 +3087,26 @@ async function saveProfil(){
 // Demandé uniquement pour écrire l'adresse de livraison. La consultation de
 // l'espace reste libre : ajouter une porte à l'entrée ferait fuir, alors que
 // le risque réel se limite au détournement du colis.
+/* Une porte sans sonnette est un mur : la fenêtre disait quoi taper, jamais
+   quoi faire quand on ne l'a pas — et personne n'écrit pour réclamer un code
+   dont on ignore qu'il existe. */
+function pinAide(){
+    const u = (D.contact && D.contact.url) || '';
+    return u
+        ? `Tu ne l'as pas sous la main ? <a href="${escAttr(u)}" target="_blank" rel="noopener">Demande-le-nous</a>, on te le redonne tout de suite.`
+        : `Tu ne l'as pas sous la main ? Écris-nous, on te le redonne tout de suite.`;
+}
+
 function askPin(){
     return new Promise(resolve=>{
         const wrap = document.createElement('div');
         wrap.className = 'pin-back';
         wrap.innerHTML = `
-            <div class="pin-box" role="dialog" aria-modal="true" aria-label="Code d'accès">
-                <div class="pin-t">Confirme ton code</div>
-                <div class="pin-d">Pour modifier ton adresse de livraison, saisis le code à 4 chiffres transmis par l'équipe Volakits.</div>
+            <div class="pin-box" role="dialog" aria-modal="true" aria-label="Code de livraison">
+                <div class="pin-t">Ton adresse est déjà enregistrée</div>
+                <div class="pin-d">Pour la changer, tape le <b>code à 4 chiffres</b> qu'on t'a
+                    envoyé avec ton lien. Il est là pour protéger ton colis : sans lui,
+                    quelqu'un qui tomberait sur ton lien pourrait le faire livrer ailleurs.</div>
                 <input class="pin-in num" id="pinIn" inputmode="numeric" autocomplete="one-time-code"
                        maxlength="4" placeholder="0000" aria-label="Code à 4 chiffres">
                 <div class="pin-err" id="pinErr"></div>
@@ -3098,6 +3114,7 @@ function askPin(){
                     <button class="pin-ghost" id="pinCancel">Annuler</button>
                     <button class="btn" id="pinOk">Confirmer</button>
                 </div>
+                <div class="pin-aide">${pinAide()}</div>
             </div>`;
         document.body.appendChild(wrap);
 
