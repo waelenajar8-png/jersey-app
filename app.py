@@ -5927,6 +5927,21 @@ def _espace_pin(inf):
     return str(inf.get("espace_pin") or "").strip()
 
 
+def _a_une_adresse(inf):
+    """
+    Une adresse de livraison est-elle DÉJÀ enregistrée sur cette fiche ?
+
+    C'est la question qui décide si le code de livraison a un sens. Le code
+    protège contre le détournement d'un colis : sans adresse enregistrée, il
+    n'y a rien à détourner, seulement un champ vide à remplir.
+    """
+    if not isinstance(inf, dict):
+        return False
+    sh = inf.get("shipping") or {}
+    return bool(str(sh.get("address") or "").strip()
+                or str(inf.get("address") or "").strip())
+
+
 def _espace_pin_ok(inf, slug):
     """
     Le visiteur a-t-il présenté le bon code dans cette session ?
@@ -6229,7 +6244,9 @@ def _espace_payload(inf):
         # État du code d'accès : l'interface sait ainsi s'il faut le demander
         # avant de laisser modifier l'adresse de livraison.
         "access": {
-            "pin_required": bool(_espace_pin(inf)),
+            # Même règle que côté écriture, sinon l'écran annoncerait une
+            # porte fermée là où le serveur laisse passer (ou l'inverse).
+            "pin_required": bool(_espace_pin(inf)) and _a_une_adresse(inf),
             "pin_verified": _espace_pin_ok(inf, _public_slug(inf)),
             # Son code d'entrée, à elle seule. Le montrer ici n'ouvre rien de
             # plus : qui lit cette réponse est déjà dans son espace, et le code
@@ -6668,7 +6685,14 @@ def api_espace_update(slug):
         guard = _get_influencer_by_slug(slug)
         if not guard:
             return jsonify({"success": False, "error": "introuvable"}), 404
-        if not _espace_pin_ok(guard, slug):
+        # Le code était exigé DÈS LA PREMIÈRE SAISIE. Personne ne pouvait donc
+        # renseigner sa propre adresse sans nous écrire pour réclamer un code
+        # qu'elle n'avait jamais reçu — et la plupart abandonnaient là plutôt
+        # que d'écrire. Or ce code ne protège que d'une chose : qu'un tiers
+        # muni du lien réécrive une adresse déjà donnée pour faire partir le
+        # colis ailleurs. Tant qu'aucune adresse n'existe, il ne protège rien
+        # et ne fait que bloquer la personne qu'on attend.
+        if _a_une_adresse(guard) and not _espace_pin_ok(guard, slug):
             return jsonify({
                 "success": False, "error": "code requis", "pin_required": True,
             }), 403
