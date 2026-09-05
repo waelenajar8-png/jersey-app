@@ -859,6 +859,10 @@ select.inp{cursor:pointer}
         overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .mg-code{font-size:11.5px;font-weight:800;letter-spacing:.09em;
          font-variant-numeric:tabular-nums;color:var(--accent)}
+/* Le code de livraison se lit à côté sans se confondre avec lui : deux codes
+   côte à côte de la même couleur, on finit par coller le mauvais. */
+.mg-pin{font-size:11.5px;font-weight:800;letter-spacing:.09em;
+        font-variant-numeric:tabular-nums;color:var(--muted)}
 .mg-txt{margin-top:10px;font-size:11.5px;line-height:1.55;color:var(--ink-2);
         white-space:pre-wrap;word-break:break-word;font-family:inherit;
         /* Coupé sur un nombre de lignes entier : une ligne tranchée en deux
@@ -1513,13 +1517,17 @@ select.inp{cursor:pointer}
                 Écris ton message une fois, avec les repères ci-dessous : ils sont remplacés
                 par le prénom, le lien et le <b>vrai code</b> de chaque influenceuse. Tu choisis
                 ensuite le statut — « Colis envoyé », par exemple — et tu copies, une par une.
-                Ton texte est gardé sur cet ordinateur, tu ne le réécriras pas la prochaine fois.
+                Ton texte est gardé sur cet ordinateur, tu ne le réécriras pas la prochaine fois.<br><br>
+                Deux codes, deux rôles : <b>{code}</b> lui ouvre son espace,
+                <b>{codelivraison}</b> lui sert à <b>corriger une adresse déjà enregistrée</b>.
+                Sa première adresse, elle la saisit librement — plus personne n'est bloqué là.
             </div>
             <textarea id="msgTpl" spellcheck="false"></textarea>
             <div class="mg-jetons">
                 <button type="button" class="mg-jeton" onclick="msgJeton('{prenom}')">{prenom}</button>
                 <button type="button" class="mg-jeton" onclick="msgJeton('{pseudo}')">{pseudo}</button>
                 <button type="button" class="mg-jeton" onclick="msgJeton('{code}')">{code}</button>
+                <button type="button" class="mg-jeton" onclick="msgJeton('{codelivraison}')">{codelivraison}</button>
                 <button type="button" class="mg-jeton" onclick="msgJeton('{lien}')">{lien}</button>
                 <button type="button" class="mg-jeton" onclick="msgReset()">Remettre le modèle d'origine</button>
             </div>
@@ -3848,6 +3856,7 @@ Ton espace créateur Volakits est prêt.
 
 \u{1F517} Le lien : {lien}
 \u{1F511} Ton code d'accès : {code}
+\u{1F4E6} Ton code de livraison : {codelivraison} (à garder — il te servira le jour où tu voudras corriger ton adresse)
 
 Tu ouvres le lien, tu tapes ton code, et tu es chez toi. Garde bien ce message :
 c'est avec lui que tu reviendras, depuis n'importe quel téléphone.
@@ -3909,6 +3918,7 @@ function msgPour(inf, modele){
         .split('{prenom}').join(prenom(inf))
         .split('{pseudo}').join(String(inf.pseudo || '').trim())
         .split('{code}').join(code)
+        .split('{codelivraison}').join((inf.espace_pin || '').trim())
         .split('{lien}').join(location.origin);
 }
 
@@ -3950,12 +3960,14 @@ function renderMsg(){
                     enregistre-la : un code lui sera attribué, et son message apparaîtra ici.</div>
             </div>`;
         }
+        const pin = (inf.espace_pin || '').trim();
         const txt = msgPour(inf, modele);
         const ouvert = !!MSG_OUVERTS[inf.id];
         return `<div class="mg-item">
             <div class="mg-top">
                 <div class="mg-nom">${nom}</div>
                 <span class="mg-code">${esc(code)}</span>
+                ${pin ? `<span class="mg-pin" title="Code de livraison">${esc(pin)}</span>` : ''}
                 <button class="btn sm" data-mg="${escAttr(inf.id)}">Copier</button>
             </div>
             <div class="mg-txt${ouvert?' tout':''}" id="mgt_${escAttr(inf.id)}">${esc(txt)}</div>
